@@ -43,6 +43,7 @@ export const GUARDRAILS = [
   "reorder",
   "stripe",
   "frameset",
+  "menu",
 ] as const;
 
 export const ALL: string[] = [...EQUIVALENCE, ...CONTROLS, ...GUARDRAILS];

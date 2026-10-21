@@ -108,7 +108,7 @@ describe("validation", () => {
   // way the loader shrugs at becomes a confusing failure much later, or worse, a quiet one.
   const cases: Array<[fixture: string, needle: RegExp]> = [
     ["bad-left.mjs", /`left` must be a string/],
-    ["bad-routes.mjs", /`routes\[0\]` must be a string or an object \{ left, right\?, selector\? \}/],
+    ["bad-routes.mjs", /`routes\[0\]` must be a string or an object \{ left, right\?, selector\?, before\? \}/],
     ["bad-widths.mjs", /`widths` must be an array of positive numbers/],
     ["bad-threshold.mjs", /`threshold` must be a number between 0 and 1/],
     ["bad-concurrency.mjs", /`concurrency` must be a positive integer/],
@@ -155,6 +155,8 @@ describe("validation", () => {
       /two routes both read as \/a \[xpath=\/\/h1 \| \/\/h2\]; change one of their selectors/,
     ],
     ['{ routes: [{ left: "/a", selector: { left: ".a" } }] }', /`routes\[0\]\.selector` must be/],
+    ['{ before: "click" }', /`before` must be a function/],
+    ['{ routes: [{ left: "/a", before: {} }] }', /`routes\[0\]\.before` must be a function/],
   ];
   for (const [config, needle] of inline) {
     test(`${config} exits 2 and names the problem`, async () => {

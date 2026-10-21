@@ -292,6 +292,7 @@ describe("the tiled capture path", () => {
       assert.notDeepEqual(await pixel(file, 9_090), [255, 0, 255], `block 51 masked on ${side}`);
     }
   });
+
 });
 
 describe("masks", () => {
@@ -469,6 +470,68 @@ describe("component scope", () => {
     assert.deepEqual(summary.clean, ["/color [h1]"], context(run));
     assert.ok(summary.routes.has("/color [.swatch >> nth=2]"), context(run));
     assert.equal(summary.verdict.worst?.route, "/color [.swatch >> nth=2]", context(run));
+  });
+});
+
+describe("before hooks", () => {
+  const hooked = (config: string, routes: string[] = []) => {
+    const file = path.join(tempDir(), "hook.mjs");
+    fs.writeFileSync(file, `export default ${config};\n`);
+    return capture(routes, { config: file });
+  };
+
+  test("without a hook the closed menu matches on both sides", async () => {
+    const run = await capture(["/menu"]);
+    assert.equal(run.code, 0, context(run));
+    const r = result(results(run.outDir), "/menu", 1440);
+    assert.equal(r.diffPixels, 0, context(run));
+    assert.equal(r.hook, false);
+    assert.equal(cardFor(run, "/menu").hook, false);
+  });
+
+  test("a route's hook opens the menu on both sides before the shot", async () => {
+    const run = await hooked(
+      '{ routes: [{ left: "/menu", before: async (page) => { await page.click("#toggle"); } }] }',
+    );
+    assert.equal(run.code, 0, context(run));
+    const r = result(results(run.outDir), "/menu", 1440);
+    // Each side's panel says something different, so this only differs if both opened.
+    assert.ok(r.diffPixels > 0, `the hook did not run before the shot${context(run)}`);
+    assert.deepEqual(r.text.added, ["Panel built by the left side"], context(run));
+    assert.deepEqual(r.text.removed, ["Panel built by the right side, worded differently"], context(run));
+    assert.equal(r.hook, true);
+    assert.equal(cardFor(run, "/menu").hook, true, context(run));
+  });
+
+  test("a top-level hook runs for CLI routes, with the side, route and width", async () => {
+    const run = await hooked(
+      "{ before: async (page, { side, route, width }) => { " +
+        'await page.locator("h1").evaluate((h, t) => (h.textContent = t), `${side} ${route} ${width}`); } }',
+      ["/menu"],
+    );
+    assert.equal(run.code, 0, context(run));
+    const r = result(results(run.outDir), "/menu", 1440);
+    assert.deepEqual([r.text.added, r.text.removed], [["left /menu 1440"], ["right /menu 1440"]], context(run));
+  });
+
+  test("a route's own hook replaces the top-level one", async () => {
+    const run = await hooked(
+      '{ before: async () => { throw new Error("top-level ran"); }, routes: [{ left: "/menu", before: async () => {} }] }',
+    );
+    assert.equal(run.code, 0, context(run));
+    assert.equal(result(results(run.outDir), "/menu", 1440).diffPixels, 0, context(run));
+  });
+
+  test("a hook that throws is a route error naming the hook, and is not retried", async () => {
+    const before = site.hits("/menu");
+    // A message the transient-error retry would otherwise match.
+    const run = await hooked('{ before: async () => { throw new Error("net::ERR_FAKE from the hook"); } }', ["/menu"]);
+    assert.equal(run.code, 1, context(run));
+    const [r] = results(run.outDir).results;
+    assert.equal(r?.status, "error", context(run));
+    assert.equal(r?.status === "error" && r.error, "before hook failed on left: net::ERR_FAKE from the hook");
+    assert.equal(r?.hook, true);
+    assert.equal(site.hits("/menu") - before, 2, `the hook was retried${context(run)}`);
   });
 });
 

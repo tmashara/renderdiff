@@ -17,6 +17,7 @@ export {
   DEFAULT_OUT_DIR,
   DEFAULT_WIDTHS,
   MASK_COLOR,
+  type Hook,
   type Mask,
   type ResolvedConfig,
   type Route,

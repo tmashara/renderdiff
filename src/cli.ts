@@ -256,7 +256,7 @@ if (!rawRoutes.length) {
 
 let routes: Route[];
 try {
-  routes = parseRoutes(rawRoutes, args.selector);
+  routes = parseRoutes(rawRoutes, args.selector, fileConfig.before);
 } catch (e) {
   die(e instanceof Error ? e.message : String(e));
 }

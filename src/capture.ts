@@ -1,6 +1,6 @@
 import type { Locator, Page } from "playwright";
 import sharp from "sharp";
-import { MASK_COLOR, masksFor, type ResolvedConfig, type Route } from "./config.ts";
+import { label, MASK_COLOR, masksFor, type ResolvedConfig, type Route } from "./config.ts";
 
 /** Loads a page, settles it, and screenshots it. */
 
@@ -33,6 +33,9 @@ const TILE_HEIGHT = 16_000;
  * one, and we would rather error than stitch a >100MB image. Named in the throw.
  */
 const MAX_PAGE_HEIGHT = 40_000;
+
+/** A `before` hook threw. Never retried: the hook may have half-run against the page. */
+export class HookError extends Error {}
 
 /**
  * Install network blocking, the fake clock and seeded randomness. Once per page,
@@ -77,6 +80,13 @@ export async function capture(
   });
   if (res && res.status() >= 400) {
     throw new Error(`HTTP ${res.status()} at ${url}`);
+  }
+  if (route.before) {
+    try {
+      await route.before(page, { side, route: label(route), width });
+    } catch (e) {
+      throw new HookError(`before hook failed on ${side}: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
   await page.addStyleTag({ content: cfg.neutralizeCss });
 

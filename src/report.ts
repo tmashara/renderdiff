@@ -12,6 +12,8 @@ interface BaseResult {
   right: string;
   /** The element compared on each side; null for the whole page. */
   selector: Sides | null;
+  /** A `before` hook ran on both sides before the shot, so the page was measured in its state. */
+  hook: boolean;
   width: number;
 }
 
@@ -217,6 +219,7 @@ function card(r: ComparedResult): string {
     <span class="score ${band(r.score)}">${pct(r.score)}</span>
     <code>${esc(name(r))}</code>
     <span class="w">@${r.width}px</span>
+    ${r.hook ? `<span class="hook">before hook</span>` : ""}
     ${r.heightDelta ? `<span class="delta">height ${signed(r.heightDelta)}px</span>` : ""}
     ${r.widthDelta ? `<span class="delta">width ${signed(r.widthDelta)}px</span>` : ""}
     ${r.unstablePixels ? `<span class="unstable">${r.unstablePixels.toLocaleString("en-US")} px unstable</span>` : ""}
@@ -262,7 +265,7 @@ export async function writeReport(
           margin:0 0 1rem; padding:.75rem 1rem 1rem; }
   .card header { display:flex; align-items:center; gap:.75rem; flex-wrap:wrap; margin-bottom:.75rem }
   .score { font-weight:700; font-variant-numeric:tabular-nums; min-width:4.5rem }
-  .w, .px, .delta, .unstable, .aligned { color:var(--mut); font-size:12px }
+  .w, .px, .delta, .unstable, .aligned, .hook { color:var(--mut); font-size:12px }
   .findings { font-size:12px; color:var(--mut); margin:0 0 .75rem }
   .findings p { margin:.25rem 0 0 }
   .findings ul { margin:.25rem 0; font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace }

@@ -22,13 +22,25 @@ export interface Route {
   left: string;
   right: string;
   selector: Sides | null;
+  before: Hook | null;
 }
+
+/**
+ * Runs on each side after the page loads and before it settles and is shot, e.g. to open a
+ * menu. `route` is the route's name (`/a`, or `/a::/b` for a pair), the same on both sides.
+ */
+export type Hook = (
+  page: Page,
+  ctx: { side: "left" | "right"; route: string; width: number },
+) => Promise<void>;
 
 /**
  * A route as written: `/a`, the pair `/a::/b`, or `{ left, right?, selector? }` (right
  * defaults to left).
  */
-export type RouteSpec = string | { left: string; right?: string; selector?: string | Sides };
+export type RouteSpec =
+  | string
+  | { left: string; right?: string; selector?: string | Sides; before?: Hook };
 
 /** `pricing` / `/pricing/` -> `/pricing`; `/` stays `/`. */
 export const normalize = (url: string) => {
@@ -37,23 +49,23 @@ export const normalize = (url: string) => {
 };
 
 /** `/a` for a plain route, `/a::/b` for a pair — the route's name in stdout and results.json. */
-export const label = (r: Omit<Route, "selector">) =>
+export const label = (r: Pick<Route, "left" | "right">) =>
   r.left === r.right ? r.left : `${r.left}::${r.right}`;
 
 /** `.card`, or `.new | .old` when the sides differ. */
 export const selectorText = (s: Sides) => (s.left === s.right ? s.left : `${s.left} | ${s.right}`);
 
 /** The label plus ` [selector]`: unique per route in a run, so the compact summary's group key. */
-export const name = (r: Route) =>
+export const name = (r: Pick<Route, "left" | "right" | "selector">) =>
   label(r) + (r.selector ? ` [${selectorText(r.selector)}]` : "");
 
 /**
  * Specs -> normalized, deduplicated routes; throws on an empty side or a glob. A string is a
  * pair when it has a `::` followed by `/` (or ending it, so `/a::` is an empty side, not a
  * literal), which keeps `?q=std::vector` and `/wiki/Talk:Foo` single routes. A CLI
- * `selector` replaces every route's own.
+ * `selector` replaces every route's own; a route's own `before` replaces the top-level one.
  */
-export function parseRoutes(specs: RouteSpec[], selector?: Sides): Route[] {
+export function parseRoutes(specs: RouteSpec[], selector?: Sides, before?: Hook): Route[] {
   const out = new Map<string, Route>();
   for (const spec of specs) {
     let sides: [string, string];
@@ -76,9 +88,10 @@ export function parseRoutes(specs: RouteSpec[], selector?: Sides): Route[] {
       left: normalize(sides[0]),
       right: normalize(sides[1]),
       selector: selector ?? (typeof own === "string" ? { left: own, right: own } : (own ?? null)),
+      before: (typeof spec === "string" ? undefined : spec.before) ?? before ?? null,
     };
     const same = out.get(name(route));
-    if (same && JSON.stringify(same) !== JSON.stringify(route)) {
+    if (same && (JSON.stringify(same) !== JSON.stringify(route) || same.before !== route.before)) {
       throw new Error(`two routes both read as ${name(route)}; change one of their selectors`);
     }
     out.set(name(route), route);
@@ -204,8 +217,10 @@ export interface RenderdiffConfig {
   left?: string;
   /** Right origin, e.g. `https://example.com`. A trailing slash is stripped. */
   right?: string;
-  /** Routes to diff when none are passed on the command line. A route object may take a `selector`. */
+  /** Routes to diff when none are passed on the command line. A route object may take a `selector` and a `before`. */
   routes?: RouteSpec[];
+  /** A {@link Hook} for every route without its own `before`, CLI routes included. */
+  before?: Hook;
   /** Viewport widths. Replaces {@link DEFAULT_WIDTHS} outright. */
   widths?: number[];
   /** Fail the run if any comparison scores below this, 0..1. */
@@ -332,21 +347,24 @@ function validate(c: Record<string, unknown>, file: string) {
       bad(key, "an array of strings");
     }
   }
+  const hook = "a function (page, { side, route, width }) => Promise<void>";
+  if (c.before !== undefined && typeof c.before !== "function") bad("before", hook);
   if (c.routes !== undefined) {
     if (!Array.isArray(c.routes)) bad("routes", "an array");
     (c.routes as unknown[]).forEach((r, i) => {
       if (typeof r === "string") return;
       if (typeof r !== "object" || r === null || Array.isArray(r)) {
-        bad(`routes[${i}]`, "a string or an object { left, right?, selector? }");
+        bad(`routes[${i}]`, "a string or an object { left, right?, selector?, before? }");
       }
       const o = r as Record<string, unknown>;
       for (const key of Object.keys(o)) {
-        if (!["left", "right", "selector"].includes(key)) {
+        if (!["left", "right", "selector", "before"].includes(key)) {
           throw new Error(
-            `${file}: \`routes[${i}].${key}\` is not a route key (left, right, selector)`,
+            `${file}: \`routes[${i}].${key}\` is not a route key (left, right, selector, before)`,
           );
         }
       }
+      if (o.before !== undefined && typeof o.before !== "function") bad(`routes[${i}].before`, hook);
       const sel = o.selector as Record<string, unknown> | undefined;
       if (
         sel !== undefined &&

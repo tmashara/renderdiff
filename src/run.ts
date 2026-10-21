@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { chromium, errors, type Page } from "playwright";
-import { cancelUnstable, capture, prepare, type Shot } from "./capture.ts";
+import { cancelUnstable, capture, HookError, prepare, type Shot } from "./capture.ts";
 import { compare, crops, type Band } from "./compare.ts";
 import {
   CONTEXT_OPTIONS,
@@ -115,6 +115,8 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
     for (let job = queue.shift(); job; job = queue.shift()) {
       const { route, width } = job;
       const key = name(route);
+      const { before, ...where } = route;
+      const entry = { url: label(route), ...where, hook: before !== null, width };
       const tag = `${label(route)} @${width}`;
       // Its own line: parse.ts reads the route on the row as one \S+ token.
       const sel = route.selector ? `selector ${selectorText(route.selector)}` : "";
@@ -165,9 +167,7 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
         ]);
 
         results.push({
-          url: label(route),
-          ...route,
-          width,
+          ...entry,
           status: "compared",
           ...metrics,
           unstablePixels,
@@ -201,9 +201,7 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
         );
       } catch (e) {
         results.push({
-          url: label(route),
-          ...route,
-          width,
+          ...entry,
           status: "error",
           error: e instanceof Error ? e.message : String(e),
         });
@@ -279,9 +277,9 @@ async function launch() {
 }
 
 const transient = (e: unknown) =>
-  e instanceof errors.TimeoutError ||
-  (e instanceof Error &&
-    /net::ERR_|Execution context was destroyed/.test(e.message));
+  !(e instanceof HookError) &&
+  (e instanceof errors.TimeoutError ||
+    (e instanceof Error && /net::ERR_|Execution context was destroyed/.test(e.message)));
 
 /** One retry for a transient failure: a live site can time out once on a cold edge. */
 async function shoot(
