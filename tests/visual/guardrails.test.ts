@@ -293,7 +293,21 @@ describe("the tiled capture path", () => {
     }
   });
 
+  test("the bottom tile is the page's own last rows, not padding or a repeat of the top", async () => {
+    // A missing tile would be magenta padding; a wrapped one-shot repeats the top. The last
+    // row is block 100's 1px #c9d4e2 border, which neither would give.
+    for (const side of ["left", "right"]) {
+      assert.deepEqual(await bottomRow(run.file(`tall.1440.${side}.png`)), [0xc9, 0xd4, 0xe2], `${side}${context(run)}`);
+    }
+  });
 });
+
+/** The RGB of the last row's middle pixel. */
+const bottomRow = async (file: string) => {
+  const img = sharp(file);
+  const { width = 0, height = 0 } = await img.metadata();
+  return [...(await img.extract({ left: width >> 1, top: height - 1, width: 1, height: 1 }).removeAlpha().raw().toBuffer())];
+};
 
 describe("masks", () => {
   test("an unmasked drifting value costs the score", async () => {
@@ -575,6 +589,33 @@ describe("storage state", () => {
     assert.deepEqual([r.text.added, r.text.removed], [["Signed in as tester"], ["Signed in as tester (right)"]], context(run));
     assert.deepEqual(res.meta.storageState, { left: "auth.json", right: "auth.json" });
     assert.ok(!leaks(run), "the storage state's contents were written out");
+  });
+});
+
+describe("the browser", () => {
+  test("results.json records the browser", async () => {
+    const run = await capture(["/short"]);
+    assert.equal(run.code, 0, context(run));
+    const { browser } = results(run.outDir).meta;
+    assert.equal(browser.name, "chromium");
+    assert.match(browser.version, /^\d+\./);
+  });
+
+  test("without the bundled Chromium it falls back to the system Chrome, or names the fix", async () => {
+    // An empty browsers path hides the bundled Chromium. Which branch runs depends on whether
+    // this machine has Chrome installed.
+    const run = await runCli(renderdiffArgs({ left: site.left, right: site.right, routes: ["/tall"], widths: [1440] }), {
+      env: { PLAYWRIGHT_BROWSERS_PATH: tempDir() },
+    });
+    if (run.code === 1 && !fs.existsSync(run.file("results.json"))) {
+      assert.match(run.stderr, /npx playwright install chromium/, context(run));
+      return;
+    }
+    assert.equal(run.code, 0, context(run));
+    assert.match(run.stdout, /^Bundled Chromium failed to launch; using the system Chrome \d/m, context(run));
+    assert.equal(results(run.outDir).meta.browser.name, "chrome");
+    // Chrome wraps a one-shot capture past 16,384px, so this pins the tiled path there too.
+    assert.deepEqual(await bottomRow(run.file("tall.1440.left.png")), [0xc9, 0xd4, 0xe2], context(run));
   });
 });
 

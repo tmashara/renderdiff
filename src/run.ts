@@ -97,7 +97,7 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
 
   const stems = slugs(routes);
   const results: RouteResult[] = [];
-  const browser = await launch();
+  const { browser, channel } = await launch();
   const queue = [...jobs];
   let done = 0;
   // Whole minute, so an HH:MM display reads the same on both sides.
@@ -221,6 +221,7 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
     );
   }
   await Promise.all(Array.from({ length: cfg.concurrency }, worker));
+  const browserMeta = { name: channel ?? "chromium", version: browser.version() };
   await browser.close();
 
   // Workers finish out of order; job order keeps results.json stable across runs.
@@ -241,6 +242,7 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
     blockUrlPatterns: cfg.blockUrlPatterns,
     hideSelectors: cfg.hideSelectors,
     masks: cfg.masks.map(({ urlPath, reason }) => ({ urlPath, reason })),
+    browser: browserMeta,
     storageState: {
       left: cfg.storageState.left && path.basename(cfg.storageState.left),
       right: cfg.storageState.right && path.basename(cfg.storageState.right),
@@ -267,16 +269,25 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
   return below.length || results.some((r) => r.status === "error") ? 1 : 0;
 }
 
-/** A missing browser binary is the likeliest first-run failure — name the fix. */
+/**
+ * A missing browser binary is the likeliest first-run failure, so fall back to the system
+ * Chrome (both sides share it, so the comparison stays symmetric), then name the fix.
+ */
 async function launch() {
   try {
-    return await chromium.launch();
+    return { browser: await chromium.launch(), channel: null };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    throw new Error(
-      `could not launch Chromium:\n  ${msg}\n\n` +
-        `  Install the browser with:  npx playwright install chromium`,
-    );
+    try {
+      const browser = await chromium.launch({ channel: "chrome" });
+      console.log(`Bundled Chromium failed to launch; using the system Chrome ${browser.version()}.`);
+      return { browser, channel: "chrome" };
+    } catch {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new Error(
+        `could not launch Chromium, or the system Chrome:\n  ${msg}\n\n` +
+          `  Install the browser with:  npx playwright install chromium`,
+      );
+    }
   }
 }
 
