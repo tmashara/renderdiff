@@ -12,7 +12,7 @@
   "homepage": "https://github.com/tmashara/renderdiff#readme",
   "bugs": "https://github.com/tmashara/renderdiff/issues",
   "bin": {
-    "renderdiff": "./dist/cli.js"
+    "renderdiff": "dist/cli.js"
   },
   "exports": {
     ".": {
