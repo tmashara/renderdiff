@@ -9,7 +9,8 @@
    Source newlines between inline-blocks render as spaces, so the strip zeroes its font and
    each swatch restores its own. `vertical-align: top` keeps them off the baseline. */
 @media (min-width: 481px) {
-  .strip { font-size: 0; line-height: 0; }
+  /* nowrap: below 960 the four swatches overflow, as the flex row on the right does. */
+  .strip { font-size: 0; line-height: 0; white-space: nowrap; }
   .strip > .swatch { display: inline-block; vertical-align: top; font-size: 16px; line-height: 24px; margin-right: var(--gap); }
   .strip > .swatch:last-child { margin-right: 0; }
   .strip + .strip { margin-top: var(--gap); }

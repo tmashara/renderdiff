@@ -12,7 +12,7 @@
  * there is no tolerance to calibrate and nothing to drift — a single differing pixel is a real
  * finding, either in the fixture or in the comparison.
  *
- * One browser launch for the whole file: a single run covers every route at both widths, and
+ * One browser launch for the whole file: a single run covers every route at every width, and
  * the tests below read its results.
  */
 import assert from "node:assert/strict";
@@ -30,8 +30,11 @@ import {
 import { card, parseProgress, parseReport, row, type Report } from "../helpers/parse.ts";
 import { startFixtureSite, type FixtureSite } from "../helpers/server.ts";
 
-/** One desktop, one mobile. Both sides switch layout at 480px, so 375 is a real second case. */
-const WIDTHS = [1440, 375];
+/**
+ * Every default width. Both sides switch layout at 480px, and three 288px cards stop fitting
+ * below 960, so the mid widths are cases of their own, not repeats of desktop.
+ */
+const WIDTHS = [1440, 1152, 896, 704, 375];
 
 let site: FixtureSite;
 let run: CliResult;

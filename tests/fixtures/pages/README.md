@@ -46,7 +46,10 @@ Breaking any of these produces a flaky suite, and the flake looks like a renderd
    needs real content. The `notes` tail exists partly for this. `blank` and `sprite` (a
    hidden SVG sprite only) are the intentional violations; `short`
    stays under 200 characters on purpose and passes on its form controls.
-7. **No animation** except in `animated`, which exists to prove `STILL_CSS` kills it, `ticker`,
+7. **Equivalent at every default width,** not just 1440 and 375. Below 960 the 928px
+   content box no longer fits three cards, so a wrapping layout on one side needs the
+   same wrap on the other, or both must overflow alike.
+8. **No animation** except in `animated`, which exists to prove `STILL_CSS` kills it, `ticker`,
    whose timer exists to be caught by the stability check, and `unsettled`, which recolours
    the whole page to trip the unstable-pixel cap.
 

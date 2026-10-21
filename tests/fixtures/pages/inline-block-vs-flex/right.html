@@ -8,6 +8,7 @@
 /* RIGHT: a flex row with a gap. No whitespace to work around. */
 @media (min-width: 481px) {
   .strip { display: flex; gap: var(--gap); }
+  .strip > .swatch { flex: none; }
   .strip + .strip { margin-top: var(--gap); }
 }
 @media (max-width: 480px) {

@@ -9,6 +9,10 @@
 @media (min-width: 481px) {
   .deck { display: grid; grid-template-columns: repeat(3, var(--card-w)); gap: var(--gap); }
 }
+/* Below 960 three cards no longer fit, and the left side's flex row wraps to two. */
+@media (min-width: 481px) and (max-width: 959px) {
+  .deck { grid-template-columns: repeat(2, var(--card-w)); }
+}
 @media (max-width: 480px) {
   .deck { display: grid; grid-template-columns: 1fr; gap: var(--gap-mobile); }
 }
