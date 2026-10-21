@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { chromium, errors, type Page } from "playwright";
 import { cancelUnstable, capture, prepare, type Shot } from "./capture.ts";
-import { compare, crops } from "./compare.ts";
+import { compare, crops, type Band } from "./compare.ts";
 import { CONTEXT_OPTIONS, version, type ResolvedConfig, type Route } from "./config.ts";
 import { fmtBand, fmtRegion, pct, signed } from "./format.ts";
 import {
@@ -27,6 +27,8 @@ interface RunOpts {
   routes: Route[];
   cfg: ResolvedConfig;
   open: boolean;
+  /** A line per shot as it lands; otherwise one compact summary at the end. */
+  progress: boolean;
 }
 
 const slug = (url: string) =>
@@ -63,7 +65,7 @@ function wipeable(dir: string): boolean {
   return fs.statSync(dir).isDirectory() && fs.readdirSync(dir).every(ours);
 }
 
-export async function run({ routes, cfg, open }: RunOpts): Promise<number> {
+export async function run({ routes, cfg, open, progress }: RunOpts): Promise<number> {
   if (!wipeable(cfg.outDir)) {
     console.error(
       `✗ output directory ${cfg.outDir} holds files renderdiff didn't write — ` +
@@ -165,8 +167,10 @@ export async function run({ routes, cfg, open }: RunOpts): Promise<number> {
             ? `text: ${text.added.length} added, ${text.removed.length} removed`
             : "",
         ].filter(Boolean);
+        ++done;
+        if (!progress) continue;
         console.log(
-          `  [${++done}/${jobs.length}] ${pct(metrics.score)}  ${label}` +
+          `  [${done}/${jobs.length}] ${pct(metrics.score)}  ${label}` +
             (metrics.heightDelta
               ? `  (height ${signed(metrics.heightDelta)}px)`
               : "") +
@@ -182,16 +186,19 @@ export async function run({ routes, cfg, open }: RunOpts): Promise<number> {
           status: "error",
           error: e instanceof Error ? e.message : String(e),
         });
-        console.log(`  [${++done}/${jobs.length}] ERROR  ${label}`);
+        ++done;
+        if (progress) console.log(`  [${done}/${jobs.length}] ERROR  ${label}`);
       }
     }
     await leftCtx.close();
     await rightCtx.close();
   };
 
-  console.log(
-    `Capturing ${jobs.length} pair(s) with ${cfg.concurrency} worker(s)...\n`,
-  );
+  if (progress) {
+    console.log(
+      `Capturing ${jobs.length} pair(s) with ${cfg.concurrency} worker(s)...\n`,
+    );
+  }
   await Promise.all(Array.from({ length: cfg.concurrency }, worker));
   await browser.close();
 
@@ -216,7 +223,8 @@ export async function run({ routes, cfg, open }: RunOpts): Promise<number> {
   const reportPath = await writeReport(results, meta, cfg);
   const resultsPath = writeResults(results, meta, cfg.outDir);
 
-  summarize(results, reportPath, resultsPath);
+  if (progress) summarize(results, reportPath, resultsPath);
+  else console.log(compact(results, routes, resultsPath));
 
   if (open) {
     const opener = process.platform === "darwin" ? "open" : "xdg-open";
@@ -301,4 +309,85 @@ function summarize(results: RouteResult[], reportPath: string, resultsPath: stri
 
   console.log(`\nReport: ${reportPath}`);
   console.log(`Results: ${resultsPath}`);
+}
+
+/** At most this many text-diff lines per compact row. */
+const TEXT_LINES = 3;
+
+/**
+ * The non-TTY summary, sized for an agent's context: clean routes on one line, then each
+ * differing route with its widths collapsed where everything but the score agrees, and a
+ * one-line verdict that names results.json.
+ */
+export function compact(results: RouteResult[], routes: Route[], resultsPath: string): string {
+  const out: string[] = [];
+  const clean: Route[] = [];
+  let differ = 0;
+  for (const route of routes) {
+    const rows = results.filter((r) => r.url === route);
+    const ok = rows.filter((r): r is ComparedResult => r.status === "compared");
+    const same = ok.filter((r) => r.diffPixels === 0);
+    const changed = ok.filter((r) => r.diffPixels > 0);
+    if (same.length === rows.length) {
+      clean.push(route);
+      continue;
+    }
+    differ++;
+    out.push(route + (same.length ? `  clean @${same.map((r) => r.width).join(",")}` : ""));
+    const groups = new Map<string, ComparedResult[]>();
+    for (const r of changed) {
+      const key = JSON.stringify([
+        r.heightDelta,
+        r.widthDelta,
+        r.bands?.map((b) => [b.side, b.h]) ?? null,
+        r.alignedScore === null ? null : pct(r.alignedScore),
+        r.text,
+      ]);
+      groups.set(key, [...(groups.get(key) ?? []), r]);
+    }
+    for (const g of groups.values()) out.push(`  @${g.map((r) => r.width).join(",")}  ${row(g)}`);
+    for (const r of rows) if (r.status === "error") out.push(`  @${r.width}  ERROR ${r.error}`);
+  }
+  if (clean.length) out.unshift(`clean: ${clean.join(" ")}`);
+  const compared = results.filter((r): r is ComparedResult => r.status === "compared");
+  const shots = compared.filter((r) => r.diffPixels > 0).length;
+  const errors = results.length - compared.length;
+  const worst = compared.length ? stats(compared).worst : null;
+  out.push(
+    `renderdiff: ${differ} of ${routes.length} routes differ (${shots} of ${results.length} shots), ` +
+      `${errors} error${errors === 1 ? "" : "s"}` +
+      (worst ? `, worst ${pct(worst.score)} ${worst.url}@${worst.width}` : "") +
+      ` — ${resultsPath}`,
+  );
+  return out.join("\n");
+}
+
+/** One compact row for comparisons that agree on everything but score, regions and unstable px. */
+function row(g: ComparedResult[]): string {
+  const [r] = g as [ComparedResult];
+  const span = (ns: number[], f: (n: number) => string) => {
+    const [lo, hi] = [Math.min(...ns), Math.max(...ns)];
+    return lo === hi ? f(lo) : `${f(lo)}–${f(hi)}`;
+  };
+  const regions = g.map((x) => x.regions.length);
+  const unstable = Math.max(...g.map((x) => x.unstablePixels));
+  // Band y varies with width; a collapsed row shows the first one's, marked approximate.
+  const y = (b: Band) => `@y${g.length > 1 ? "~" : ""}${b.y}`;
+  const text = [...r.text.added.map((t) => `+"${t}"`), ...r.text.removed.map((t) => `-"${t}"`)];
+  return [
+    span(g.map((x) => x.score), pct),
+    r.heightDelta ? `h${signed(r.heightDelta)}` : "",
+    r.widthDelta ? `w${signed(r.widthDelta)}` : "",
+    r.bands === null ? "unaligned" : "",
+    ...(r.bands ?? []).map((b) => `band ${b.side === "left" ? "+" : "-"}${b.h}${y(b)}`),
+    r.alignedScore !== null ? `aligned ${pct(r.alignedScore)}` : "",
+    Math.max(...regions) ? `${span(regions, String)} reg` : "",
+    unstable ? `unstable ${unstable.toLocaleString("en-US")}px` : "",
+    text.length
+      ? `text ${text.slice(0, TEXT_LINES).join(" ")}` +
+        (text.length > TEXT_LINES ? ` (+${text.length - TEXT_LINES} more)` : "")
+      : "",
+  ]
+    .filter(Boolean)
+    .join("  ");
 }

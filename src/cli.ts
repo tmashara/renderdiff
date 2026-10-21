@@ -22,6 +22,7 @@ import {
 interface Args extends CliOverrides {
   dryRun: boolean;
   open: boolean;
+  progress: boolean;
   help: boolean;
   version: boolean;
   config?: string;
@@ -41,6 +42,7 @@ function parseArgs(argv: string[]): Args {
   const a: Args = {
     dryRun: false,
     open: false,
+    progress: false,
     help: false,
     version: false,
     routes: [],
@@ -66,6 +68,7 @@ function parseArgs(argv: string[]): Args {
     else if (v === "--version" || v === "-v") a.version = true;
     else if (v === "--dry-run") a.dryRun = true;
     else if (v === "--open") a.open = true;
+    else if (v === "--progress") a.progress = true;
     else if (v === "--left") a.left = next();
     else if (v === "--right") a.right = next();
     else if (v === "--out") a.outDir = next();
@@ -112,6 +115,8 @@ const HELP = `
     --config <path>     Config file. Default: renderdiff.config.{ts,mts,js,mjs} in cwd.
     --dry-run           Print the URL pairs and exit. No browser.
     --open              Open the report when the run finishes.
+    --progress          A line per shot as it finishes. The default on a terminal;
+                        otherwise one summary of the differing routes at the end.
     -h, --help          Show this.
     -v, --version       Print the version.
 
@@ -239,7 +244,12 @@ await preflight(cfg.left, cfg.right);
 
 const { run } = await import("./run.ts");
 try {
-  process.exit(await run({ routes, cfg, open: args.open }));
+  process.exit(await run({
+      routes,
+      cfg,
+      open: args.open,
+      progress: args.progress || !!process.stdout.isTTY,
+    }));
 } catch (e) {
   console.error(`✗ ${e instanceof Error ? e.message : String(e)}`);
   process.exit(1);

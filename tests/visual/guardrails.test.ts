@@ -27,7 +27,7 @@ import {
   tempDir,
   type CliResult,
 } from "../helpers/cli.ts";
-import { card, parseProgress, parseReport, results } from "../helpers/parse.ts";
+import { card, parseReport, parseSummary, result, results } from "../helpers/parse.ts";
 import { startFixtureSite, type FixtureSite } from "../helpers/server.ts";
 import { EXPECT_HEIGHT } from "../fixtures/pages/tall/page.ts";
 
@@ -159,7 +159,7 @@ describe("the stability check", () => {
     assert.equal(c.diffPixels, 0, `unstable pixels counted against the score${context(run)}`);
     // Exactly the 928x160 box: every pixel of it changes between any two shots, nothing else does.
     assert.equal(c.unstablePixels, 928 * 160, context(run));
-    assert.equal(parseProgress(run.stdout)[0]!.unstablePixels, 928 * 160, context(run));
+    assert.equal(result(results(run.outDir), "/ticker", 1440).unstablePixels, 928 * 160, context(run));
   });
 
   test("a page that is mostly unstable is an error, not a score", async () => {
@@ -366,11 +366,14 @@ describe("network blocking", () => {
 describe("the run summary", () => {
   test("errors are listed separately from scores on stdout", async () => {
     const run = await capture(["/blank", "/animated"]);
-    const rows = parseProgress(run.stdout);
-    assert.equal(rows.find((r) => r.route === "/blank")!.score, null);
-    assert.equal(rows.find((r) => r.route === "/animated")!.score, 1);
-    assert.match(run.stdout, /^Errors \(1\):$/m);
-    assert.match(run.stdout, /\/blank@1440: page did not render/);
+    const { clean, routes, verdict } = parseSummary(run.stdout);
+    assert.deepEqual(clean, ["/animated"], context(run));
+    const blank = routes.get("/blank")!;
+    assert.deepEqual(blank.rows, []);
+    assert.equal(blank.errors.length, 1);
+    // In full: the reason is what tells a blank page from a broken asset pipeline.
+    assert.match(blank.errors[0]!.message, /^page did not render on either side \(left: .+; right: .+\) at \/blank$/);
+    assert.deepEqual([verdict.differ, verdict.routes, verdict.errors], [1, 2, 1]);
   });
 });
 

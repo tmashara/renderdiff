@@ -14,21 +14,25 @@ migration, a CSS refactor, a dependency bump, a staging-vs-production check.
 renderdiff / /about /pricing --left http://localhost:3000 --right https://example.com
 ```
 
+On a terminal it prints a line per shot as it lands, then the worst scores and the paths
+to `report.html` and `results.json`. Piped — to a file, CI or a coding agent — it prints
+one summary at the end instead, listing only what differs:
+
 ```
 Routes: 3
-Capturing 15 pair(s) with 2 worker(s)...
-
-  [1/15] 99.98%  / @1440
-  [2/15] 97.41%  /about @1440  (height -112px)
-  …
-
-mean 99.12%   worst 97.41% (/about @1440)
-    97.41%  /about@1440  height -112px
-    99.87%  /pricing@375
-
-Report: /Users/you/site/renderdiff-out/report.html
-Results: /Users/you/site/renderdiff-out/results.json
+clean: /
+/about  clean @1152,896,704,375
+  @1440  97.41%  h-24  band -24@y196  aligned 100.00%  text -"Pricing"
+/pricing
+  @1440,1152,896,704,375  99.12%–99.87%  1 reg
+renderdiff: 2 of 3 routes differ (6 of 15 shots), 0 errors, worst 97.41% /about@1440 — /Users/you/site/renderdiff-out/results.json
 ```
+
+A row covers the widths that agree on everything but the score (shown as a range): height
+delta (`h`), bands (`+` rows only left has, `-` rows only right has, at `y`; `~` when the
+widths put it in different places), aligned score, region count, unstable pixels and up to
+three text-diff lines (`-"x"` only on the right, `+"x"` only on the left). Clean means not
+one pixel differs. `--progress` gets the per-shot output when piped.
 
 ## Install
 
@@ -42,9 +46,10 @@ Requires Node >= 22.18.
 ### Agent skill
 
 [`skills/renderdiff/SKILL.md`](./skills/renderdiff/SKILL.md) teaches a coding agent to use
-renderdiff without fooling itself: run it with `npx renderdiff@latest`, read `results.json`,
-then the text diff, the bands and the region crops, and give a verdict that says what it
-looked at — not just a score.
+renderdiff without fooling itself: run it with `npx renderdiff@latest`, read the summary
+it prints, then the text diff, the bands and the region crops, and give a verdict that says
+what it looked at — not just a score. The longer reference (triage, rationalizations,
+config, gotchas) sits next to it in `reference.md` and is read only when needed.
 
 In Claude Code, as a plugin:
 
@@ -79,6 +84,7 @@ renderdiff <route…> --left <url> --right <url> [options]
 | `--config <path>` | Config file. Default: `renderdiff.config.{ts,mts,js,mjs}` in cwd. |
 | `--dry-run` | Print the URL pairs and exit. No browser. |
 | `--open` | Open the report when the run finishes. |
+| `--progress` | A line per shot as it finishes, then the worst scores. The default on a terminal; piped, renderdiff prints one compact summary at the end. |
 | `-h, --help` / `-v, --version` | |
 
 Routes are **literal paths** — there is no route discovery and globs are rejected. Both
@@ -182,8 +188,9 @@ Everything lands in the out dir (`./renderdiff-out` by default):
 - `{slug}.{width}.r{n}.png` — one crop per diff region, for the five largest: left | right |
   diff side by side, each the region padded by 48px, scaled down to at most 1,200px on the
   long side. Height padding is never cropped.
-- `results.json` — everything above as data, written on every run, errors included. Its
-  types (`Results` and friends) are exported from the package.
+- `results.json` — everything above as data, written on every run, errors included, one
+  result per line, scores to four decimals. Its types (`Results` and friends) are exported
+  from the package.
 
 ```jsonc
 {
