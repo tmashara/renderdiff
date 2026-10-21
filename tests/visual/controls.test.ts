@@ -199,7 +199,7 @@ for (const route of ["/color", "/nav"]) {
       assert.deepEqual(r.regions.slice(0, 5), c.regions);
       assert.deepEqual(r.text, { added: c.added, removed: c.removed });
       assert.deepEqual(Object.values(r.images), c.images);
-      assert.deepEqual(r.crops, c.crops);
+      assert.deepEqual(r.crops.map((x) => x.path), c.crops);
     });
   }
 }
@@ -253,34 +253,53 @@ test("--progress prints a line per shot with the score results.json has", async 
   assert.match(r.stdout, /^Results: .*results\.json$/m);
 });
 
-test("each region gets a crop: left | right | diff, padded, at most 1200px", async () => {
-  const res = results(run.outDir);
+const tokens = (w: number, h: number) => Math.ceil(w / 28) * Math.ceil(h / 28);
+
+test("every crop fits Claude's image budget, at most three per comparison", async () => {
   let seen = 0;
-  for (const r of res.results) {
-    assert.equal(r.status, "compared");
+  for (const r of results(run.outDir).results) {
     if (r.status !== "compared") continue;
-    assert.equal(r.crops.length, Math.min(5, r.regions.length), `${r.url}@${r.width}`);
-    const left = await sharp(run.file(r.images.left)).metadata();
-    const right = await sharp(run.file(r.images.right)).metadata();
-    const cw = Math.min(left.width!, right.width!);
-    const ch = Math.min(left.height!, right.height!);
-    for (const [i, name] of r.crops.entries()) {
-      assert.equal(name, `${r.url.slice(1)}.${r.width}.r${i + 1}.png`);
-      const g = r.regions[i]!;
-      // Three panels of the region padded by 48px and clipped, with 8px gaps, then scaled.
-      const pw = Math.min(cw, g.x + g.w + 48) - Math.max(0, g.x - 48);
-      const ph = Math.min(ch, g.y + g.h + 48) - Math.max(0, g.y - 48);
-      const [w, h] = [3 * pw + 16, ph];
-      const scale = Math.min(1, 1200 / Math.max(w, h));
-      const m = await sharp(run.file(name)).metadata();
-      assert.ok(Math.max(m.width!, m.height!) <= 1200, `${name} is ${m.width}×${m.height}`);
-      assert.ok(Math.abs(m.width! - w * scale) <= 1 && Math.abs(m.height! - h * scale) <= 1,
-        `${name} is ${m.width}×${m.height}, expected ${w}×${h} × ${scale}`);
+    assert.ok(r.crops.length <= 3, `${r.url}@${r.width} has ${r.crops.length} crops`);
+    for (const [i, c] of r.crops.entries()) {
+      assert.equal(c.path, `${r.url.slice(1)}.${r.width}.c${i + 1}.png`);
+      const m = await sharp(run.file(c.path)).metadata();
+      assert.ok(Math.max(m.width!, m.height!) <= 1568, `${c.path} is ${m.width}×${m.height}`);
+      assert.ok(tokens(m.width!, m.height!) <= 1568, `${c.path} is ${tokens(m.width!, m.height!)} tokens`);
+      assert.ok(c.scale >= 0.75 && c.scale <= 1, `${c.path} at ${c.scale}`);
       seen++;
     }
   }
   assert.ok(seen >= CONTROLS.length * WIDTHS.length, context(run));
 });
+
+test("/nav @1440 crops the missing link, not the content it pushed up", async () => {
+  const r = result(results(run.outDir), "/nav", 1440);
+  assert.equal(r.crops.length, 1, context(run));
+  const [c] = r.crops;
+  assert.equal(c!.kind, "band");
+  assert.ok(Math.abs(c!.right.y - PRICING[1440]!) <= 8 && c!.right.h === 24, JSON.stringify(c));
+  assert.equal(c!.left.h, 0, "the left side lacks the rows: an insertion point");
+  assert.equal(c!.scale, 1);
+  // As wide as the link plus context, not the page.
+  assert.ok((await sharp(run.file(c!.path)).metadata()).width! <= 400);
+});
+
+test("/taller @1440 crops the extra band, left over right at native scale", () => {
+  const r = result(results(run.outDir), "/taller", 1440);
+  assert.equal(r.crops.length, 1, context(run));
+  const [c] = r.crops;
+  assert.deepEqual([c!.kind, c!.right.h, c!.left.h, c!.layout, c!.scale], ["band", 272, 0, "stacked", 1]);
+});
+
+for (const width of WIDTHS) {
+  test(`/color @${width} crops the one region, the same box on both sides`, () => {
+    const r = result(results(run.outDir), "/color", width);
+    assert.equal(r.crops.length, 1, context(run));
+    const [c] = r.crops;
+    const { pixels, ...box } = r.regions[0]!;
+    assert.deepEqual([c!.kind, c!.left, c!.right, c!.scale, c!.clipped], ["region", box, box, 1, false]);
+  });
+}
 
 test("the height badge is rendered on the taller and nav rows and nowhere else", () => {
   const moved = ["/taller", "/nav"];

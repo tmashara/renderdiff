@@ -39,6 +39,7 @@ export const GUARDRAILS = [
   "unsettled",
   "sprite",
   "short",
+  "tall-region",
 ] as const;
 
 export const ALL: string[] = [...EQUIVALENCE, ...CONTROLS, ...GUARDRAILS];

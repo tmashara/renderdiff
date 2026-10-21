@@ -25,7 +25,7 @@ Report colouring (`--open`, for a human): green above 99.5%, amber to 97%, red b
 | "Worst is 99.1%, no regressions." | You reported a number, not a check. Open the worst route's crops. |
 | "99.6%, it's noise." | Check `text` and the region count first. A missing nav link is 99.6% and one `-` line. |
 | "It's probably just fonts / antialiasing." | "Probably" is exactly what the crop resolves. Look. |
-| "The crops looked fine, done." | Crops cover the largest regions only. Check the region count, and open the diff PNG for the rest and for any height delta: padding is never cropped. |
+| "The crops looked fine, done." | There are at most three: bands, then the largest regions. Check the region count, any `clipped` crop in results.json, and open the diff PNG for the rest and for any height delta: padding is never cropped. |
 | "Masking the header gets this to 100%." | Every mask is coverage surrendered. Mask only content *proven* to vary per load (clocks, star counts, rotating quotes), with a `reason`, which the report prints verbatim. |
 | "I'll lower `--threshold` until it passes." | Threshold is a CI gate, not a dial for reaching green. |
 | "That route errors, I'll drop it from the list." | Shrinking the route list shrinks what you verified. Fix it, or say it's unverified. |
@@ -33,8 +33,10 @@ Report colouring (`--open`, for a human): green above 99.5%, amber to 97%, red b
 
 ## results.json
 
-Scripts, and drilling into one route: every score, region (`x,y,w,h,pixels`), band, full
-text diff and image path, one result per line, so `grep '"url":"/about"'` pulls a route.
+Scripts, and drilling into one route: every score, region (`x,y,w,h,pixels`, left-page
+px), band, full text diff, image path and crop (`kind`, each side's box with `h` 0 at an
+insertion point, `layout` `stacked` = left on top or `side` = left on the left, `scale`,
+`clipped`), one result per line, so `grep '"url":"/about"'` pulls a route.
 Paths are relative to the out dir. `summary` has `compared`, `errors`, `mean`, `worst` and
 `belowThreshold`; `meta` records origins, widths, threshold, the pinned clock, block
 patterns, hidden selectors and mask reasons. The normal loop doesn't need it.

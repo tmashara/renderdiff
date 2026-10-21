@@ -32,8 +32,10 @@ A score without looking is not a verdict: 99.6% can be a missing nav link.
 3. Read `text` first: `-"x"` is only on the reference (missing in your change), `+"x"` only on yours.
 4. A `band -24@y196` is 24 rows only the right has (`+` only the left) at that `y`;
    `aligned 100.00%` means the band is the whole difference. `unaligned`: no bands, see reference.md.
-5. `Read` the crops in the out dir: `{slug}.{width}.r{n}.png` (`/` is `index`, `/a/b` is `a-b`).
-   Full shots `{slug}.{width}.{left,right,diff}.png` only when a crop doesn't explain itself.
+5. `Read` the crops in the out dir: `{slug}.{width}.c{n}.png` (`/` is `index`, `/a/b` is `a-b`),
+   up to three, bands first. Left is always on top or on the left; the change is boxed in red,
+   and a red seam marks where one side lacks the other's rows. Full shots
+   `{slug}.{width}.{left,right,diff}.png` only when a crop doesn't explain itself.
 6. Explain every band, region and text line, then widen to all routes and the default widths.
    For a row collapsed across widths, open the widest and the narrowest.
 

@@ -4,8 +4,8 @@ Screenshot diff between two origins.
 
 Give it a list of routes and two base URLs. It screenshots each route on both sides at
 several viewport widths, pixel-diffs the pairs, and writes a scored HTML report with
-left / right / diff side by side, plus `results.json` and a crop of each large diff region
-for scripts and coding agents.
+left / right / diff side by side, plus `results.json` and crops of the changes, sized to stay
+legible to coding agents.
 
 Useful for the "did I break anything?" question a test suite can't answer: a framework
 migration, a CSS refactor, a dependency bump, a staging-vs-production check.
@@ -185,9 +185,14 @@ Everything lands in the out dir (`./renderdiff-out` by default):
 - `report.html` — the scored report.
 - `{slug}.{width}.{left,right,diff}.png` — full-page shots and the diff. `/` slugs to
   `index`, `/blog/foo` to `blog-foo`, other characters to `_`; a clash gets a `-2` suffix.
-- `{slug}.{width}.r{n}.png` — one crop per diff region, for the five largest: left | right |
-  diff side by side, each the region padded by 48px, scaled down to at most 1,200px on the
-  long side. Height padding is never cropped.
+- `{slug}.{width}.c{n}.png` — up to three crops per comparison: bands (rows only one side
+  has), tallest first, then the largest regions. Each shows left and right at native scale,
+  padded by 48px and at least 320px wide, with a 1px red box around the change; on the side
+  that lacks a band's rows, a 2px red seam is inserted where they would be, hiding nothing.
+  Left is always on top (`stacked`, for wide changes) or on the left (`side`, for tall
+  ones). A crop stays within 1,568px on its long edge and 1,568 image tokens
+  (⌈w/28⌉·⌈h/28⌉) and is never scaled below 0.75×; a change too big for that keeps its top
+  rows (or left columns) and is marked `clipped`. Height padding is never cropped.
 - `results.json` — everything above as data, written on every run, errors included, one
   result per line, scores to four decimals. Its types (`Results` and friends) are exported
   from the package.
@@ -209,11 +214,16 @@ Everything lands in the out dir (`./renderdiff-out` by default):
       "alignedScore": 1,         // score over the aligned rows; null unless there are bands
       "diffPixels": 33120, "totalPixels": 1158000, "unstablePixels": 0,
       "heightDelta": -24, "widthDelta": 0,          // left − right
-      "regions": [{ "x": 0, "y": 1104, "w": 1440, "h": 33, "pixels": 9120 }],
+      "regions": [],             // left-page px; with bands, from the realigned rows
       "bands": [{ "side": "right", "y": 196, "h": 24 }],   // null: too different to align
       "text": { "added": [], "removed": ["Pricing"] },
       "images": { "left": "about.1440.left.png", "right": "about.1440.right.png", "diff": "about.1440.diff.png" },
-      "crops": ["about.1440.r1.png"]                // crops[i] is regions[i]
+      "crops": [{
+        "path": "about.1440.c1.png", "kind": "band",          // or "region"
+        "left": { "x": 256, "y": 196, "w": 68, "h": 0 },      // h 0: where the rows would go
+        "right": { "x": 256, "y": 196, "w": 68, "h": 24 },
+        "layout": "stacked", "scale": 1, "clipped": false     // left on top, or on the left ("side")
+      }]
     },
     { "url": "/blank", "width": 1440, "status": "error", "error": "page did not render …" }
   ],

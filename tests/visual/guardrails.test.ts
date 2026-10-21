@@ -363,6 +363,20 @@ describe("network blocking", () => {
   });
 });
 
+describe("crops", () => {
+  test("a change too tall for one legible crop is clipped to its top, not shrunk or split", async () => {
+    const run = await capture(["/tall-region"]);
+    assert.equal(run.code, 0, context(run));
+    const r = result(results(run.outDir), "/tall-region", 1440);
+    assert.equal(r.crops.length, 1, context(run));
+    const [c] = r.crops;
+    assert.equal(c!.clipped, true);
+    assert.ok(c!.scale >= 0.75, `scaled to ${c!.scale}`);
+    const m = await sharp(run.file(c!.path)).metadata();
+    assert.ok(Math.ceil(m.width! / 28) * Math.ceil(m.height! / 28) <= 1568, `${m.width}×${m.height}`);
+  });
+});
+
 describe("the run summary", () => {
   test("errors are listed separately from scores on stdout", async () => {
     const run = await capture(["/blank", "/animated"]);
@@ -416,7 +430,7 @@ describe("the output directory", () => {
     const dir = path.join(tempDir(), "out");
     const first = await into(dir, ["/color"]);
     assert.equal(first.code, 0, context(first));
-    assert.ok(fs.existsSync(path.join(dir, "color.1440.r1.png")), context(first));
+    assert.ok(fs.existsSync(path.join(dir, "color.1440.c1.png")), context(first));
     assert.ok(fs.existsSync(path.join(dir, "results.json")));
     const second = await into(dir, ["/color"]);
     assert.equal(second.code, 0, context(second));

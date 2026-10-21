@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tall region</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for crop sizing. One 2400px box is recoloured, a change too tall to crop at a
+   legible scale, so its crop must keep the top rows rather than shrink. */
+.column { width: var(--content); height: 2400px; background: #c62828; }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Tall region</h1>
+<p class="lede">This pair is deliberately different. The column below is blue on the left and red on the right, and it is far taller than one crop can hold at a scale where text stays legible.</p>
+<div class="column"></div>
+<section class="notes">
+<p>A crop scaled below three quarters stops being legible, so a change this tall keeps the rows that fit and says it was clipped.</p>
+</section>
+</div>
+</body>
+</html>

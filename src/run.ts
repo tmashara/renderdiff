@@ -58,7 +58,7 @@ function slugs(routes: Route[]): Map<Route, string> {
 const ours = (f: string) =>
   f === "report.html" ||
   f === "results.json" ||
-  /^[a-z0-9_-]+\.[\d.]+\.(left|right|diff|r\d+)\.png$/.test(f);
+  /^[a-z0-9_-]+\.[\d.]+\.(left|right|diff|c\d+)\.png$/.test(f);
 
 function wipeable(dir: string): boolean {
   if (!fs.existsSync(dir)) return true;
@@ -121,7 +121,7 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
         }
         const unstablePixels = await cancelUnstable(leftShot, rightShot);
 
-        const { diffPng, ...metrics } = await compare(leftShot, rightShot);
+        const { diffPng, spots, ...metrics } = await compare(leftShot, rightShot);
         if (unstablePixels > MAX_UNSTABLE_SHARE * metrics.totalPixels) {
           throw new Error(
             `page did not settle: ${unstablePixels}px unstable at ${route}`,
@@ -137,13 +137,13 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
         };
         const write = (name: string, buf: Buffer) =>
           fs.promises.writeFile(path.join(cfg.outDir, name), buf);
-        const sheets = await crops(leftShot.png, rightShot.png, diffPng, metrics.regions);
-        const cropPaths = sheets.map((_, i) => `${base}.r${i + 1}.png`);
+        const made = await crops(leftShot.png, rightShot.png, spots);
+        const cropped = made.map(({ png, ...c }, i) => ({ path: `${base}.c${i + 1}.png`, ...c }));
         await Promise.all([
           write(images.left, leftShot.png),
           write(images.right, rightShot.png),
           write(images.diff, diffPng),
-          ...sheets.map((buf, i) => write(cropPaths[i]!, buf)),
+          ...made.map((c, i) => write(cropped[i]!.path, c.png)),
         ]);
 
         results.push({
@@ -153,7 +153,7 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
           ...metrics,
           unstablePixels,
           images,
-          crops: cropPaths,
+          crops: cropped,
         });
         const { regions, bands, alignedScore, text } = metrics;
         const details = [

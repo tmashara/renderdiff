@@ -101,9 +101,9 @@ const HELP = `
 
   Screenshots each route on both origins at several viewport widths, pixel-diffs the
   pairs, and writes a scored HTML report (report.html) plus results.json — every score,
-  region, band, text-diff line and image path, for scripts and agents — and a
-  side-by-side crop of each of the largest diff regions. Routes are literal paths — no
-  globs, no discovery. Exits 1 if any route errors or falls below --threshold.
+  region, band, text-diff line and image path, for scripts and agents — and up to
+  three crops per comparison of the bands and largest regions, left beside or over
+  right. Routes are literal paths — no globs, no discovery. Exits 1 if any route errors or falls below --threshold.
 
   Options
     --left <url>        Left origin, e.g. http://localhost:3000        (required)

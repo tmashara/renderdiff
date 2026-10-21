@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { Band, Region, TextDiff } from "./compare.ts";
+import type { Band, Box, Region, TextDiff } from "./compare.ts";
 import { CONTEXT_OPTIONS, type ResolvedConfig } from "./config.ts";
 import { fmtBand, fmtRegion, pct, signed } from "./format.ts";
 
@@ -29,8 +29,24 @@ export interface ComparedResult extends BaseResult {
   text: TextDiff;
   /** Paths relative to the out dir. */
   images: { left: string; right: string; diff: string };
-  /** `{slug}.{width}.r{n}.png` for the largest regions: left | right | diff, `crops[i]` is `regions[i]`. */
-  crops: string[];
+  /** At most three: bands, tallest first, then the largest regions. Not one per region. */
+  crops: CropResult[];
+}
+
+/** A crop of one change: left and right panels, a 1px red box round it, or a 2px red seam. */
+export interface CropResult {
+  /** `{slug}.{width}.c{n}.png`, relative to the out dir. */
+  path: string;
+  kind: "band" | "region";
+  /** The change on each side, in that side's page px. `h` 0 is where the other side's band would go. */
+  left: Box;
+  right: Box;
+  /** Left is always on top (`stacked`) or on the left (`side`). */
+  layout: "stacked" | "side";
+  /** 1 is native; never below 0.75. */
+  scale: number;
+  /** Only the top rows (or left columns) of the change fit. */
+  clipped: boolean;
 }
 
 /** A route that threw before it could be diffed — neither a pass nor a fail. */
@@ -163,7 +179,7 @@ function findings(r: ComparedResult): string {
   if (r.crops.length) {
     items.push(
       `<div class="crops">${r.crops
-        .map((c) => `<a class="crop" href="${c}" target="_blank"><img loading="lazy" src="${c}"></a>`)
+        .map((c) => `<a class="crop" href="${c.path}" target="_blank" title="${c.kind}, left ${c.layout === "stacked" ? "on top" : "on the left"}"><img loading="lazy" src="${c.path}"></a>`)
         .join("")}</div>`,
     );
   }
