@@ -44,31 +44,26 @@ patterns, hidden selectors and mask reasons. The normal loop doesn't need it.
 ## Config file
 
 Flags cover a one-off run. A `renderdiff.config.{ts,mts,js,mjs}` in the working directory
-covers a repo you diff repeatedly, and expresses what flags can't: per-route masks,
-extra selectors to hide, extra URLs to block. **CLI flag > config file > default.**
+covers a repo you diff repeatedly, and expresses what flags can't: masks, extra selectors
+to hide, extra URLs to block. **CLI flag > config file > default.**
 
 ```js
 // renderdiff.config.mjs
 export default {
   left: "http://localhost:4000",
   right: "https://example.com",
-  routes: ["/", "/about", "/pricing"],
+  routes: ["/", "/about", "/pricing::/plans", { left: "/blog", right: "/posts" }],
   widths: [1440, 896, 375],
   threshold: 0.97,
   hideSelectors: [".site-cookie-banner"],
-  masks: [
-    {
-      urlPath: "/pricing",
-      reason: "live star count on /pricing",
-      locate: (page) => page.locator("[data-star-count]"),
-    },
-  ],
+  masks: [{ selector: "[data-star-count]", reason: "live star count", urlPath: "/pricing" }],
 };
 ```
 
-Run through `npx` or a global install, use a plain `export default {}`:
-`import { defineConfig } from "renderdiff"` only resolves when renderdiff is also installed in
-that project. [`renderdiff.config.example.ts`](https://github.com/tmashara/renderdiff/blob/main/renderdiff.config.example.ts)
+A mask takes exactly one of `selector` or `locate: (page) => Locator`; without `urlPath` it
+applies to every route, and on a pair it matches either side's path and paints both. Use a
+plain `export default {}`: `import { defineConfig } from "renderdiff"` only resolves when
+renderdiff is also installed in that project. [`renderdiff.config.example.ts`](https://github.com/tmashara/renderdiff/blob/main/renderdiff.config.example.ts)
 annotates every field.
 
 Two rules for `hideSelectors`: match the element **exactly** (consent scripts also stamp
@@ -84,8 +79,10 @@ cookie script ran wedges the renderer).
   next to a new one, pass `--out renderdiff-before` / `--out renderdiff-after`. A
   directory holding files renderdiff didn't write is refused (exit 2).
 - **Routes normalize** to no trailing slash; `/` stays `/`. Globs are rejected.
-- **A migration that changed a URL** can't be diffed in one run: both sides get the
-  same path.
+- **Route pairs** split on the first `::` followed by `/`: `/pricing::/plans` is a pair,
+  `/q?x=std::vector` and `pricing::plans` are single routes. `--dry-run` shows how each was
+  read. A pair is `/a::/b` in stdout and `url`; results.json also has `left` and `right`,
+  and its files are `{slug(a)}~{slug(b)}.{width}.*.png`.
 - **Analytics, consent and A/B tooling are blocked at the network layer** on both sides,
   and animations are stilled. If something still flickers between runs, it's a candidate
   for `blockUrlPatterns`, not for a mask.

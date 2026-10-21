@@ -1,18 +1,17 @@
 // Copy to `renderdiff.config.ts` in the directory you run `renderdiff` from.
 //
-// Everything here is optional, and CLI flags always win over it.
-//
-// The `defineConfig` import is only for editor types, and only resolves if `renderdiff` is
-// also a devDependency of this project. Without it, `export default { … }` is fine.
-import { defineConfig } from "renderdiff";
-
-export default defineConfig({
+// Everything here is optional, and CLI flags always win over it. A plain object needs no
+// import; for editor types, wrap it in `defineConfig` from "renderdiff", which only
+// resolves if renderdiff is also a devDependency of this project.
+export default {
   // The two origins. The tool has no notion of which is "prod" — it just diffs them.
   left: "http://localhost:3000",
   right: "https://example.com",
 
-  // Diffed when you run bare `renderdiff` with no positional routes.
-  routes: ["/", "/about", "/pricing"],
+  // Diffed when you run bare `renderdiff` with no positional routes. `/a::/b` (or
+  // `{ left: "/a", right: "/b" }`) loads /a on the left and /b on the right — for a page
+  // the migration moved.
+  routes: ["/", "/about", "/pricing::/plans", { left: "/blog", right: "/posts" }],
 
   // Replaces the default set (1440, 1152, 896, 704, 375).
   widths: [1440, 896, 375],
@@ -52,21 +51,25 @@ export default defineConfig({
   // Keep the list short. Every mask is coverage given up, so add only what is proven
   // to drift. Each `reason` is printed verbatim in the report, so the report stays
   // honest about what it did not measure.
+  //
+  // Each needs exactly one of `selector` (a Playwright selector) or `locate`. Without
+  // `urlPath` it applies to every route; on a pair it matches either side's path.
   masks: [
     {
       // Baked in at build time from a nightly job, so a local tree and a production
       // build days apart legitimately disagree.
       urlPath: "/pricing",
       reason: "live star count on /pricing",
-      locate: (page) => page.locator("[data-star-count]"),
+      selector: "[data-star-count]",
     },
     {
-      // Ticks on an interval. The two captures land seconds apart, so they disagree
-      // across a minute boundary. Matched by text — the element carries only
-      // utility classes.
+      // The escape hatch, for what a selector can't say: here, matching by text because
+      // the element carries only utility classes. A clock rendered from `new Date()` in
+      // the browser rarely needs a mask (both sides start at the same instant); this one
+      // is rendered on the server.
       urlPath: "/events",
-      reason: "clock on /events",
+      reason: "server-rendered clock on /events",
       locate: (page) => page.getByText(/^\d{1,2}:\d{2}(AM|PM)$/),
     },
   ],
-});
+};

@@ -60,3 +60,7 @@ Breaking any of these produces a flaky suite, and the flake looks like a renderd
 1. Create `pages/<name>/{left,right}.html` from an existing pair.
 2. Reference it from a test in `tests/visual/`. The fixture lint fails on any directory no
    visual test mentions, so a fixture cannot be added and then forgotten.
+
+A route-pair test (`/a::/b`) needs no fixture of its own: it pairs two existing
+directories, loading `a`'s `left.html` on the left origin and `b`'s `right.html` on the
+right.
