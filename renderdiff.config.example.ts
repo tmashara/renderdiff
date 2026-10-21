@@ -12,8 +12,16 @@ export default {
 
   // Diffed when you run bare `renderdiff` with no positional routes. `/a::/b` (or
   // `{ left: "/a", right: "/b" }`) loads /a on the left and /b on the right — for a page
-  // the migration moved.
-  routes: ["/", "/about", "/pricing::/plans", { left: "/blog", right: "/posts" }],
+  // the migration moved. `selector` compares one element instead of the page (a string,
+  // or `{ left, right }`); it must match exactly one, and `--selector` replaces it. List a
+  // route once per selector to compare several components of it.
+  routes: [
+    "/",
+    "/about",
+    "/pricing::/plans",
+    { left: "/blog", right: "/posts" },
+    { left: "/pricing", selector: { left: ".plans-v2", right: ".plans" } },
+  ],
 
   // Replaces the default set (1440, 1152, 896, 704, 375).
   widths: [1440, 896, 375],
