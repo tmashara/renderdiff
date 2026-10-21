@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Band, Box, Region, TextDiff } from "./compare.ts";
 import { CONTEXT_OPTIONS, type ResolvedConfig } from "./config.ts";
-import { fmtBand, fmtRegion, pct, signed } from "./format.ts";
+import { floor4, fmtBand, fmtRegion, pct, signed } from "./format.ts";
 
 interface BaseResult {
   url: string;
@@ -96,9 +96,9 @@ export function stats(rows: ComparedResult[]) {
   return { sorted, mean, worst: sorted[0]! };
 }
 
-/** Scores to 4 decimals, the precision the report's two-place percentages show. */
+/** Scores to 4 decimals, rounded down like `pct`. */
 const round = (key: string, v: unknown) =>
-  typeof v === "number" && /^(score|alignedScore|mean)$/.test(key) ? Math.round(v * 1e4) / 1e4 : v;
+  typeof v === "number" && /^(score|alignedScore|mean)$/.test(key) ? floor4(v) : v;
 
 export function writeResults(
   results: RouteResult[],

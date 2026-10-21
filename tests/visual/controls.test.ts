@@ -212,6 +212,9 @@ test("results.json carries the run meta and a summary that matches the report", 
   assert.equal(meta.threshold, null);
   assert.ok(meta.blockUrlPatterns.length && meta.hideSelectors.length);
   assert.equal(rows.length, CONTROLS.length * WIDTHS.length);
+  for (const r of rows) {
+    if (r.status === "compared") assert.ok(r.score < 1 && r.score * 1e4 === Math.round(r.score * 1e4), `${r.url}@${r.width}: ${r.score}`);
+  }
   assert.equal(summary.compared, report.cards.length);
   assert.equal(summary.errors, 0);
   assert.equal(summary.belowThreshold, 0);
@@ -231,6 +234,7 @@ test("piped stdout is one compact summary: no clean routes, widths collapsed, a 
     total: CONTROLS.length * WIDTHS.length,
     errors: 0,
     worst: { score: Number((worst.score * 100).toFixed(2)) / 100, route: worst.url, width: worst.width },
+    below: null,
     results: run.file("results.json"),
   });
   // Both widths agree on everything but the score, so they share one row.

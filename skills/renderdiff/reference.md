@@ -13,7 +13,7 @@
 | `text -"x" +"y"` | Content differs: `-` lines are on the reference only, `+` on your change only. `(+N more)` means more lines; the report card or results.json lists them all. |
 | `unaligned` | The pages differ in height but share too few identical rows to align, so no bands. Either they are very different, the edits total more than 2,000 rows, or sub-threshold noise touches every row. Use the height delta and regions. |
 | `band …@y~N` | Widths collapsed into one row put the band at different `y`; `N` is the first width's. |
-| `unstable Npx` | Pixels that kept changing between shots of the same load on one origin (a ticker, a carousel, a video). Painted out on both sides and excluded from the score. A large number means a big area went unmeasured: look at the magenta on the full shots. |
+| `unstable Npx` | Pixels that kept changing between shots of the same load on one origin (a ticker, a carousel, a video). Painted out on both sides and excluded from the score. A large number means a big area went unmeasured: look at the magenta on the full shots. Such a route is never on the `clean:` line. |
 | `ERROR page did not settle: Npx unstable at …` | More than 25% of the page kept changing between shots, so too little was measured to score. Mask or stop the moving part. |
 
 Report colouring (`--open`, for a human): green above 99.5%, amber to 97%, red below.
@@ -79,7 +79,7 @@ cookie script ran wedges the renderer).
 ## Gotchas
 
 - **stdout is compact when piped** (what an agent sees). `--progress` prints a line per
-  shot instead.
+  shot instead; `--no-progress` forces the summary on a terminal.
 - **The out dir is wiped at the start of every run.** To keep a previous run's evidence
   next to a new one, pass `--out renderdiff-before` / `--out renderdiff-after`. A
   directory holding files renderdiff didn't write is refused (exit 2).

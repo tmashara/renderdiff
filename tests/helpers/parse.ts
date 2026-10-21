@@ -36,7 +36,7 @@ export interface Summary {
   /** Routes on the `clean:` line. */
   clean: string[];
   /** Each differing route: widths that were clean, then one row per collapsed width group. */
-  routes: Map<string, { clean: number[]; rows: { widths: number[]; text: string }[]; errors: { width: number; message: string }[] }>;
+  routes: Map<string, { clean: number[]; rows: { widths: number[]; text: string }[]; errors: { widths: number[]; message: string }[] }>;
   verdict: {
     differ: number;
     routes: number;
@@ -45,12 +45,14 @@ export interface Summary {
     errors: number;
     /** Null when nothing was compared. */
     worst: { score: number; route: string; width: number } | null;
+    /** Null unless a threshold was set. */
+    below: { count: number; threshold: number } | null;
     results: string;
   };
 }
 
 const VERDICT =
-  /^renderdiff: (\d+) of (\d+) routes differ \((\d+) of (\d+) shots\), (\d+) errors?(?:, worst ([\d.]+)% (\S+)@(\d+))? — (.+)$/;
+  /^renderdiff: (\d+) of (\d+) routes differ \((\d+) of (\d+) shots\), (\d+) errors?(?:, worst ([\d.]+)% (\S+)@(\d+))?(?:, (\d+) below ([\d.]+)%)? — (.+)$/;
 
 /** The compact summary printed when stdout is not a TTY. Throws when there is no verdict line. */
 export function parseSummary(stdout: string): Summary {
@@ -65,8 +67,8 @@ export function parseSummary(stdout: string): Summary {
     if ((m = /^(\/\S*)(?:  clean @([\d,]+))?$/.exec(line))) {
       at = { clean: m[2] ? m[2].split(",").map(Number) : [], rows: [], errors: [] };
       routes.set(m[1]!, at);
-    } else if (at && (m = /^  @(\d+)  ERROR (.*)$/.exec(line))) {
-      at.errors.push({ width: Number(m[1]), message: m[2]! });
+    } else if (at && (m = /^  @([\d,]+)  ERROR (.*)$/.exec(line))) {
+      at.errors.push({ widths: m[1]!.split(",").map(Number), message: m[2]! });
     } else if (at && (m = /^  @([\d,]+)  (.*)$/.exec(line))) {
       at.rows.push({ widths: m[1]!.split(",").map(Number), text: m[2]! });
     }
@@ -81,7 +83,8 @@ export function parseSummary(stdout: string): Summary {
       total: Number(v[4]),
       errors: Number(v[5]),
       worst: v[6] ? { score: Number(v[6]) / 100, route: v[7]!, width: Number(v[8]) } : null,
-      results: v[9]!,
+      below: v[9] ? { count: Number(v[9]), threshold: Number(v[10]) / 100 } : null,
+      results: v[11]!,
     },
   };
 }

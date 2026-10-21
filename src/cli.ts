@@ -22,7 +22,8 @@ import {
 interface Args extends CliOverrides {
   dryRun: boolean;
   open: boolean;
-  progress: boolean;
+  /** Undefined: decide by whether stdout is a terminal. */
+  progress?: boolean;
   help: boolean;
   version: boolean;
   config?: string;
@@ -42,7 +43,6 @@ function parseArgs(argv: string[]): Args {
   const a: Args = {
     dryRun: false,
     open: false,
-    progress: false,
     help: false,
     version: false,
     routes: [],
@@ -69,6 +69,7 @@ function parseArgs(argv: string[]): Args {
     else if (v === "--dry-run") a.dryRun = true;
     else if (v === "--open") a.open = true;
     else if (v === "--progress") a.progress = true;
+    else if (v === "--no-progress") a.progress = false;
     else if (v === "--left") a.left = next();
     else if (v === "--right") a.right = next();
     else if (v === "--out") a.outDir = next();
@@ -117,6 +118,7 @@ const HELP = `
     --open              Open the report when the run finishes.
     --progress          A line per shot as it finishes. The default on a terminal;
                         otherwise one summary of the differing routes at the end.
+    --no-progress       The end-of-run summary, even on a terminal.
     -h, --help          Show this.
     -v, --version       Print the version.
 
@@ -248,7 +250,7 @@ try {
       routes,
       cfg,
       open: args.open,
-      progress: args.progress || !!process.stdout.isTTY,
+      progress: args.progress ?? !!process.stdout.isTTY,
     }));
 } catch (e) {
   console.error(`✗ ${e instanceof Error ? e.message : String(e)}`);

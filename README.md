@@ -31,8 +31,11 @@ renderdiff: 2 of 3 routes differ (6 of 15 shots), 0 errors, worst 97.41% /about@
 A row covers the widths that agree on everything but the score (shown as a range): height
 delta (`h`), bands (`+` rows only left has, `-` rows only right has, at `y`; `~` when the
 widths put it in different places), aligned score, region count, unstable pixels and up to
-three text-diff lines (`-"x"` only on the right, `+"x"` only on the left). Clean means not
-one pixel differs. `--progress` gets the per-shot output when piped.
+three text-diff lines (`-"x"` only on the right, `+"x"` only on the left). Errors print in
+full, grouped across the widths that share a message. Clean means not one pixel differs
+and none went unmeasured as unstable; a route with unstable pixels gets its own row. With
+`--threshold`, the verdict line ends `, B below 97.00%`. `--progress` gets the per-shot
+output when piped, `--no-progress` the summary on a terminal.
 
 ## Install
 
@@ -85,6 +88,7 @@ renderdiff <route…> --left <url> --right <url> [options]
 | `--dry-run` | Print the URL pairs and exit. No browser. |
 | `--open` | Open the report when the run finishes. |
 | `--progress` | A line per shot as it finishes, then the worst scores. The default on a terminal; piped, renderdiff prints one compact summary at the end. |
+| `--no-progress` | The compact summary even on a terminal. |
 | `-h, --help` / `-v, --version` | |
 
 Routes are **literal paths** — there is no route discovery and globs are rejected. Both
@@ -140,11 +144,10 @@ The score is the share of pixels that match, per route per width. Green above 99
 amber to 97%, red below. It is a triage signal, not a verdict — open the report and
 look at the diff column.
 
-Under each score, stdout and the report card say where to look:
+Under each score, `--progress` output and the report card say where to look:
 
 ```
   [3/8] 97.14%  /pricing @1440  (height -24px)
-        3 regions, largest 1440×33 at (0,1104)
         band -24px at y=196 (right)
         aligned 100.00%
         text: 0 added, 1 removed
@@ -152,8 +155,11 @@ Under each score, stdout and the report card say where to look:
 
 - **Regions** are connected patches of differing pixels, on a 16px grid, largest first. On
   a long page a missing link barely moves the score; it is still a region. Only the area
-  both sides cover is searched: padding is reported by the height delta and the bands. The
-  card lists the top five with their pixel counts and a crop of each.
+  both sides cover is searched: padding is reported by the height delta and the bands. With
+  bands, regions come from the realigned rows, so content a band only pushed down isn't
+  one (above, the band is the whole difference, so there are none). The
+  card lists the top five with their pixel counts; up to three crops cover the bands first,
+  then the largest regions.
 - **Bands** are rows only one side has, found by aligning the two images row by row. `-24px
   at y=196 (right)` means the right side has 24 rows there that the left lacks — signed like
   the height delta. When rows of identical content repeat, the band's `y` can slide along
@@ -194,7 +200,8 @@ Everything lands in the out dir (`./renderdiff-out` by default):
   (⌈w/28⌉·⌈h/28⌉) and is never scaled below 0.75×; a change too big for that keeps its top
   rows (or left columns) and is marked `clipped`. Height padding is never cropped.
 - `results.json` — everything above as data, written on every run, errors included, one
-  result per line, scores to four decimals. Its types (`Results` and friends) are exported
+  result per line, scores rounded down to four decimals (so a shot that differs never
+  reads as `1`). Its types (`Results` and friends) are exported
   from the package.
 
 ```jsonc

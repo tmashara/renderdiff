@@ -224,27 +224,21 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
   const resultsPath = writeResults(results, meta, cfg.outDir);
 
   if (progress) summarize(results, reportPath, resultsPath);
-  else console.log(compact(results, routes, resultsPath));
+  else console.log(compact(results, routes, resultsPath, cfg.threshold));
 
   if (open) {
     const opener = process.platform === "darwin" ? "open" : "xdg-open";
     spawn(opener, [reportPath], { detached: true, stdio: "ignore" }).unref();
   }
 
-  const errors = results.filter((r) => r.status === "error");
-  if (errors.length) return 1;
-
-  if (cfg.threshold !== null) {
-    const below = results.filter(
-      (r) => r.status === "compared" && r.score < cfg.threshold!,
-    );
-    if (below.length) {
-      console.error(`\n✗ ${below.length} route(s) below ${pct(cfg.threshold)}.`);
-      return 1;
-    }
+  // Reported before the error exit, so an errored route can't hide a threshold failure.
+  const below = results.filter(
+    (r) => r.status === "compared" && cfg.threshold !== null && r.score < cfg.threshold,
+  );
+  if (below.length) {
+    console.error(`\n✗ ${below.length} route(s) below ${pct(cfg.threshold!)}.`);
   }
-
-  return 0;
+  return below.length || results.some((r) => r.status === "error") ? 1 : 0;
 }
 
 /** A missing browser binary is the likeliest first-run failure — name the fix. */
@@ -319,20 +313,26 @@ const TEXT_LINES = 3;
  * differing route with its widths collapsed where everything but the score agrees, and a
  * one-line verdict that names results.json.
  */
-export function compact(results: RouteResult[], routes: Route[], resultsPath: string): string {
+export function compact(
+  results: RouteResult[],
+  routes: Route[],
+  resultsPath: string,
+  threshold: number | null,
+): string {
   const out: string[] = [];
   const clean: Route[] = [];
   let differ = 0;
   for (const route of routes) {
     const rows = results.filter((r) => r.url === route);
     const ok = rows.filter((r): r is ComparedResult => r.status === "compared");
-    const same = ok.filter((r) => r.diffPixels === 0);
-    const changed = ok.filter((r) => r.diffPixels > 0);
+    // Unstable pixels went unmeasured, so a shot with any is not clean, only unchanged.
+    const same = ok.filter((r) => r.diffPixels === 0 && r.unstablePixels === 0);
+    const changed = ok.filter((r) => !same.includes(r));
     if (same.length === rows.length) {
       clean.push(route);
       continue;
     }
-    differ++;
+    if (changed.some((r) => r.diffPixels > 0)) differ++;
     out.push(route + (same.length ? `  clean @${same.map((r) => r.width).join(",")}` : ""));
     const groups = new Map<string, ComparedResult[]>();
     for (const r of changed) {
@@ -346,7 +346,9 @@ export function compact(results: RouteResult[], routes: Route[], resultsPath: st
       groups.set(key, [...(groups.get(key) ?? []), r]);
     }
     for (const g of groups.values()) out.push(`  @${g.map((r) => r.width).join(",")}  ${row(g)}`);
-    for (const r of rows) if (r.status === "error") out.push(`  @${r.width}  ERROR ${r.error}`);
+    const failed = new Map<string, number[]>();
+    for (const r of rows) if (r.status === "error") failed.set(r.error, [...(failed.get(r.error) ?? []), r.width]);
+    for (const [error, widths] of failed) out.push(`  @${widths.join(",")}  ERROR ${error}`);
   }
   if (clean.length) out.unshift(`clean: ${clean.join(" ")}`);
   const compared = results.filter((r): r is ComparedResult => r.status === "compared");
@@ -357,6 +359,7 @@ export function compact(results: RouteResult[], routes: Route[], resultsPath: st
     `renderdiff: ${differ} of ${routes.length} routes differ (${shots} of ${results.length} shots), ` +
       `${errors} error${errors === 1 ? "" : "s"}` +
       (worst ? `, worst ${pct(worst.score)} ${worst.url}@${worst.width}` : "") +
+      (threshold === null ? "" : `, ${compared.filter((r) => r.score < threshold).length} below ${pct(threshold)}`) +
       ` — ${resultsPath}`,
   );
   return out.join("\n");

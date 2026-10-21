@@ -46,6 +46,8 @@ describe("help and version", () => {
       "--config",
       "--dry-run",
       "--open",
+      "--progress",
+      "--no-progress",
     ]) {
       assert.ok(r.stdout.includes(flag), `--help does not mention ${flag}`);
     }

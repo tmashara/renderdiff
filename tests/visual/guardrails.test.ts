@@ -160,6 +160,11 @@ describe("the stability check", () => {
     // Exactly the 928x160 box: every pixel of it changes between any two shots, nothing else does.
     assert.equal(c.unstablePixels, 928 * 160, context(run));
     assert.equal(result(results(run.outDir), "/ticker", 1440).unstablePixels, 928 * 160, context(run));
+    // Unmeasured is not clean: the summary gives it a row that names the unstable pixels.
+    const { clean, routes, verdict } = parseSummary(run.stdout);
+    assert.deepEqual(clean, [], context(run));
+    assert.match(routes.get("/ticker")!.rows[0]!.text, /unstable 148,480px/);
+    assert.equal(verdict.differ, 0, "no pixel differs");
   });
 
   test("a page that is mostly unstable is an error, not a score", async () => {
@@ -404,7 +409,25 @@ describe("the run summary", () => {
     assert.equal(blank.errors.length, 1);
     // In full: the reason is what tells a blank page from a broken asset pipeline.
     assert.match(blank.errors[0]!.message, /^page did not render on either side \(left: .+; right: .+\) at \/blank$/);
-    assert.deepEqual([verdict.differ, verdict.routes, verdict.errors], [1, 2, 1]);
+    assert.deepEqual([verdict.differ, verdict.routes, verdict.errors], [0, 2, 1]);
+  });
+
+  test("a route that only errored doesn't count as differing, and one message covers its widths", async () => {
+    const run = await capture(["/blank"], { widths: [1440, 375] });
+    const { routes, verdict } = parseSummary(run.stdout);
+    assert.deepEqual([verdict.differ, verdict.routes, verdict.shots, verdict.total, verdict.errors], [0, 1, 0, 2, 2], context(run));
+    const errors = routes.get("/blank")!.errors;
+    assert.equal(errors.length, 1, context(run));
+    assert.deepEqual(errors[0]!.widths, [1440, 375]);
+  });
+
+  test("a threshold failure is on the verdict line even when another route errored", async () => {
+    const run = await runCli(
+      renderdiffArgs({ left: site.left, right: site.right, routes: ["/color", "/blank"], widths: [1440], threshold: 0.99 }),
+    );
+    assert.equal(run.code, 1, context(run));
+    assert.deepEqual(parseSummary(run.stdout).verdict.below, { count: 1, threshold: 0.99 }, context(run));
+    assert.match(run.stderr, /1 route\(s\) below 99\.00%/);
   });
 });
 
