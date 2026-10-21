@@ -10,8 +10,55 @@ import type { Locator, Page } from "playwright";
  * Precedence is always: CLI flag > config file > built-in default.
  */
 
-/** A route to diff — a URL path. Extensionless, no trailing slash. `/` for the index. */
-export type Route = string;
+/**
+ * A route to diff: the path loaded on each side, normalized (no trailing slash, `/` for the
+ * index). Both are the same path unless the route is a pair.
+ */
+export interface Route {
+  left: string;
+  right: string;
+}
+
+/** A route as written: `/a`, the pair `/a::/b`, or `{ left, right? }` (right defaults to left). */
+export type RouteSpec = string | { left: string; right?: string };
+
+/** `pricing` / `/pricing/` -> `/pricing`; `/` stays `/`. */
+export const normalize = (url: string) => {
+  const trimmed = url.replace(/^\/+/, "").replace(/\/+$/, "");
+  return trimmed ? `/${trimmed}` : "/";
+};
+
+/** `/a` for a plain route, `/a::/b` for a pair — the route's name in stdout and results.json. */
+export const label = (r: Route) => (r.left === r.right ? r.left : `${r.left}::${r.right}`);
+
+/**
+ * Specs -> normalized, deduplicated routes; throws on an empty side or a glob. A string is a
+ * pair when it has a `::` followed by `/` (or ending it, so `/a::` is an empty side, not a
+ * literal), which keeps `?q=std::vector` and `/wiki/Talk:Foo` single routes.
+ */
+export function parseRoutes(specs: RouteSpec[]): Route[] {
+  const out = new Map<string, Route>();
+  for (const spec of specs) {
+    let sides: [string, string];
+    if (typeof spec === "string") {
+      const i = spec.search(/::(?=\/|$)/);
+      sides = i === -1 ? [spec, spec] : [spec.slice(0, i), spec.slice(i + 2)];
+    } else {
+      sides = [spec.left, spec.right ?? spec.left];
+    }
+    const shown = typeof spec === "string" ? spec : JSON.stringify(spec);
+    if (!sides[0] || !sides[1]) throw new Error(`route ${shown} has an empty side`);
+    // Its label would collide with the pair's, and dedupe would silently drop one of them.
+    if (typeof spec !== "string" && sides.some((s) => /::(?=\/|$)/.test(s))) {
+      throw new Error(`route ${shown}: a side containing "::/" reads as a pair`);
+    }
+    const glob = sides.find((s) => s.includes("*"));
+    if (glob) throw new Error(`globs are not supported (${glob}) — pass literal paths.`);
+    const route = { left: normalize(sides[0]), right: normalize(sides[1]) };
+    out.set(label(route), route);
+  }
+  return [...out.values()];
+}
 
 /**
  * Viewports to compare at. Each value sits *inside* a common responsive band rather
@@ -112,13 +159,18 @@ export const MASK_COLOR = "#FF00FF";
  * Keep the list short. Every mask is coverage given up, so add only what is proven to
  * drift.
  */
-export interface Mask {
-  /** Exact `urlPath` this applies to, e.g. `/pricing`. */
-  urlPath: string;
+export type Mask = {
+  /**
+   * The route path this applies to, e.g. `/pricing`; every route when omitted. On a pair
+   * it matches either side's path and paints both, so the noise still cancels.
+   */
+  urlPath?: string;
   /** Why it drifts — surfaced verbatim in the report. */
   reason: string;
-  locate: (page: Page) => Locator;
-}
+} & (
+  | { /** A Playwright selector, e.g. `[data-star-count]`. */ selector: string }
+  | { /** The escape hatch for what a selector can't say. */ locate: (page: Page) => Locator }
+);
 
 /** The shape a `renderdiff.config.*` file default-exports. Every field is optional. */
 export interface RenderdiffConfig {
@@ -127,7 +179,7 @@ export interface RenderdiffConfig {
   /** Right origin, e.g. `https://example.com`. A trailing slash is stripped. */
   right?: string;
   /** Routes to diff when none are passed on the command line. */
-  routes?: Route[];
+  routes?: RouteSpec[];
   /** Viewport widths. Replaces {@link DEFAULT_WIDTHS} outright. */
   widths?: number[];
   /** Fail the run if any comparison scores below this, 0..1. */
@@ -177,14 +229,10 @@ export function defineConfig(config: RenderdiffConfig): RenderdiffConfig {
   return config;
 }
 
-export function masksFor(
-  cfg: ResolvedConfig,
-  page: Page,
-  urlPath: string,
-): Locator[] {
+export function masksFor(cfg: ResolvedConfig, page: Page, route: Route): Locator[] {
   return cfg.masks
-    .filter((m) => m.urlPath === urlPath)
-    .map((m) => m.locate(page));
+    .filter((m) => m.urlPath === undefined || m.urlPath === route.left || m.urlPath === route.right)
+    .map((m) => ("selector" in m ? page.locator(m.selector) : m.locate(page)));
 }
 
 /** Config filenames probed in cwd, in order. */
@@ -253,10 +301,29 @@ function validate(c: Record<string, unknown>, file: string) {
   for (const key of ["left", "right", "outDir", "extraCss"]) {
     if (c[key] !== undefined && typeof c[key] !== "string") bad(key, "a string");
   }
-  for (const key of ["routes", "blockUrlPatterns", "hideSelectors"]) {
+  for (const key of ["blockUrlPatterns", "hideSelectors"]) {
     if (c[key] !== undefined && !isStrArray(c[key])) {
       bad(key, "an array of strings");
     }
+  }
+  if (c.routes !== undefined) {
+    if (!Array.isArray(c.routes)) bad("routes", "an array");
+    (c.routes as unknown[]).forEach((r, i) => {
+      if (typeof r === "string") return;
+      if (typeof r !== "object" || r === null || Array.isArray(r)) {
+        bad(`routes[${i}]`, "a string or an object { left, right? }");
+      }
+      const o = r as Record<string, unknown>;
+      for (const key of Object.keys(o)) {
+        if (key !== "left" && key !== "right") {
+          throw new Error(`${file}: \`routes[${i}].${key}\` is not a route key (left, right)`);
+        }
+      }
+      if (typeof o.left !== "string" || !o.left) bad(`routes[${i}].left`, "a non-empty string");
+      if (o.right !== undefined && (typeof o.right !== "string" || !o.right)) {
+        bad(`routes[${i}].right`, "a non-empty string");
+      }
+    });
   }
   if (c.widths !== undefined) {
     if (
@@ -286,9 +353,17 @@ function validate(c: Record<string, unknown>, file: string) {
         bad(`masks[${i}]`, "an object");
         return;
       }
-      if (typeof o.urlPath !== "string") bad(`masks[${i}].urlPath`, "a string");
+      if (o.urlPath !== undefined && typeof o.urlPath !== "string") {
+        bad(`masks[${i}].urlPath`, "a string");
+      }
       if (typeof o.reason !== "string") bad(`masks[${i}].reason`, "a string");
-      if (typeof o.locate !== "function") {
+      if (("selector" in o) === ("locate" in o)) {
+        throw new Error(`${file}: \`masks[${i}]\` needs exactly one of \`selector\` or \`locate\``);
+      }
+      if (o.selector !== undefined && typeof o.selector !== "string") {
+        bad(`masks[${i}].selector`, "a string");
+      }
+      if (o.locate !== undefined && typeof o.locate !== "function") {
         bad(`masks[${i}].locate`, "a function (page) => Locator");
       }
     });
@@ -313,13 +388,14 @@ export function resolveConfig(
   const left = cli.left ?? file.left;
   const right = cli.right ?? file.right;
 
-  const missing = [!left && "--left", !right && "--right"].filter(
-    Boolean,
-  ) as string[];
-  if (missing.length) {
+  if (!left || !right) {
     throw new Error(
-      `${missing.join(" and ")} ${missing.length > 1 ? "are" : "is"} required ` +
-        `(pass on the command line, or set left/right in renderdiff.config.*)`,
+      !left && !right
+        ? "left and right origins are required (two positional URLs, --left and --right, " +
+            "or left and right in renderdiff.config.*)"
+        : !left
+          ? "left origin is required (first positional URL, --left, or left in renderdiff.config.*)"
+          : "right origin is required (second positional URL, --right, or right in renderdiff.config.*)",
     );
   }
 
@@ -329,8 +405,8 @@ export function resolveConfig(
   ];
 
   return {
-    left: left!.replace(/\/+$/, ""),
-    right: right!.replace(/\/+$/, ""),
+    left: left.replace(/\/+$/, ""),
+    right: right.replace(/\/+$/, ""),
     widths: cli.widths ?? file.widths ?? [...DEFAULT_WIDTHS],
     threshold: cli.threshold ?? file.threshold ?? null,
     outDir: path.resolve(
@@ -347,6 +423,8 @@ export function resolveConfig(
       STILL_CSS +
       `${hideSelectors.join(",")}{display:none!important}\n` +
       (file.extraCss ?? ""),
-    masks: file.masks ?? [],
+    masks: (file.masks ?? []).map((m) =>
+      m.urlPath === undefined ? m : { ...m, urlPath: normalize(m.urlPath) },
+    ),
   };
 }

@@ -321,6 +321,44 @@ describe("masks", () => {
   });
 });
 
+describe("selector masks", () => {
+  test("a selector mask with no urlPath works like a locate mask", async () => {
+    const run = await capture(["/drifting"], { config: path.join(CONFIGS, "mask-selector.mjs") });
+    assert.equal(run.code, 0, context(run));
+    const r = result(results(run.outDir), "/drifting", 1440);
+    assert.equal(r.diffPixels, 0, `the selector mask did not cover the value${context(run)}`);
+    assert.deepEqual([r.text.added, r.text.removed], [[], []], context(run));
+  });
+});
+
+describe("route pairs", () => {
+  const PAIR = "/flex-vs-grid::/float-vs-flex";
+
+  test("each side loads its own path", async () => {
+    const run = await capture([PAIR]);
+    const r = result(results(run.outDir), PAIR, 1440);
+    assert.deepEqual([r.left, r.right], ["/flex-vs-grid", "/float-vs-flex"]);
+    assert.ok(r.text.added.includes("Card one"), `left did not load /flex-vs-grid${context(run)}`);
+    assert.ok(r.text.removed.includes("Column one"), `right did not load /float-vs-flex${context(run)}`);
+    assert.ok(parseSummary(run.stdout).routes.has(PAIR), context(run));
+    assert.ok(r.images.left.startsWith("flex-vs-grid~float-vs-flex."), r.images.left);
+    assert.ok(cardFor(run, PAIR), context(run));
+  });
+
+  test("a mask whose urlPath is only the left path, unnormalized, paints both sides", async () => {
+    // The fixture server ignores the query, so the right side is /drifting under another path.
+    const config = path.join(tempDir(), "mask.mjs");
+    fs.writeFileSync(
+      config,
+      'export default { masks: [{ urlPath: "drifting/", reason: "drifts", selector: "[data-drift]" }] };\n',
+    );
+    const run = await capture(["/drifting::/drifting?pair"], { config });
+    assert.equal(run.code, 0, context(run));
+    const r = result(results(run.outDir), "/drifting::/drifting?pair", 1440);
+    assert.equal(r.diffPixels, 0, `the mask missed a side${context(run)}`);
+  });
+});
+
 describe("network blocking", () => {
   test("an unblocked third-party script rewrites the page and costs the score", async () => {
     const run = await capture(["/tracker"]);
@@ -474,6 +512,15 @@ describe("the output directory", () => {
     assert.ok(fs.existsSync(path.join(dir, "results.json")));
     const second = await into(dir, ["/color"]);
     assert.equal(second.code, 0, context(second));
+  });
+
+  test("a previous run of a route pair is wiped and reused", async () => {
+    const dir = path.join(tempDir(), "out");
+    const first = await into(dir, ["/flex-vs-grid::/float-vs-flex"]);
+    assert.equal(first.code, 0, context(first));
+    const second = await into(dir, ["/flex-vs-grid::/float-vs-flex"]);
+    assert.equal(second.code, 0, context(second));
+    assert.doesNotMatch(second.stderr, /refusing to wipe/, context(second));
   });
 
   test("an interrupted run's directory, with images but no report, is reused", async () => {

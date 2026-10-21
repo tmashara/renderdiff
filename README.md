@@ -11,7 +11,7 @@ Useful for the "did I break anything?" question a test suite can't answer: a fra
 migration, a CSS refactor, a dependency bump, a staging-vs-production check.
 
 ```
-renderdiff / /about /pricing --left http://localhost:3000 --right https://example.com
+renderdiff http://localhost:3000 https://example.com / /about /pricing
 ```
 
 On a terminal it prints a line per shot as it lands, then the worst scores and the paths
@@ -73,13 +73,15 @@ Until renderdiff is on npm, `npx renderdiff@latest` won't resolve; install the C
 ## Usage
 
 ```
-renderdiff <route…> --left <url> --right <url> [options]
+renderdiff <left-origin> <right-origin> <route…> [options]
 ```
 
-| Flag | |
+| Argument or flag | |
 | --- | --- |
-| `--left <url>` | Left origin. Required. |
-| `--right <url>` | Right origin. Required. |
+| `<origin>` | An argument starting with `http://` or `https://`. The first is left, the second right; a third is an error. |
+| `<route>` | A literal path, e.g. `/about`, or a pair `/pricing::/plans` (see below). |
+| `--left <url>` | Left origin, instead of the first positional one. Giving both is an error. |
+| `--right <url>` | Right origin, instead of the second positional one. |
 | `--width <n>` | Viewport width; repeatable. Replaces the defaults. |
 | `--threshold <0..1>` | Exit non-zero if any comparison scores below this. |
 | `--out <dir>` | Output directory, wiped at the start of a run. Default `./renderdiff-out`. A directory holding files renderdiff didn't write is refused. |
@@ -91,8 +93,8 @@ renderdiff <route…> --left <url> --right <url> [options]
 | `--no-progress` | The compact summary even on a terminal. |
 | `-h, --help` / `-v, --version` | |
 
-Routes are **literal paths** — there is no route discovery and globs are rejected. Both
-origins get the same path appended, so the two sides must have matching URL structure.
+Routes are **literal paths** — there is no route discovery and globs are rejected. Each
+route is loaded on both origins, unless it's a pair.
 
 Default widths are `1440, 1152, 896, 704, 375` — one inside each common responsive band
 rather than on a breakpoint boundary, so a layout switch never flaps between captures.
@@ -100,20 +102,37 @@ rather than on a breakpoint boundary, so a layout switch never flaps between cap
 Exit codes: `0` all good · `1` a route errored or scored below `--threshold` ·
 `2` bad arguments, bad config, or an origin that isn't responding.
 
+## Comparing different routes
+
+When a migration moved a page, give the route as a pair: `left::right`.
+
+```
+renderdiff http://localhost:3000 https://example.com /pricing::/plans /about::/company/about
+```
+
+`/pricing::/plans` loads `/pricing` on the left and `/plans` on the right. The split is
+on the first `::` followed by `/`, so `/q?x=std::vector` and `/wiki/Talk:Foo` stay single
+routes, and `pricing::plans` (no slash) is a literal path; `--dry-run` shows how each
+route was read. Each side is normalized on its own, a pair with identical sides is the
+plain route, and an empty side (`/pricing::`) is an error.
+
+A pair is named `/pricing::/plans` in stdout, `results.json` (`url`, plus `left` and
+`right`) and the report; its images are `pricing~plans.{width}.*.png`. A mask whose
+`urlPath` is either side's path is painted on both sides. In a config file, a route can
+also be an object, `{ left: "/pricing", right: "/plans" }`, where `right` defaults to
+`left`.
+
 ## Config file
 
 Flags cover a one-off run. A `renderdiff.config.ts` (or `.mjs`) in the working directory
-covers a repo you diff repeatedly, and expresses the things flags can't: per-route
-**masks** for content that legitimately drifts, extra selectors to hide, extra URLs to
-block.
+covers a repo you diff repeatedly, and expresses the things flags can't: **masks** for
+content that legitimately drifts, extra selectors to hide, extra URLs to block.
 
 ```ts
-import { defineConfig } from "renderdiff";
-
-export default defineConfig({
+export default {
   left: "http://localhost:3000",
   right: "https://example.com",
-  routes: ["/", "/about", "/pricing"],
+  routes: ["/", "/about", "/pricing::/plans", { left: "/blog", right: "/posts" }],
   widths: [1440, 896, 375],
   threshold: 0.97,
 
@@ -121,22 +140,22 @@ export default defineConfig({
   blockUrlPatterns: ["**://*.my-tracker.example/**"],
 
   masks: [
-    {
-      urlPath: "/pricing",
-      reason: "live star count on /pricing",
-      locate: (page) => page.locator("[data-star-count]"),
-    },
+    { selector: "[data-star-count]", reason: "live star count", urlPath: "/pricing" },
   ],
-});
+};
 ```
+
+A mask needs a `reason` and exactly one of `selector` (a Playwright selector) or
+`locate: (page) => Locator`, the escape hatch for what a selector can't say. Without
+`urlPath` it applies to every route.
 
 See [`renderdiff.config.example.ts`](./renderdiff.config.example.ts) for every field, annotated.
 
 **Precedence: CLI flag > config file > built-in default.**
 
-`import { defineConfig } from "renderdiff"` is only for editor types, and only resolves if
-`renderdiff` is *also* installed in that project — a globally-installed CLI is not
-importable from an arbitrary directory; `export default { … }` works everywhere.
+`export default { … }` needs no import. `import type { RenderdiffConfig } from "renderdiff"`
+with `satisfies RenderdiffConfig` is for editor types only; Node erases it, so the file loads
+without renderdiff installed in that project.
 
 ## How it reads
 
@@ -190,7 +209,8 @@ Everything lands in the out dir (`./renderdiff-out` by default):
 
 - `report.html` — the scored report.
 - `{slug}.{width}.{left,right,diff}.png` — full-page shots and the diff. `/` slugs to
-  `index`, `/blog/foo` to `blog-foo`, other characters to `_`; a clash gets a `-2` suffix.
+  `index`, `/blog/foo` to `blog-foo`, other characters to `_`, a pair `/a::/b` to `a~b`; a
+  clash gets a `-2` suffix.
 - `{slug}.{width}.c{n}.png` — up to three crops per comparison: bands (rows only one side
   has), tallest first, then the largest regions. Each shows left and right at native scale,
   padded by 48px and at least 320px wide, with a 1px red box around the change; on the side
@@ -212,11 +232,12 @@ Everything lands in the out dir (`./renderdiff-out` by default):
     "widths": [1440, 375], "threshold": null,
     "clock": "…",                // the instant both sides' clocks start at
     "blockUrlPatterns": ["…"], "hideSelectors": ["…"],
-    "masks": [{ "urlPath": "/pricing", "reason": "live star count on /pricing" }]
+    "masks": [{ "urlPath": "/pricing", "reason": "live star count" }]   // no urlPath: every route
   },
   "results": [
     {
-      "url": "/about", "width": 1440, "status": "compared",
+      "url": "/about", "left": "/about", "right": "/about",   // a pair: "/a::/b", "/a", "/b"
+      "width": 1440, "status": "compared",
       "score": 0.9714,           // share of measured pixels that match
       "alignedScore": 1,         // score over the aligned rows; null unless there are bands
       "diffPixels": 33120, "totalPixels": 1158000, "unstablePixels": 0,
@@ -232,7 +253,7 @@ Everything lands in the out dir (`./renderdiff-out` by default):
         "layout": "stacked", "scale": 1, "clipped": false     // left on top, or on the left ("side")
       }]
     },
-    { "url": "/blank", "width": 1440, "status": "error", "error": "page did not render …" }
+    { "url": "/blank", "left": "/blank", "right": "/blank", "width": 1440, "status": "error", "error": "page did not render …" }
   ],
   "summary": {
     "compared": 1, "errors": 1, "mean": 0.9714,

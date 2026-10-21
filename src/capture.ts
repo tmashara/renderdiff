@@ -1,6 +1,6 @@
 import type { Page } from "playwright";
 import sharp from "sharp";
-import { MASK_COLOR, masksFor, type ResolvedConfig } from "./config.ts";
+import { MASK_COLOR, masksFor, type ResolvedConfig, type Route } from "./config.ts";
 
 /** Loads a page, settles it, and screenshots it. */
 
@@ -60,7 +60,7 @@ export async function prepare(
 export async function capture(
   page: Page,
   url: string,
-  urlPath: string,
+  route: Route,
   width: number,
   cfg: ResolvedConfig,
   now: number,
@@ -107,7 +107,7 @@ export async function capture(
   await page.addStyleTag({ content: cfg.neutralizeCss }); // anything injected late
 
   // Masks only paint the PNG, so hide them for the text read too; visibility keeps layout.
-  const masks = masksFor(cfg, page, urlPath);
+  const masks = masksFor(cfg, page, route);
   const hidden: string[][] = [];
   for (const l of masks) {
     hidden.push(

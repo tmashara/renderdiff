@@ -6,11 +6,12 @@ description: Use to prove a framework migration, CSS refactor, template rewrite 
 # renderdiff
 
 ```bash
-npx renderdiff@latest /about --left http://localhost:3000 --right https://example.com --width 1440
+npx renderdiff@latest http://localhost:3000 https://example.com /about --width 1440
 ```
 
-Left = your change, right = the reference; both get the same path. First run on a machine:
-`npx playwright install chromium`. Until renderdiff is on npm, install it with
+First origin = left = your change, second = right = the reference. Each route loads on
+both; a page the change moved is a pair, `/pricing::/plans` (left path, then right).
+First run on a machine: `npx playwright install chromium`. Until renderdiff is on npm, install it with
 `npm install -g github:tmashara/renderdiff` and run `renderdiff …`. Flags: `--help`.
 Triage, rationalizations, config and gotchas: [reference.md](reference.md).
 
@@ -32,7 +33,7 @@ A score without looking is not a verdict: 99.6% can be a missing nav link.
 3. Read `text` first: `-"x"` is only on the reference (missing in your change), `+"x"` only on yours.
 4. A `band -24@y196` is 24 rows only the right has (`+` only the left) at that `y`;
    `aligned 100.00%` means the band is the whole difference. `unaligned`: no bands, see reference.md.
-5. `Read` the crops in the out dir: `{slug}.{width}.c{n}.png` (`/` is `index`, `/a/b` is `a-b`),
+5. `Read` the crops in the out dir: `{slug}.{width}.c{n}.png` (`/` is `index`, `/a/b` is `a-b`, the pair `/a::/b` is `a~b`),
    up to three, bands first. Left is always on top or on the left; the change is boxed in red,
    and a red seam marks where one side lacks the other's rows. Full shots
    `{slug}.{width}.{left,right,diff}.png` only when a crop doesn't explain itself.

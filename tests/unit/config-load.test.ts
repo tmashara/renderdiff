@@ -108,12 +108,12 @@ describe("validation", () => {
   // way the loader shrugs at becomes a confusing failure much later, or worse, a quiet one.
   const cases: Array<[fixture: string, needle: RegExp]> = [
     ["bad-left.mjs", /`left` must be a string/],
-    ["bad-routes.mjs", /`routes` must be an array of strings/],
+    ["bad-routes.mjs", /`routes\[0\]` must be a string or an object \{ left, right\? \}/],
     ["bad-widths.mjs", /`widths` must be an array of positive numbers/],
     ["bad-threshold.mjs", /`threshold` must be a number between 0 and 1/],
     ["bad-concurrency.mjs", /`concurrency` must be a positive integer/],
     ["bad-mask-shape.mjs", /`masks` must be an array/],
-    ["bad-mask-locate.mjs", /`masks\[0\]\.locate` must be a function/],
+    ["bad-mask-locate.mjs", /`masks\[0\]` needs exactly one of `selector` or `locate`/],
     ["no-default.mjs", /has no default export/],
     ["array-default.mjs", /must default-export an object/],
     ["throws.mjs", /could not load .*throws\.mjs/],
@@ -129,6 +129,59 @@ describe("validation", () => {
       assert.match(r.stderr, needle);
     });
   }
+
+  // Inline rather than fixture files: each is one line, and the needle sits next to it.
+  const inline: Array<[config: string, needle: RegExp]> = [
+    ['{ routes: "/a" }', /`routes` must be an array/],
+    ['{ routes: [{ right: "/b" }] }', /`routes\[0\]\.left` must be a non-empty string/],
+    ['{ routes: ["/a", { left: "/a", right: 2 }] }', /`routes\[1\]\.right` must be a non-empty string/],
+    ['{ routes: [{ left: "/a", path: "/b" }] }', /`routes\[0\]\.path` is not a route key/],
+    ['{ routes: [{ left: "" }] }', /`routes\[0\]\.left` must be a non-empty string/],
+    ['{ routes: [{ left: "/a", right: "" }] }', /`routes\[0\]\.right` must be a non-empty string/],
+    ['{ routes: [{ left: "/a::/b" }] }', /a side containing "::\/" reads as a pair/],
+    [
+      '{ masks: [{ reason: "x", selector: undefined, locate: (p) => p.locator("a") }] }',
+      /`masks\[0\]` needs exactly one of `selector` or `locate`/,
+    ],
+    [
+      '{ masks: [{ reason: "x", selector: "a", locate: (p) => p.locator("a") }] }',
+      /`masks\[0\]` needs exactly one of `selector` or `locate`/,
+    ],
+    ['{ masks: [{ reason: "x", selector: 1 }] }', /`masks\[0\]\.selector` must be a string/],
+  ];
+  for (const [config, needle] of inline) {
+    test(`${config} exits 2 and names the problem`, async () => {
+      const cwd = tempDir("renderdiff-cfg-");
+      fs.writeFileSync(path.join(cwd, "renderdiff.config.mjs"), `export default ${config};\n`);
+      const r = await runCli(["--dry-run", "--left", L, "--right", R], { cwd, noOut: true });
+      assert.equal(r.code, 2, `expected exit 2\n${r.stdout}\n${r.stderr}`);
+      assert.match(r.stderr, needle);
+    });
+  }
+
+  test("object routes sit beside strings; right defaults to left", async () => {
+    const cwd = tempDir("renderdiff-cfg-");
+    fs.writeFileSync(
+      path.join(cwd, "renderdiff.config.mjs"),
+      'export default { routes: [{ left: "/a", right: "plans/" }, { left: "/c" }, "/d::/e", { left: "/a", right: "/plans" }] };\n',
+    );
+    const r = await runCli(["--dry-run", "--left", L, "--right", R], { cwd, noOut: true });
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(r.stdout, /^Routes: 3$/m);
+    assert.match(r.stdout, /^  \/a::\/plans +http:\/\/left\.test\/a  \|  http:\/\/right\.test\/plans$/m);
+    assert.match(r.stdout, /^  \/c +http:\/\/left\.test\/c  \|  http:\/\/right\.test\/c$/m);
+    assert.match(r.stdout, /^  \/d::\/e +http:\/\/left\.test\/d  \|  http:\/\/right\.test\/e$/m);
+  });
+
+  test("a plain object with a selector mask and no functions loads", async () => {
+    const cwd = tempDir("renderdiff-cfg-");
+    fs.writeFileSync(
+      path.join(cwd, "renderdiff.config.mjs"),
+      'export default { masks: [{ selector: "[data-star-count]", reason: "stars" }] };\n',
+    );
+    const r = await runCli(["--dry-run", "/a", "--left", L, "--right", R], { cwd, noOut: true });
+    assert.equal(r.code, 0, r.stderr);
+  });
 
   test("the failing file is named in the message", async () => {
     const r = await runCli(

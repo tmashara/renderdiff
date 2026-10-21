@@ -5,7 +5,11 @@ import { CONTEXT_OPTIONS, type ResolvedConfig } from "./config.ts";
 import { floor4, fmtBand, fmtRegion, pct, signed } from "./format.ts";
 
 interface BaseResult {
+  /** The route: `/a`, or `/a::/b` for a pair. */
   url: string;
+  /** The path loaded on each side; both equal `url` unless it is a pair. */
+  left: string;
+  right: string;
   width: number;
 }
 
@@ -69,7 +73,8 @@ export interface RunMeta {
   clock: string;
   blockUrlPatterns: string[];
   hideSelectors: string[];
-  masks: { urlPath: string; reason: string }[];
+  /** `urlPath` is absent for a mask that applies to every route. */
+  masks: { urlPath?: string; reason: string }[];
 }
 
 export interface Summary {
