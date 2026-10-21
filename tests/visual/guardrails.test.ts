@@ -300,10 +300,18 @@ describe("the output directory", () => {
     const dir = path.join(tempDir(), "out");
     const first = await into(dir);
     assert.equal(first.code, 0, context(first));
-    fs.writeFileSync(path.join(dir, "stale.png"), "");
+    fs.writeFileSync(path.join(dir, "stale.375.diff.png"), "");
     const second = await into(dir);
     assert.equal(second.code, 0, context(second));
-    assert.ok(!fs.existsSync(path.join(dir, "stale.png")), "the old run was not wiped");
+    assert.ok(!fs.existsSync(path.join(dir, "stale.375.diff.png")), "the old run was not wiped");
+  });
+
+  test("an interrupted run's directory, with images but no report, is reused", async () => {
+    const dir = tempDir();
+    fs.writeFileSync(path.join(dir, "x.1440.left.png"), "");
+    const run = await into(dir);
+    assert.equal(run.code, 0, context(run));
+    assert.ok(!fs.existsSync(path.join(dir, "x.1440.left.png")), "the old run was not wiped");
   });
 });
 

@@ -28,7 +28,12 @@ interface RunOpts {
 const slug = (url: string) =>
   url === "/"
     ? "index"
-    : url.slice(1).toLowerCase().replace(/\//g, "-").replace(/[^a-z0-9-]/g, "_");
+    : url
+        .slice(1)
+        .toLowerCase()
+        .replace(/\//g, "-")
+        .replace(/[^a-z0-9-]/g, "_")
+        .slice(0, 200);
 
 /** Route -> file stem, unique across the run. Suffixes follow route order, so reruns agree. */
 function slugs(routes: Route[]): Map<Route, string> {
@@ -43,23 +48,21 @@ function slugs(routes: Route[]): Map<Route, string> {
   return out;
 }
 
-/** Only an absent, empty, or previous-renderdiff directory is safe to wipe. */
+/** Only a directory holding nothing but files renderdiff writes is safe to wipe. */
+const ours = (f: string) =>
+  f === "report.html" ||
+  /^[a-z0-9_-]+\.[\d.]+\.(left|right|diff)\.png$/.test(f);
+
 function wipeable(dir: string): boolean {
   if (!fs.existsSync(dir)) return true;
-  if (!fs.statSync(dir).isDirectory()) return false;
-  if (!fs.readdirSync(dir).length) return true;
-  const report = path.join(dir, "report.html");
-  return (
-    fs.existsSync(report) &&
-    fs.readFileSync(report, "utf8").includes("<title>Visual diff</title>")
-  );
+  return fs.statSync(dir).isDirectory() && fs.readdirSync(dir).every(ours);
 }
 
 export async function run({ routes, cfg, open }: RunOpts): Promise<number> {
   if (!wipeable(cfg.outDir)) {
     console.error(
-      `✗ --out ${cfg.outDir} is not empty and holds no previous renderdiff report — ` +
-        `refusing to wipe it. Pick a new or empty directory.`,
+      `✗ output directory ${cfg.outDir} holds files renderdiff didn't write — ` +
+        `refusing to wipe it. Pass --out with a new or empty directory.`,
     );
     return 2;
   }
@@ -200,7 +203,8 @@ async function launch() {
 
 const transient = (e: unknown) =>
   e instanceof errors.TimeoutError ||
-  (e instanceof Error && /net::ERR_/.test(e.message));
+  (e instanceof Error &&
+    /net::ERR_|Execution context was destroyed/.test(e.message));
 
 /** One retry for a transient failure: a live site can time out once on a cold edge. */
 async function shoot(

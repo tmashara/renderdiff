@@ -134,7 +134,7 @@ cookie script ran wedges the renderer).
 
 - **The out dir is wiped at the start of every run.** To keep a previous run's evidence
   next to a new one, pass `--out renderdiff-before` / `--out renderdiff-after`. A
-  non-empty directory that doesn't hold a previous report is refused (exit 2).
+  directory holding files renderdiff didn't write is refused (exit 2).
 - **Routes normalize** to no trailing slash; `/` stays `/`.
 - **A migration that changed a URL** can't be diffed in one run — both sides get the
   same path.
