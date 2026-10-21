@@ -154,8 +154,8 @@ Things to know:
 - A transformed element is shot at its axis-aligned bounding box.
 - Pseudo-elements (`::before`) are rejected by Playwright; elements inside iframes can't be
   reached. Open shadow roots are pierced.
-- A selector that matches an element with no box (`display: none`) is an error; one whose
-  element has no text and no image is blank, like an empty page.
+- A selector that matches an element with no box (`display: none`) or one off the page is
+  an error. The render gate stays page-level: a textless element on a rendered page is fine.
 
 ## Config file
 

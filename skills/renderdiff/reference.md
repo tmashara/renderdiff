@@ -90,13 +90,12 @@ cookie script ran wedges the renderer).
   (a migrated widget, a design-system swap), so page noise elsewhere can't hide or fake a
   change. Exactly one match per side, or the route errors. A CLI selector applies to every
   route and replaces the config's. A route is `/a [.x]` in the summary (`/a @1440` with a
-  `selector` line under it in `--progress`), files are `{slug}@{sel}.{width}.*.png`, and
+  `selector` line under it in `--progress`), files are `{slug}@{sel}.{width}.*.png` (`@{l}~{r}` when the sides' selectors differ), and
   regions are in the element's own pixels. The whole page still loads and settles. It's
   shot at scroll 0, so fixed or sticky overlays over it are included (`hideSelectors`); inside
   a shorter scroll container, whatever paints below the container is too; a transformed
   element is shot at its axis-aligned box. `xpath=` and `>>` work and `::` is never split;
-  pseudo-elements are rejected by Playwright; iframes can't be reached. An element with no
-  text and no image is blank, so masking all of it errors.
+  pseudo-elements are rejected by Playwright; iframes can't be reached.
 - **Analytics, consent and A/B tooling are blocked at the network layer** on both sides,
   and animations are stilled. If something still flickers between runs, it's a candidate
   for `blockUrlPatterns`, not for a mask.
