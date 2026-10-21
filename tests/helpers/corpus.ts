@@ -29,9 +29,16 @@ export const GUARDRAILS = [
   "tall",
   "animated",
   "lazy",
+  "lazy-deep",
+  "lazy-js",
   "consent",
   "drifting",
   "tracker",
+  "clock",
+  "ticker",
+  "unsettled",
+  "sprite",
+  "short",
 ] as const;
 
 export const ALL: string[] = [...EQUIVALENCE, ...CONTROLS, ...GUARDRAILS];
@@ -40,10 +47,10 @@ export const ALL: string[] = [...EQUIVALENCE, ...CONTROLS, ...GUARDRAILS];
 export const GENERATED = ["tall", "drifting"];
 
 /** Routes that deliberately do not link `shared/base.css`. */
-export const SELF_CONTAINED = ["blank", "tall"];
+export const SELF_CONTAINED = ["blank", "sprite", "tall"];
 
-/** The one route that must fail `capture()`'s render gate. */
-export const BELOW_RENDER_GATE = ["blank"];
+/** Routes under the 200-char text gate: `blank` and `sprite` must be refused, `short` passes on its form controls. */
+export const BELOW_RENDER_GATE = ["blank", "sprite", "short"];
 
 /** `/` for the index, `/name` otherwise — the path to hand to the CLI. */
 export const toPath = (dir: string) => (dir === "home" ? "/" : `/${dir}`);

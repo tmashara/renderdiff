@@ -15,7 +15,8 @@ Three groups:
 - **Controls** — `shifted`, `taller`, `color`. Deliberately different. These must score low.
   A corpus of only passing cases proves nothing; without these, a tool that returned 100%
   unconditionally would pass the suite.
-- **Guard rails** — `blank`, `tall`, `animated`, `lazy`, `consent`, `drifting`, `tracker`.
+- **Guard rails** — `blank`, `tall`, `animated`, `lazy`, `lazy-deep`, `lazy-js`, `consent`,
+  `drifting`, `tracker`, `clock`, `ticker`, `unsettled`, `sprite`, `short`.
   One per defence in `src/capture.ts` / `src/config.ts`.
 
 ## Authoring rules
@@ -39,10 +40,14 @@ Breaking any of these produces a flaky suite, and the flake looks like a renderd
    whitespace, and asserts the two sides are byte-equal for every equivalence fixture. That
    check is what stops the pair from quietly ceasing to be an equivalence test when someone
    edits one side.
-6. **Clear the render gate.** `src/capture.ts` throws for any page under 800px tall or under
-   200 characters of text, so every page needs real content. The `notes` tail exists partly
-   for this. `blank` is the one intentional violation.
-7. **No animation** except in `animated`, which exists to prove `STILL_CSS` kills it.
+6. **Clear the render gate.** A route errors when both sides have under 200 characters of
+   text and no visible images, SVG, canvas, video, iframes or form controls, so every page
+   needs real content. The `notes` tail exists partly for this. `blank` and `sprite` (a
+   hidden SVG sprite only) are the intentional violations; `short`
+   stays under 200 characters on purpose and passes on its form controls.
+7. **No animation** except in `animated`, which exists to prove `STILL_CSS` kills it, `ticker`,
+   whose timer exists to be caught by the stability check, and `unsettled`, which recolours
+   the whole page to trip the unstable-pixel cap.
 
 ## Adding a route
 

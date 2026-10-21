@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layout parity</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for the stability check. A timer recolours the box every 10ms, and every
+   channel steps by an odd amount, so any two shots more than one tick apart differ on every
+   pixel of the box and on nothing else. That makes the box exactly the unstable region, on
+   every run, rather than only when two shots happen to straddle a toggle. */
+.tick { width: var(--content); height: 160px; background: rgb(0, 0, 0); }
+@media (max-width: 480px) { .tick { width: 100%; } }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Ticking element guard rail</h1>
+<p class="lede">The box below changes colour every ten milliseconds. It can never be captured the same way twice, so it must be reported as unstable and left out of the score.</p>
+
+<div class="tick" id="tick"></div>
+<script>
+let n = 0;
+const tick = document.getElementById("tick");
+setInterval(() => {
+  n++;
+  tick.style.background = `rgb(${(n * 53) % 256}, ${(n * 97) % 256}, ${(n * 29) % 256})`;
+}, 10);
+</script>
+
+<section class="notes">
+<h2>Notes</h2>
+<p>Noise from one origin is detected by shooting the same load until two consecutive shots match. Pixels that still differ are painted out on both sides, counted, and left out of the measurement.</p>
+</section>
+</div>
+</body>
+</html>

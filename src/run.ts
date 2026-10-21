@@ -2,9 +2,9 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { chromium, errors, type Page } from "playwright";
-import { capture, prepare, type Shot } from "./capture.ts";
+import { cancelUnstable, capture, prepare, type Shot } from "./capture.ts";
 import { compare } from "./compare.ts";
-import type { ResolvedConfig, Route } from "./config.ts";
+import { CONTEXT_OPTIONS, type ResolvedConfig, type Route } from "./config.ts";
 import { pct, signed } from "./format.ts";
 import {
   stats,
@@ -13,6 +13,9 @@ import {
   type ErrorResult,
   type RouteResult,
 } from "./report.ts";
+
+/** Past this share of a page unstable, too little was measured for a score to mean anything. */
+const MAX_UNSTABLE_SHARE = 0.25;
 
 interface Job {
   route: Route;
@@ -78,36 +81,50 @@ export async function run({ routes, cfg, open }: RunOpts): Promise<number> {
   const browser = await launch();
   const queue = [...jobs];
   let done = 0;
+  // Whole minute, so an HH:MM display reads the same on both sides.
+  const now = Math.floor(Date.now() / 60_000) * 60_000;
 
   const worker = async () => {
     // One context per origin so cookies/localStorage never cross between them.
-    const leftCtx = await browser.newContext({ deviceScaleFactor: 1 });
-    const rightCtx = await browser.newContext({ deviceScaleFactor: 1 });
+    const leftCtx = await browser.newContext(CONTEXT_OPTIONS);
+    const rightCtx = await browser.newContext(CONTEXT_OPTIONS);
     const leftPage = await leftCtx.newPage();
     const rightPage = await rightCtx.newPage();
-    await prepare(leftPage, cfg);
-    await prepare(rightPage, cfg);
+    await prepare(leftPage, cfg, now);
+    await prepare(rightPage, cfg, now);
 
     for (let job = queue.shift(); job; job = queue.shift()) {
       const { route, width } = job;
       const label = `${route} @${width}`;
       try {
-        const leftShot = await shoot(
-          leftPage,
-          cfg.left + route,
-          route,
-          width,
-          cfg,
-        );
-        const rightShot = await shoot(
-          rightPage,
-          cfg.right + route,
-          route,
-          width,
-          cfg,
-        );
+        // allSettled, not all: a page must not start the next job while still loading this one.
+        const settled = await Promise.allSettled([
+          shoot(leftPage, cfg.left + route, route, width, cfg, now),
+          shoot(rightPage, cfg.right + route, route, width, cfg, now),
+        ]);
+        const failed = settled.find((r) => r.status === "rejected");
+        if (failed) throw failed.reason;
+        const [leftShot, rightShot] = settled.map(
+          (r) => (r as PromiseFulfilledResult<Shot>).value,
+        ) as [Shot, Shot];
+        // A blank page matches any other blank page, so refuse rather than score two of
+        // them. One blank side is left to the diff, which shows it plainly.
+        if (leftShot.blank && rightShot.blank) {
+          throw new Error(
+            `page did not render on either side ` +
+              `(left: ${leftShot.blank}; right: ${rightShot.blank}) at ${route}`,
+          );
+        }
+        const unstablePixels = await cancelUnstable(leftShot, rightShot);
 
         const { diffPng, ...metrics } = await compare(leftShot, rightShot);
+        if (unstablePixels > MAX_UNSTABLE_SHARE * metrics.totalPixels) {
+          throw new Error(
+            `page did not settle: ${unstablePixels}px unstable at ${route}`,
+          );
+        }
+        const measured = metrics.totalPixels - unstablePixels;
+        metrics.score = measured > 0 ? 1 - metrics.diffPixels / measured : 0;
         const base = `${stems.get(route)}.${width}`;
         const images = {
           left: `${base}.left.png`,
@@ -127,12 +144,16 @@ export async function run({ routes, cfg, open }: RunOpts): Promise<number> {
           width,
           status: "compared",
           ...metrics,
+          unstablePixels,
           images,
         });
         console.log(
           `  [${++done}/${jobs.length}] ${pct(metrics.score)}  ${label}` +
             (metrics.heightDelta
               ? `  (height ${signed(metrics.heightDelta)}px)`
+              : "") +
+            (unstablePixels
+              ? `  (unstable ${unstablePixels.toLocaleString("en-US")}px)`
               : ""),
         );
       } catch (e) {
@@ -161,6 +182,7 @@ export async function run({ routes, cfg, open }: RunOpts): Promise<number> {
       left: cfg.left,
       right: cfg.right,
       generatedAt: new Date().toISOString(),
+      clock: new Date(now).toISOString(),
     },
     cfg,
   );
@@ -213,13 +235,14 @@ async function shoot(
   urlPath: string,
   width: number,
   cfg: ResolvedConfig,
+  now: number,
 ): Promise<Shot> {
   try {
-    return await capture(page, url, urlPath, width, cfg);
+    return await capture(page, url, urlPath, width, cfg, now);
   } catch (e) {
     if (!transient(e)) throw e;
     await page.waitForTimeout(1000);
-    return await capture(page, url, urlPath, width, cfg);
+    return await capture(page, url, urlPath, width, cfg, now);
   }
 }
 

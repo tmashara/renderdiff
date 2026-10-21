@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layout parity</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for script-driven lazy loading. This side sets each src from an
+   IntersectionObserver, the way most lazy-load libraries do; the right side sets it in the
+   markup. The images sit under a 4,800px spacer, so the capture has to scroll every slice
+   of the page, a frame at a time, for the observer to fire. */
+.spacer { height: 4800px; margin: 0 0 32px; background: var(--fill); border: 1px solid var(--line); }
+.gallery { display: flex; flex-direction: column; gap: var(--gap); }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Script lazy loader guard rail</h1>
+<p class="lede">Four images more than four thousand pixels below the fold, loaded by an IntersectionObserver on this side and directly on the other.</p>
+
+<div class="spacer"></div>
+<div class="gallery">
+  <img class="shot" data-src="/shared/img/slate.svg" alt="slate">
+  <img class="shot" data-src="/shared/img/azure.svg" alt="azure">
+  <img class="shot" data-src="/shared/img/moss.svg" alt="moss">
+  <img class="shot" data-src="/shared/img/slate.svg" alt="slate">
+</div>
+<script>
+const io = new IntersectionObserver((entries) => {
+  for (const e of entries) {
+    if (!e.isIntersecting) continue;
+    e.target.src = e.target.dataset.src;
+    io.unobserve(e.target);
+  }
+});
+document.querySelectorAll("img[data-src]").forEach((img) => io.observe(img));
+</script>
+
+<section class="notes">
+<h2>Notes</h2>
+<p>Parity here means every image was fetched and decoded before the shot, however the page chose to defer it.</p>
+</section>
+</div>
+</body>
+</html>

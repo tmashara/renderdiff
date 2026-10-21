@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { ResolvedConfig } from "./config.ts";
+import { CONTEXT_OPTIONS, type ResolvedConfig } from "./config.ts";
 import { pct, signed } from "./format.ts";
 
 interface BaseResult {
@@ -16,6 +16,8 @@ export interface ComparedResult extends BaseResult {
   totalPixels: number;
   heightDelta: number;
   widthDelta: number;
+  /** Pixels that changed between shots of the same load, painted out on both sides. */
+  unstablePixels: number;
   images: { left: string; right: string; diff: string };
 }
 
@@ -31,6 +33,8 @@ export interface RunMeta {
   left: string;
   right: string;
   generatedAt: string;
+  /** The instant both sides' clocks start at on every load, ISO. */
+  clock: string;
 }
 
 /** Sort ascending by score; surface the mean and the worst (lowest-scoring) row. */
@@ -75,6 +79,7 @@ function card(r: ComparedResult): string {
     <span class="w">@${r.width}px</span>
     ${r.heightDelta ? `<span class="delta">height ${signed(r.heightDelta)}px</span>` : ""}
     ${r.widthDelta ? `<span class="delta">width ${signed(r.widthDelta)}px</span>` : ""}
+    ${r.unstablePixels ? `<span class="unstable">${r.unstablePixels.toLocaleString("en-US")} px unstable</span>` : ""}
     <span class="px">${r.diffPixels.toLocaleString()} / ${r.totalPixels.toLocaleString()} px differ</span>
   </header>
   <div class="grid">
@@ -115,7 +120,8 @@ export async function writeReport(
           margin:0 0 1rem; padding:.75rem 1rem 1rem; }
   .card header { display:flex; align-items:center; gap:.75rem; flex-wrap:wrap; margin-bottom:.75rem }
   .score { font-weight:700; font-variant-numeric:tabular-nums; min-width:4.5rem }
-  .w, .px, .delta { color:var(--mut); font-size:12px }
+  .w, .px, .delta, .unstable { color:var(--mut); font-size:12px }
+  .unstable { background:rgba(255,0,255,.12); padding:.1rem .4rem; border-radius:4px }
   .delta { background:rgba(181,137,0,.15); padding:.1rem .4rem; border-radius:4px }
   .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:.75rem }
   @media (max-width:900px) { .grid { grid-template-columns:1fr } }
@@ -157,7 +163,14 @@ ${
       ? `<ul>${cfg.masks.map((m) => `<li>${esc(m.reason)}</li>`).join("")}</ul>`
       : `<p><em>None configured.</em></p>`
   }
-  <p>Magenta is padding where one page is taller or wider than the other. It counts
+  <p>Pinned on both sides: clock starts at <code>${esc(meta.clock)}</code> on every load, a seeded
+     <code>Math.random</code>, timezone <code>${CONTEXT_OPTIONS.timezoneId}</code>, locale
+     <code>${CONTEXT_OPTIONS.locale}</code>, <code>${CONTEXT_OPTIONS.colorScheme}</code> colour
+     scheme, reduced motion, CSS animations and transitions off, videos paused at frame 0.</p>
+  <p>Unstable pixels — ones that changed between two shots of the same load — are painted
+     magenta on both sides, counted on each card, and excluded from the measurement. A route
+     more than 25% unstable is an error.</p>
+  <p>Magenta is also padding where one page is taller or wider than the other. It counts
      against the score on purpose — see the height delta on the row.</p>
 </details>
 `;

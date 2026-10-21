@@ -18,11 +18,13 @@ export interface ProgressRow {
   score: number | null;
   /** left − right, in px. 0 when the badge was absent. */
   heightDelta: number;
+  /** Pixels painted out as unstable. 0 when the badge was absent. */
+  unstablePixels: number;
 }
 
-/** `  [2/15] 97.41%  /about @1440  (height -112px)` — or `ERROR` in place of the score. */
+/** `  [2/15] 97.41%  /about @1440  (height -112px)  (unstable 1,024px)` — or `ERROR` in place of the score. */
 const PROGRESS =
-  /^\s*\[\d+\/\d+\]\s+(ERROR|[\d.]+%)\s+(\S+)\s+@(\d+)(?:\s+\(height ([+-]?\d+)px\))?\s*$/;
+  /^\s*\[\d+\/\d+\]\s+(ERROR|[\d.]+%)\s+(\S+)\s+@(\d+)(?:\s+\(height ([+-]?\d+)px\))?(?:\s+\(unstable ([\d,]+)px\))?\s*$/;
 
 export function parseProgress(stdout: string): ProgressRow[] {
   const rows: ProgressRow[] = [];
@@ -34,6 +36,7 @@ export function parseProgress(stdout: string): ProgressRow[] {
       width: Number(m[3]),
       score: m[1] === "ERROR" ? null : Number(m[1]!.slice(0, -1)) / 100,
       heightDelta: m[4] ? Number(m[4]) : 0,
+      unstablePixels: m[5] ? num(m[5]) : 0,
     });
   }
   return rows;
@@ -59,6 +62,7 @@ export interface ReportCard {
   widthDelta: number;
   diffPixels: number;
   totalPixels: number;
+  unstablePixels: number;
   images: string[];
 }
 
@@ -103,6 +107,7 @@ export function parseReport(html: string): Report {
     }
     const height = /<span class="delta">height ([+-]?\d+)px<\/span>/.exec(card);
     const wDelta = /<span class="delta">width ([+-]?\d+)px<\/span>/.exec(card);
+    const unstable = /<span class="unstable">([\d,]+) px unstable<\/span>/.exec(card);
     cards.push({
       route: route[1]!,
       width: Number(width[1]),
@@ -112,6 +117,7 @@ export function parseReport(html: string): Report {
       widthDelta: wDelta ? Number(wDelta[1]) : 0,
       diffPixels: num(px[1]!),
       totalPixels: num(px[2]!),
+      unstablePixels: unstable ? num(unstable[1]!) : 0,
       images: [...card.matchAll(/<a href="([^"]+)"/g)].map((m) => m[1]!),
     });
   }
