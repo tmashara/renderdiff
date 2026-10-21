@@ -40,6 +40,8 @@ export const GUARDRAILS = [
   "sprite",
   "short",
   "tall-region",
+  "reorder",
+  "stripe",
 ] as const;
 
 export const ALL: string[] = [...EQUIVALENCE, ...CONTROLS, ...GUARDRAILS];

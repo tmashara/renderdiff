@@ -420,8 +420,9 @@ function align(l: Buffer, r: Buffer, w: number, cw: number, lh: number, rh: numb
 
 /**
  * A recolour inside a run of identical rows comes out of Myers as a left band and a right band
- * of the same height with only identical rows between them. That is one change in place: pair
- * the whole span row for row instead, so it reads as a region.
+ * of the same height. When pairing the span straight leaves every row outside the two bands
+ * identical, that is one change in place: pair it row for row, so it reads as a region. A
+ * block removed at one place and another added elsewhere fails that test and stays two bands.
  */
 function inPlace(p: ReturnType<typeof pairUp>, ha: Uint32Array, hb: Uint32Array) {
   let { bands, at, rows } = p;
@@ -433,9 +434,11 @@ function inPlace(p: ReturnType<typeof pairUp>, ha: Uint32Array, hb: Uint32Array)
     const le = b.side === "left" ? b.y + b.h : at[i + 1]!,
       re = b.side === "right" ? b.y + b.h : at[i + 1]!;
     if (le - ls !== re - rs) continue;
-    const inside = rows.filter(([ly]) => ly >= ls && ly < le);
-    if (!inside.every(([ly, ry]) => ha[ly] === hb[ry])) continue;
     const span = Array.from({ length: le - ls }, (_, k): [number, number] => [ls + k, rs + k]);
+    const inBand = (side: Band["side"], y: number) =>
+      [a, b].some((n) => n.side === side && y >= n.y && y < n.y + n.h);
+    // Matched rows always hash alike, so test the straight pairing about to replace them.
+    if (!span.every(([ly, ry]) => inBand("left", ly) || inBand("right", ry) || ha[ly] === hb[ry])) continue;
     rows = [...rows.filter(([ly]) => ly < ls), ...span, ...rows.filter(([ly]) => ly >= le)];
     bands = bands.filter((_, j) => j !== i && j !== i + 1);
     at = at.filter((_, j) => j !== i && j !== i + 1);

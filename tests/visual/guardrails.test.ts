@@ -377,6 +377,23 @@ describe("crops", () => {
   });
 });
 
+describe("band pairing", () => {
+  test("a block removed at the top and another added at the bottom stay two bands", async () => {
+    const run = await capture(["/reorder"]);
+    const r = result(results(run.outDir), "/reorder", 1440);
+    assert.deepEqual(r.bands?.map((b) => [b.side, b.h]), [["left", 96], ["right", 96]], context(run));
+    assert.deepEqual(r.crops.map((c) => c.kind), ["band", "band"]);
+  });
+
+  test("a stripe recoloured inside identical rows is one region, not a band pair", async () => {
+    const run = await capture(["/stripe"]);
+    const r = result(results(run.outDir), "/stripe", 1440);
+    assert.deepEqual(r.bands, [], context(run));
+    assert.equal(r.regions.length, 1);
+    assert.deepEqual(r.crops.map((c) => c.kind), ["region"]);
+  });
+});
+
 describe("the run summary", () => {
   test("errors are listed separately from scores on stdout", async () => {
     const run = await capture(["/blank", "/animated"]);

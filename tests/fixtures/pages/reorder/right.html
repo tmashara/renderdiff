@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reorder</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for band pairing. A blue block at the top on the left, a red one of the same height at the bottom on the right: one removed and one added, two bands, not one change in place. */
+.block { width: var(--content); height: 96px; }
+.x { background: var(--accent); }
+.y { background: #c62828; }
+.plain { width: var(--content); height: 480px; background: var(--fill); position: relative; }
+.stripe { position: absolute; left: 0; right: 0; top: 160px; height: 96px; background: var(--accent); }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Row alignment</h1>
+<p class="lede">This pair is deliberately different, in a way that tests how rows are paired across the two sides before the remaining difference is measured and cropped.</p>
+<section class="notes">
+<p>Every row outside the changed block is identical on both sides, so the only question is whether the change reads as rows one side lacks or as a change in place.</p>
+</section>
+<div class="block y"></div>
+</div>
+</body>
+</html>
