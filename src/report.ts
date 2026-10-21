@@ -41,7 +41,11 @@ export function stats(rows: ComparedResult[]) {
 }
 
 const esc = (s: string) =>
-  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 
 /** Green above 99.5%, amber to 97%, red below. Tuned to be read, not to be precise. */
 

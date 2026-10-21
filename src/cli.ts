@@ -236,7 +236,7 @@ if (glob) {
   die(`globs are not supported (${glob}) — pass literal paths.`);
 }
 
-const routes: Route[] = rawRoutes.map(normalize);
+const routes: Route[] = [...new Set(rawRoutes.map(normalize))];
 
 if (configPath) console.log(`Config: ${configPath}`);
 console.log(`Routes: ${routes.length}`);

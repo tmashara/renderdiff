@@ -15,6 +15,7 @@
  * something rather than just asserting a page happens to match.
  */
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
 import { after, before, describe, test } from "node:test";
@@ -23,6 +24,7 @@ import {
   context,
   runCli,
   renderdiffArgs,
+  tempDir,
   type CliResult,
 } from "../helpers/cli.ts";
 import { card, parseProgress, parseReport } from "../helpers/parse.ts";
@@ -266,5 +268,75 @@ describe("the run summary", () => {
     assert.equal(rows.find((r) => r.route === "/animated")!.score, 1);
     assert.match(run.stdout, /^Errors \(1\):$/m);
     assert.match(run.stdout, /\/blank@1440: page did not render/);
+  });
+});
+
+describe("the output directory", () => {
+  const into = (outDir: string) =>
+    runCli(
+      [
+        ...renderdiffArgs({
+          left: site.left,
+          right: site.right,
+          routes: ["/animated"],
+          widths: [1440],
+        }),
+        "--out",
+        outDir,
+      ],
+      { noOut: true },
+    );
+
+  test("a non-empty directory that is not a previous run is left alone", async () => {
+    const dir = tempDir();
+    fs.writeFileSync(path.join(dir, "keep.txt"), "mine");
+    const run = await into(dir);
+    assert.equal(run.code, 2, context(run));
+    assert.match(run.stderr, /refusing to wipe/);
+    assert.ok(fs.existsSync(path.join(dir, "keep.txt")), "the directory was wiped");
+  });
+
+  test("a previous run's directory is wiped and reused", async () => {
+    const dir = path.join(tempDir(), "out");
+    const first = await into(dir);
+    assert.equal(first.code, 0, context(first));
+    fs.writeFileSync(path.join(dir, "stale.375.diff.png"), "");
+    const second = await into(dir);
+    assert.equal(second.code, 0, context(second));
+    assert.ok(!fs.existsSync(path.join(dir, "stale.375.diff.png")), "the old run was not wiped");
+  });
+
+  test("an interrupted run's directory, with images but no report, is reused", async () => {
+    const dir = tempDir();
+    fs.writeFileSync(path.join(dir, "x.1440.left.png"), "");
+    const run = await into(dir);
+    assert.equal(run.code, 0, context(run));
+    assert.ok(!fs.existsSync(path.join(dir, "x.1440.left.png")), "the old run was not wiped");
+  });
+});
+
+describe("image filenames", () => {
+  test("routes that slug alike, or carry a query, still get their own images", async () => {
+    // Both of these slugged to `color?a-b` once, so the second pair overwrote the first.
+    const run = await capture(["/color?a/b", "/color?a-b"]);
+    const html = run.report();
+    assert.ok(html, `no report was written${context(run)}`);
+    const images = parseReport(html).cards.flatMap((c) => c.images);
+    assert.equal(images.length, 6, context(run));
+    assert.equal(new Set(images).size, 6, `images shared between routes: ${images}`);
+    for (const name of images) {
+      assert.match(name, /^[a-z0-9_.-]+$/, `${name} is not a safe filename`);
+      assert.ok(fs.existsSync(run.file(name)), `${name} was not written`);
+    }
+  });
+});
+
+describe("retries", () => {
+  test("a page that did not render is not retried", async () => {
+    const before = site.hits("/blank");
+    const run = await capture(["/blank"]);
+    assert.match(run.stdout, /page did not render/, context(run));
+    // The left side fails first and the right is never loaded, so a retry would make this 2.
+    assert.equal(site.hits("/blank") - before, 1, context(run));
   });
 });

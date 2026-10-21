@@ -55,7 +55,7 @@ renderdiff /about --left http://localhost:4000 --right https://example.com --wid
 
 **4. Open the diff.** Output lands in `./renderdiff-out/` as
 `{slug}.{width}.{left,right,diff}.png` — `/` slugs to `index`, `/blog/foo` to
-`blog-foo`:
+`blog-foo`, other characters to `_`, and a clash gets a `-2` suffix:
 
 ```
 Read renderdiff-out/about.1440.diff.png
@@ -133,7 +133,8 @@ cookie script ran wedges the renderer).
 ## Gotchas
 
 - **The out dir is wiped at the start of every run.** To keep a previous run's evidence
-  next to a new one, pass `--out renderdiff-before` / `--out renderdiff-after`.
+  next to a new one, pass `--out renderdiff-before` / `--out renderdiff-after`. A
+  directory holding files renderdiff didn't write is refused (exit 2).
 - **Routes normalize** to no trailing slash; `/` stays `/`.
 - **A migration that changed a URL** can't be diffed in one run — both sides get the
   same path.

@@ -170,10 +170,11 @@ describe("routes", () => {
       "globs are not supported (/blog/*)",
     ));
 
-  test("every spelling of a path normalizes to one form", async () => {
+  test("every spelling of a path normalizes to one route", async () => {
     const r = await dry(["pricing", "/pricing/", "//pricing//", "pricing/"]);
     assert.equal(r.code, 0, r.stderr);
-    assert.equal(r.stdout.match(/http:\/\/left\.test\/pricing\b/g)?.length, 4);
+    assert.match(r.stdout, /^Routes: 1$/m);
+    assert.equal(r.stdout.match(/http:\/\/left\.test\/pricing\b/g)?.length, 1);
     // No doubled or trailing slashes survive.
     assert.doesNotMatch(r.stdout, /left\.test\/\/|\/pricing\//);
   });
