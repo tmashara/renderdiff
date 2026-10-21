@@ -6,35 +6,37 @@ description: Use when verifying that a framework migration, CSS refactor, templa
 # renderdiff
 
 `renderdiff` screenshots the same routes on two origins at several viewport widths,
-pixel-diffs each pair, and writes `report.html` plus per-shot PNGs.
+pixel-diffs each pair, and writes `results.json`, `report.html`, per-shot PNGs and a crop
+of each of the largest diff regions.
 
+```bash
+npx renderdiff@latest / /about /pricing --left http://localhost:3000 --right https://example.com
 ```
-renderdiff / /about /pricing --left http://localhost:3000 --right https://example.com
-```
 
-`renderdiff --help` is the flag reference. This skill is how to use it to answer "did my
-change break the rendering?" without lying to yourself.
+Needs Node >= 22.18 and, once, `npx playwright install chromium`. Until renderdiff is
+published to npm, `npx renderdiff@latest` won't resolve: install it with
+`npm install -g github:tmashara/renderdiff` (or `npm link` in a clone) and run `renderdiff …`.
 
-Check it's there: `renderdiff --version`. If not:
-`npm install -g renderdiff && npx playwright install chromium` (Node >= 22.18).
+`--help` is the flag reference. This skill is how to use it to answer "did my change break
+the rendering?" without lying to yourself.
 
 ## What a renderdiff verdict is
 
 A finished check has these four parts, in this order:
 
-1. **Scores** — the mean and worst lines from stdout, with each route's regions, bands
-   and text-diff counts.
-2. **What you saw in the diff PNGs you opened** — named per route and width, e.g.
+1. **Scores** — `summary.mean` and `summary.worst` from `results.json`, with each route's
+   region count, bands and text-diff lines.
+2. **What you saw in the crops and PNGs you opened** — named per route and width, e.g.
    "/pricing @1440: footer block sits 40px lower on the left; nav identical."
-3. **What you did not verify** — errored routes, widths you skipped, regions under a
-   mask, routes not in the list.
+3. **What you did not verify** — errored routes, widths you skipped, regions past the five
+   cropped that you didn't open, regions under a mask, routes not in the list.
 4. **The call** — parity, regression, or expected change, and why.
 
 **A score without part 2 is not a verdict.** The score says *where to look*, never
 *whether it's fine*. A page scores 99.6% with a nav link missing, and 97% because one
 font loaded a frame late. You cannot tell those apart from a number.
 
-Reading the diff means `Read`ing the PNG, not reasoning about the percentage.
+Reading the diff means `Read`ing the crop or PNG, not reasoning about the percentage.
 
 ## Workflow
 
@@ -51,44 +53,51 @@ appended, so the two sides must share URL structure.
 **3. Start narrow — one route, one width.**
 
 ```bash
-renderdiff /about --left http://localhost:4000 --right https://example.com --width 1440
+npx renderdiff@latest /about --left http://localhost:4000 --right https://example.com --width 1440
 ```
 
-**4. Read the detail lines, then open the diff.** Under each score stdout prints what
-changed and where:
+**4. Read `results.json`.** stdout ends with its path (`Results: …/renderdiff-out/results.json`).
+Every path in it is relative to the out dir. Per route and width:
 
-```
-  [1/1] 97.14%  /about @1440  (height -24px)
-        3 regions, largest 1440×33 at (0,1104)
-        band -24px at y=196 (right)
-        aligned 100.00%
-        text: 0 added, 1 removed
-```
-
-- **text** — read it first. `removed` lines are on the right (reference) only, `added` on
-  the left (your change) only; the report card lists them. A removed line is missing
-  content whatever the score says. Masked elements are left out, but unmasked text that
-  changes per load (a ticker, a clock) appears whenever the sides differed at capture.
-- **band** — rows one side has that the other lacks (`-` = only right has them, `+` = only
-  left). Everything below a band is pushed down, so the red below it is one cause, not
-  many. `aligned` near 100% means the band *is* the whole difference. `y` is approximate
-  where identical rows repeat.
-- **regions** — where the differing pixels are, largest first, as `w×h at (x,y)`. Go to
-  each one in the diff PNG. Many regions plus a band: look at the band first.
-
-Output lands in `./renderdiff-out/` as
-`{slug}.{width}.{left,right,diff}.png` — `/` slugs to `index`, `/blog/foo` to
-`blog-foo`, other characters to `_`, and a clash gets a `-2` suffix:
-
-```
-Read renderdiff-out/about.1440.diff.png
+```json
+{
+  "url": "/about", "width": 1440, "status": "compared",
+  "score": 0.9714, "alignedScore": 1, "heightDelta": -24, "unstablePixels": 0,
+  "regions": [{ "x": 0, "y": 1104, "w": 1440, "h": 33, "pixels": 9120 }],
+  "bands": [{ "side": "right", "y": 196, "h": 24 }],
+  "text": { "added": [], "removed": ["Pricing"] },
+  "images": { "left": "about.1440.left.png", "right": "about.1440.right.png", "diff": "about.1440.diff.png" },
+  "crops": ["about.1440.r1.png"]
+}
 ```
 
-Read `left.png` and `right.png` too when the diff alone doesn't explain itself.
-Working with a human present? Add `--open` so they see the report as well.
+Read it in this order:
 
-**5. Explain every region, band and text line before widening.** Each one is a real regression, content
-that legitimately drifts, or a height difference. Don't move on with an unexplained band.
+- **`text`** first. `removed` lines are on the right (reference) only, `added` on the left
+  (your change) only. A removed line is missing content whatever the score says. Masked
+  elements are left out, but unmasked text that changes per load (a ticker, a clock)
+  appears whenever the sides differed at capture.
+- **`bands`** — rows one side has that the other lacks, at `y` in that side's own
+  coordinates. Everything below a band is pushed down, so the red below it is one cause,
+  not many. `alignedScore` near 1 means the band *is* the whole difference. `y` is
+  approximate where identical rows repeat. `bands: null` means the rows were too different
+  to align.
+- **`crops`** — `Read` each one. A crop is one region (`crops[i]` is `regions[i]`, largest
+  first, at most five) padded by 48px, as left | right | diff side by side, at most 1200px
+  on its long side — legible, unlike a full-page PNG, which `Read` downscales to a blur.
+- **`images`** — the full PNGs, only when a crop doesn't explain itself: more than five
+  regions, a band's surroundings, or a height delta (padding is never cropped).
+
+`status: "error"` entries carry `error` instead of metrics. `summary` has `compared`,
+`errors`, `mean`, `worst` and `belowThreshold`; `meta` records the origins, widths,
+threshold, pinned clock, block patterns, hidden selectors and mask reasons.
+
+Working with a human present? Add `--open` so they see the report as well — it shows the
+same crops, regions, bands and text per card.
+
+**5. Explain every region, band and text line before widening.** Each one is a real
+regression, content that legitimately drifts, or a height difference. Don't move on with
+an unexplained band.
 
 **6. Widen.** All routes, default widths, and `--threshold` once you know what clean
 looks like. Keep `--concurrency` low (default 2) when the right side is someone's live
@@ -98,15 +107,15 @@ site — you're a guest there.
 
 | What you see | What it means |
 | --- | --- |
-| Magenta bands | One side is taller/wider; the shorter image is padded, and the padding counts against the score on purpose. The `height ±Npx` badge names it. |
+| Magenta padding | One side is taller/wider; the shorter image is padded, and the padding counts against the score on purpose. `heightDelta` / `widthDelta` name it. |
 | Score ~100% on every route | Suspect before you celebrate. Confirm both sides actually rendered — two identical error pages diff at ~100%. |
 | `HTTP 404 at …` (or any status ≥ 400) | That side answered with an error status. Usually a route that doesn't exist on one origin, or a dev server not ready. |
 | `page did not render on either side (…)` | Both sides had under 200 chars of text and no visible images, SVG, canvas, video, iframes or form controls, so renderdiff refused to score two blanks as a match. Usually a failed asset or an app that never mounted. One blank side isn't refused — it shows up as a low score. |
-| `ERROR` rows | Unmeasured, not failed. They exit 1 because an unmeasured route isn't a verified one. Report them as unverified. |
-| Uniform low score, whole page shifted | Almost always a height or font-loading difference near the top pushing everything down. A `band` line names where; compare left and right at that `y`. No band means the shift is horizontal or the content itself changed. |
-| `text: N added, M removed` | Content differs. Read the lines on the report card: a removed line is something the reference shows and your change doesn't. |
-| `rows too different to align` | The pages differ in height but share too few identical rows to align, so no bands. Either they are very different, or the edits total more than 2,000 rows, or sub-threshold noise touches every row. Use the height badge and regions. |
-| `unstable Npx` badge | Pixels that kept changing between shots of the same load on one origin (a ticker, a carousel, a video). Painted out on both sides and excluded from the measurement, so the score covers only the rest. A large number means a big region went unmeasured — look at the magenta on the images. |
+| `status: "error"` (stdout: `ERROR`) | Unmeasured, not failed. They exit 1 because an unmeasured route isn't a verified one. Report them as unverified. |
+| Uniform low score, whole page shifted | Almost always a height or font-loading difference near the top pushing everything down. A band names where; compare left and right at that `y`. No band means the shift is horizontal or the content itself changed. |
+| Non-empty `text` | Content differs: a removed line is something the reference shows and your change doesn't. |
+| `bands: null` (stdout: `rows too different to align`) | The pages differ in height but share too few identical rows to align. Either they are very different, or the edits total more than 2,000 rows, or sub-threshold noise touches every row. Use the height delta and regions. |
+| `unstablePixels` > 0 | Pixels that kept changing between shots of the same load on one origin (a ticker, a carousel, a video). Painted out on both sides and excluded from the measurement, so the score covers only the rest. A large number means a big region went unmeasured — look at the magenta on the images. |
 | `page did not settle: Npx unstable at …` | More than 25% of the page kept changing between shots, so too little was measured to score. Mask or stop the moving part (a carousel, a background video). |
 
 Report colouring: green above 99.5%, amber to 97%, red below.
@@ -115,9 +124,10 @@ Report colouring: green above 99.5%, amber to 97%, red below.
 
 | Thought | Reality |
 | --- | --- |
-| "Mean 99.1%, no regressions." | You reported a number, not a check. Open the worst diff. |
+| "Mean 99.1%, no regressions." | You reported a number, not a check. Open the worst route's crops. |
 | "99.6%, it's noise." | Check the text diff and region count first. A missing nav link is 99.6% and one `removed` line. |
-| "It's probably just fonts / antialiasing." | "Probably" is exactly what the diff PNG resolves. Look. |
+| "It's probably just fonts / antialiasing." | "Probably" is exactly what the crop resolves. Look. |
+| "The crops looked fine, done." | Crops cover the five largest regions. Check `regions.length`, and open the diff PNG for the rest and for any height delta — padding is never cropped. |
 | "Masking the header gets this to 100%." | Every mask is coverage surrendered. Mask only content *proven* to vary per load — clocks, star counts, rotating quotes — with a `reason`, which the report prints verbatim. |
 | "I'll lower `--threshold` until it passes." | Threshold is a CI gate, not a dial for reaching green. |
 | "That route errors, I'll drop it from the list." | Shrinking the route list shrinks what you verified. Fix it, or say it's unverified. |
@@ -148,7 +158,7 @@ export default {
 };
 ```
 
-With a globally-installed CLI, use a plain `export default {}` —
+Run through `npx` or a global install, use a plain `export default {}` —
 `import { defineConfig } from "renderdiff"` only resolves when renderdiff is also installed in
 that project. [`renderdiff.config.example.ts`](https://github.com/tmashara/renderdiff/blob/main/renderdiff.config.example.ts)
 annotates every field.

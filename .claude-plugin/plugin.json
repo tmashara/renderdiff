@@ -1,0 +1,7 @@
+{
+  "name": "renderdiff",
+  "description": "Screenshot-diff two origins and judge the result by reading the diffs, not just the score.",
+  "version": "0.1.0",
+  "author": { "name": "Timur Mashara" },
+  "repository": "https://github.com/tmashara/renderdiff"
+}

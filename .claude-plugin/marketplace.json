@@ -1,0 +1,14 @@
+{
+  "name": "renderdiff",
+  "description": "The renderdiff skill: check that a change didn't alter how pages render.",
+  "owner": {
+    "name": "Timur Mashara"
+  },
+  "plugins": [
+    {
+      "name": "renderdiff",
+      "source": "./",
+      "description": "Screenshot-diff two origins and judge the result by reading the diffs, not just the score."
+    }
+  ]
+}
