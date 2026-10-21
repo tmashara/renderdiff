@@ -5,9 +5,9 @@
 <title>Layout parity</title>
 <link rel="stylesheet" href="/shared/base.css">
 <style>
-/* RIGHT: an explicit three-track CSS grid. */
+/* RIGHT: a CSS grid with as many 288px tracks as fit, as the left side's flex row wraps. */
 @media (min-width: 481px) {
-  .deck { display: grid; grid-template-columns: repeat(3, var(--card-w)); gap: var(--gap); }
+  .deck { display: grid; grid-template-columns: repeat(auto-fill, var(--card-w)); gap: var(--gap); }
 }
 @media (max-width: 480px) {
   .deck { display: grid; grid-template-columns: 1fr; gap: var(--gap-mobile); }

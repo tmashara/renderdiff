@@ -17,7 +17,7 @@ Three groups:
   unconditionally would pass the suite. They also pin the diff regions (`color`), the row
   alignment (`taller`, `nav`, and `shifted`, which has no band) and the text diff (`nav`).
 - **Guard rails** — `blank`, `tall`, `animated`, `lazy`, `lazy-deep`, `lazy-js`, `consent`,
-  `drifting`, `tracker`, `clock`, `ticker`, `unsettled`, `sprite`, `short`.
+  `drifting`, `tracker`, `clock`, `ticker`, `unsettled`, `sprite`, `short`, `tall-region`, `reorder`, `stripe`.
   One per defence in `src/capture.ts` / `src/config.ts`.
 
 ## Authoring rules
@@ -46,7 +46,12 @@ Breaking any of these produces a flaky suite, and the flake looks like a renderd
    needs real content. The `notes` tail exists partly for this. `blank` and `sprite` (a
    hidden SVG sprite only) are the intentional violations; `short`
    stays under 200 characters on purpose and passes on its form controls.
-7. **No animation** except in `animated`, which exists to prove `STILL_CSS` kills it, `ticker`,
+7. **Wrap identically at any width, or overflow alike.** Below 960 the content box no
+   longer fits three cards. A hard-coded breakpoint that copies the other side's wrapping
+   at one width breaks at the next, so both sides wrap by the same rule (auto-fill, a
+   negative-margin float grid) or neither wraps. The suite checks every default width plus
+   600 to catch exactly that.
+8. **No animation** except in `animated`, which exists to prove `STILL_CSS` kills it, `ticker`,
    whose timer exists to be caught by the stability check, and `unsettled`, which recolours
    the whole page to trip the unstable-pixel cap.
 

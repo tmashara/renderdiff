@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { Band, Region, TextDiff } from "./compare.ts";
+import type { Band, Box, Region, TextDiff } from "./compare.ts";
 import { CONTEXT_OPTIONS, type ResolvedConfig } from "./config.ts";
-import { fmtBand, fmtRegion, pct, signed } from "./format.ts";
+import { floor4, fmtBand, fmtRegion, pct, signed } from "./format.ts";
 
 interface BaseResult {
   url: string;
@@ -27,7 +27,26 @@ export interface ComparedResult extends BaseResult {
   alignedScore: number | null;
   /** innerText line diff; `added` is on left only, `removed` on right only. */
   text: TextDiff;
+  /** Paths relative to the out dir. */
   images: { left: string; right: string; diff: string };
+  /** At most three: bands, tallest first, then the largest regions. Not one per region. */
+  crops: CropResult[];
+}
+
+/** A crop of one change: left and right panels, a 1px red box round it, or a 2px red seam. */
+export interface CropResult {
+  /** `{slug}.{width}.c{n}.png`, relative to the out dir. */
+  path: string;
+  kind: "band" | "region";
+  /** The change on each side, in that side's page px. `h` 0 is where the other side's band would go. */
+  left: Box;
+  right: Box;
+  /** Left is always on top (`stacked`) or on the left (`side`). */
+  layout: "stacked" | "side";
+  /** 1 is native; never below 0.75. */
+  scale: number;
+  /** Only the top rows (or left columns) of the change fit. */
+  clipped: boolean;
 }
 
 /** A route that threw before it could be diffed — neither a pass nor a fail. */
@@ -39,11 +58,35 @@ export interface ErrorResult extends BaseResult {
 export type RouteResult = ComparedResult | ErrorResult;
 
 export interface RunMeta {
+  tool: "renderdiff";
+  version: string;
+  generatedAt: string;
   left: string;
   right: string;
-  generatedAt: string;
+  widths: number[];
+  threshold: number | null;
   /** The instant both sides' clocks start at on every load, ISO. */
   clock: string;
+  blockUrlPatterns: string[];
+  hideSelectors: string[];
+  masks: { urlPath: string; reason: string }[];
+}
+
+export interface Summary {
+  compared: number;
+  errors: number;
+  /** Null when nothing was compared. */
+  mean: number | null;
+  worst: { url: string; width: number; score: number } | null;
+  /** Comparisons under `meta.threshold`; 0 when no threshold was set. */
+  belowThreshold: number;
+}
+
+/** The shape of `results.json`, written to the out dir on every run. */
+export interface Results {
+  meta: RunMeta;
+  results: RouteResult[];
+  summary: Summary;
 }
 
 /** Sort ascending by score; surface the mean and the worst (lowest-scoring) row. */
@@ -51,6 +94,47 @@ export function stats(rows: ComparedResult[]) {
   const sorted = [...rows].sort((a, b) => a.score - b.score);
   const mean = sorted.reduce((s, r) => s + r.score, 0) / sorted.length;
   return { sorted, mean, worst: sorted[0]! };
+}
+
+/** Scores to 4 decimals, rounded down like `pct`. */
+const round = (key: string, v: unknown) =>
+  typeof v === "number" && /^(score|alignedScore|mean)$/.test(key) ? floor4(v) : v;
+
+export function writeResults(
+  results: RouteResult[],
+  meta: RunMeta,
+  outDir: string,
+): string {
+  const compared = results.filter(
+    (r): r is ComparedResult => r.status === "compared",
+  );
+  const { mean, worst } = compared.length
+    ? stats(compared)
+    : { mean: null, worst: null };
+  const out: Results = {
+    meta,
+    results,
+    summary: {
+      compared: compared.length,
+      errors: results.length - compared.length,
+      mean,
+      worst: worst && { url: worst.url, width: worst.width, score: worst.score },
+      belowThreshold:
+        meta.threshold === null
+          ? 0
+          : compared.filter((r) => r.score < meta.threshold!).length,
+    },
+  };
+  const rows = results.map((r) => `    ${JSON.stringify(r, round)}`).join(",\n");
+  // One record per line: greppable, and a reader can pull one route without parsing the rest.
+  const json = JSON.stringify({ ...out, results: [] }, round, 2).replace(
+    '"results": []',
+    // A function, so a `$` in a route or text line isn't read as a replacement pattern.
+    () => (rows ? `"results": [\n${rows}\n  ]` : '"results": []'),
+  );
+  const file = path.join(outDir, "results.json");
+  fs.writeFileSync(file, json + "\n");
+  return file;
 }
 
 const esc = (s: string) =>
@@ -90,6 +174,13 @@ function findings(r: ComparedResult): string {
         .slice(0, LIST_CAP)
         .map((g) => `<li>${fmtRegion(g)} — ${g.pixels.toLocaleString("en-US")} px</li>`)
         .join("")}</ul>`,
+    );
+  }
+  if (r.crops.length) {
+    items.push(
+      `<div class="crops">${r.crops
+        .map((c) => `<a class="crop" href="${c.path}" target="_blank" title="${c.kind}, left ${c.layout === "stacked" ? "on top" : "on the left"}"><img loading="lazy" src="${c.path}"></a>`)
+        .join("")}</div>`,
     );
   }
   if (r.bands?.length) {
@@ -168,6 +259,8 @@ export async function writeReport(
   .findings { font-size:12px; color:var(--mut); margin:0 0 .75rem }
   .findings p { margin:.25rem 0 0 }
   .findings ul { margin:.25rem 0; font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace }
+  .crops { display:flex; flex-wrap:wrap; gap:.5rem; margin:.25rem 0 }
+  .crops img { width:auto; max-width:100%; max-height:160px }
   .findings .add { color:#2e7d32 } .findings .del { color:#c62828 }
   .unstable { background:rgba(255,0,255,.12); padding:.1rem .4rem; border-radius:4px }
   .delta { background:rgba(181,137,0,.15); padding:.1rem .4rem; border-radius:4px }

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import type { Locator, Page } from "playwright";
 
 /**
@@ -155,9 +155,21 @@ export interface ResolvedConfig {
   outDir: string;
   concurrency: number;
   blockUrlPatterns: string[];
+  /** Built-in plus configured selectors hidden on both sides. */
+  hideSelectors: string[];
   /** The complete stylesheet injected into every page. */
   neutralizeCss: string;
   masks: Mask[];
+}
+
+/** package.json's version; the same relative path resolves from `src/` and `dist/`. */
+export function version(): string {
+  const pkg = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "package.json");
+  try {
+    return JSON.parse(fs.readFileSync(pkg, "utf8")).version ?? "unknown";
+  } catch {
+    return "unknown";
+  }
 }
 
 /** Identity helper — exists purely so editors type-check a config file. */
@@ -330,6 +342,7 @@ export function resolveConfig(
       ...DEFAULT_BLOCK_URL_PATTERNS,
       ...(file.blockUrlPatterns ?? []),
     ],
+    hideSelectors,
     neutralizeCss:
       STILL_CSS +
       `${hideSelectors.join(",")}{display:none!important}\n` +

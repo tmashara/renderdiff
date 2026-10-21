@@ -10,12 +10,10 @@
  * Per-site knobs (masks for content that drifts, extra selectors to hide, defaults for
  * the flags below) live in a `renderdiff.config.ts` / `.mjs` in the working directory.
  */
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   loadConfig,
   resolveConfig,
+  version,
   type CliOverrides,
   type ResolvedConfig,
   type Route,
@@ -24,6 +22,8 @@ import {
 interface Args extends CliOverrides {
   dryRun: boolean;
   open: boolean;
+  /** Undefined: decide by whether stdout is a terminal. */
+  progress?: boolean;
   help: boolean;
   version: boolean;
   config?: string;
@@ -68,6 +68,8 @@ function parseArgs(argv: string[]): Args {
     else if (v === "--version" || v === "-v") a.version = true;
     else if (v === "--dry-run") a.dryRun = true;
     else if (v === "--open") a.open = true;
+    else if (v === "--progress") a.progress = true;
+    else if (v === "--no-progress") a.progress = false;
     else if (v === "--left") a.left = next();
     else if (v === "--right") a.right = next();
     else if (v === "--out") a.outDir = next();
@@ -99,8 +101,10 @@ const HELP = `
     renderdiff <route…> --left <url> --right <url> [options]
 
   Screenshots each route on both origins at several viewport widths, pixel-diffs the
-  pairs, and writes a scored HTML report. Routes are literal paths — no globs, no
-  discovery. Exits 1 if any route errors or falls below --threshold.
+  pairs, and writes a scored HTML report (report.html) plus results.json — every score,
+  region, band, text-diff line and image path, for scripts and agents — and up to
+  three crops per comparison of the bands and largest regions, left beside or over
+  right. Routes are literal paths — no globs, no discovery. Exits 1 if any route errors or falls below --threshold.
 
   Options
     --left <url>        Left origin, e.g. http://localhost:3000        (required)
@@ -112,6 +116,9 @@ const HELP = `
     --config <path>     Config file. Default: renderdiff.config.{ts,mts,js,mjs} in cwd.
     --dry-run           Print the URL pairs and exit. No browser.
     --open              Open the report when the run finishes.
+    --progress          A line per shot as it finishes. The default on a terminal;
+                        otherwise one summary of the differing routes at the end.
+    --no-progress       The end-of-run summary, even on a terminal.
     -h, --help          Show this.
     -v, --version       Print the version.
 
@@ -182,19 +189,6 @@ async function preflight(left: string, right: string) {
   process.exit(2);
 }
 
-function version(): string {
-  const pkg = path.join(
-    path.dirname(fileURLToPath(import.meta.url)),
-    "..",
-    "package.json",
-  );
-  try {
-    return JSON.parse(fs.readFileSync(pkg, "utf8")).version ?? "unknown";
-  } catch {
-    return "unknown";
-  }
-}
-
 let args: Args;
 try {
   args = parseArgs(process.argv.slice(2));
@@ -252,7 +246,12 @@ await preflight(cfg.left, cfg.right);
 
 const { run } = await import("./run.ts");
 try {
-  process.exit(await run({ routes, cfg, open: args.open }));
+  process.exit(await run({
+      routes,
+      cfg,
+      open: args.open,
+      progress: args.progress ?? !!process.stdout.isTTY,
+    }));
 } catch (e) {
   console.error(`✗ ${e instanceof Error ? e.message : String(e)}`);
   process.exit(1);

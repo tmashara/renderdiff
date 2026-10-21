@@ -4,7 +4,8 @@ Screenshot diff between two origins.
 
 Give it a list of routes and two base URLs. It screenshots each route on both sides at
 several viewport widths, pixel-diffs the pairs, and writes a scored HTML report with
-left / right / diff side by side.
+left / right / diff side by side, plus `results.json` and crops of the changes, sized to stay
+legible to coding agents.
 
 Useful for the "did I break anything?" question a test suite can't answer: a framework
 migration, a CSS refactor, a dependency bump, a staging-vs-production check.
@@ -13,20 +14,28 @@ migration, a CSS refactor, a dependency bump, a staging-vs-production check.
 renderdiff / /about /pricing --left http://localhost:3000 --right https://example.com
 ```
 
+On a terminal it prints a line per shot as it lands, then the worst scores and the paths
+to `report.html` and `results.json`. Piped — to a file, CI or a coding agent — it prints
+one summary at the end instead, listing only what differs:
+
 ```
 Routes: 3
-Capturing 15 pair(s) with 2 worker(s)...
-
-  [1/15] 99.98%  / @1440
-  [2/15] 97.41%  /about @1440  (height -112px)
-  …
-
-mean 99.12%   worst 97.41% (/about @1440)
-    97.41%  /about@1440  height -112px
-    99.87%  /pricing@375
-
-Report: /Users/you/site/renderdiff-out/report.html
+clean: /
+/about  clean @1152,896,704,375
+  @1440  97.41%  h-24  band -24@y196  aligned 100.00%  text -"Pricing"
+/pricing
+  @1440,1152,896,704,375  99.12%–99.87%  1 reg
+renderdiff: 2 of 3 routes differ (6 of 15 shots), 0 errors, worst 97.41% /about@1440 — /Users/you/site/renderdiff-out/results.json
 ```
+
+A row covers the widths that agree on everything but the score (shown as a range): height
+delta (`h`), bands (`+` rows only left has, `-` rows only right has, at `y`; `~` when the
+widths put it in different places), aligned score, region count, unstable pixels and up to
+three text-diff lines (`-"x"` only on the right, `+"x"` only on the left). Errors print in
+full, grouped across the widths that share a message. Clean means not one pixel differs
+and none went unmeasured as unstable; a route with unstable pixels gets its own row. With
+`--threshold`, the verdict line ends `, B below 97.00%`. `--progress` gets the per-shot
+output when piped, `--no-progress` the summary on a terminal.
 
 ## Install
 
@@ -39,9 +48,27 @@ Requires Node >= 22.18.
 
 ### Agent skill
 
-`skills/renderdiff/SKILL.md` teaches a coding agent to use renderdiff without fooling itself:
-read the diffs, not just the score. Install it with `npx skills add tmashara/renderdiff`, or
-copy the folder into `~/.claude/skills/`.
+[`skills/renderdiff/SKILL.md`](./skills/renderdiff/SKILL.md) teaches a coding agent to use
+renderdiff without fooling itself: run it with `npx renderdiff@latest`, read the summary
+it prints, then the text diff, the bands and the region crops, and give a verdict that says
+what it looked at — not just a score. The longer reference (triage, rationalizations,
+config, gotchas) sits next to it in `reference.md` and is read only when needed.
+
+In Claude Code, as a plugin:
+
+```
+/plugin marketplace add tmashara/renderdiff
+/plugin install renderdiff@renderdiff
+```
+
+For other agents (Codex, Cursor and so on), with [skills](https://skills.sh):
+
+```bash
+npx skills add tmashara/renderdiff
+```
+
+Until renderdiff is on npm, `npx renderdiff@latest` won't resolve; install the CLI with
+`npm install -g github:tmashara/renderdiff`.
 
 ## Usage
 
@@ -60,6 +87,8 @@ renderdiff <route…> --left <url> --right <url> [options]
 | `--config <path>` | Config file. Default: `renderdiff.config.{ts,mts,js,mjs}` in cwd. |
 | `--dry-run` | Print the URL pairs and exit. No browser. |
 | `--open` | Open the report when the run finishes. |
+| `--progress` | A line per shot as it finishes, then the worst scores. The default on a terminal; piped, renderdiff prints one compact summary at the end. |
+| `--no-progress` | The compact summary even on a terminal. |
 | `-h, --help` / `-v, --version` | |
 
 Routes are **literal paths** — there is no route discovery and globs are rejected. Both
@@ -115,11 +144,10 @@ The score is the share of pixels that match, per route per width. Green above 99
 amber to 97%, red below. It is a triage signal, not a verdict — open the report and
 look at the diff column.
 
-Under each score, stdout and the report card say where to look:
+Under each score, `--progress` output and the report card say where to look:
 
 ```
   [3/8] 97.14%  /pricing @1440  (height -24px)
-        3 regions, largest 1440×33 at (0,1104)
         band -24px at y=196 (right)
         aligned 100.00%
         text: 0 added, 1 removed
@@ -127,8 +155,11 @@ Under each score, stdout and the report card say where to look:
 
 - **Regions** are connected patches of differing pixels, on a 16px grid, largest first. On
   a long page a missing link barely moves the score; it is still a region. Only the area
-  both sides cover is searched: padding is reported by the height delta and the bands. The
-  card lists the top five with their pixel counts.
+  both sides cover is searched: padding is reported by the height delta and the bands. With
+  bands, regions come from the realigned rows, so content a band only pushed down isn't
+  one (above, the band is the whole difference, so there are none). The
+  card lists the top five with their pixel counts; up to three crops cover the bands first,
+  then the largest regions.
 - **Bands** are rows only one side has, found by aligning the two images row by row. `-24px
   at y=196 (right)` means the right side has 24 rows there that the left lacks — signed like
   the height delta. When rows of identical content repeat, the band's `y` can slide along
@@ -152,6 +183,66 @@ row names the cause.
 **Errors are not failures.** A route that threw produced no measurement, so it is
 neither a pass nor a fail. It's listed separately in the report — and it still exits 1,
 because an unmeasured route is not a verified one.
+
+## Output
+
+Everything lands in the out dir (`./renderdiff-out` by default):
+
+- `report.html` — the scored report.
+- `{slug}.{width}.{left,right,diff}.png` — full-page shots and the diff. `/` slugs to
+  `index`, `/blog/foo` to `blog-foo`, other characters to `_`; a clash gets a `-2` suffix.
+- `{slug}.{width}.c{n}.png` — up to three crops per comparison: bands (rows only one side
+  has), tallest first, then the largest regions. Each shows left and right at native scale,
+  padded by 48px and at least 320px wide, with a 1px red box around the change; on the side
+  that lacks a band's rows, a 2px red seam is inserted where they would be, hiding nothing.
+  Left is always on top (`stacked`, for wide changes) or on the left (`side`, for tall
+  ones). A crop stays within 1,568px on its long edge and 1,568 image tokens
+  (⌈w/28⌉·⌈h/28⌉) and is never scaled below 0.75×; a change too big for that keeps its top
+  rows (or left columns) and is marked `clipped`. Height padding is never cropped.
+- `results.json` — everything above as data, written on every run, errors included, one
+  result per line, scores rounded down to four decimals (so a shot that differs never
+  reads as `1`). Its types (`Results` and friends) are exported
+  from the package.
+
+```jsonc
+{
+  "meta": {
+    "tool": "renderdiff", "version": "0.1.0", "generatedAt": "…",
+    "left": "http://localhost:3000", "right": "https://example.com",
+    "widths": [1440, 375], "threshold": null,
+    "clock": "…",                // the instant both sides' clocks start at
+    "blockUrlPatterns": ["…"], "hideSelectors": ["…"],
+    "masks": [{ "urlPath": "/pricing", "reason": "live star count on /pricing" }]
+  },
+  "results": [
+    {
+      "url": "/about", "width": 1440, "status": "compared",
+      "score": 0.9714,           // share of measured pixels that match
+      "alignedScore": 1,         // score over the aligned rows; null unless there are bands
+      "diffPixels": 33120, "totalPixels": 1158000, "unstablePixels": 0,
+      "heightDelta": -24, "widthDelta": 0,          // left − right
+      "regions": [],             // left-page px; with bands, from the realigned rows
+      "bands": [{ "side": "right", "y": 196, "h": 24 }],   // null: too different to align
+      "text": { "added": [], "removed": ["Pricing"] },
+      "images": { "left": "about.1440.left.png", "right": "about.1440.right.png", "diff": "about.1440.diff.png" },
+      "crops": [{
+        "path": "about.1440.c1.png", "kind": "band",          // or "region"
+        "left": { "x": 256, "y": 196, "w": 68, "h": 0 },      // h 0: where the rows would go
+        "right": { "x": 256, "y": 196, "w": 68, "h": 24 },
+        "layout": "stacked", "scale": 1, "clipped": false     // left on top, or on the left ("side")
+      }]
+    },
+    { "url": "/blank", "width": 1440, "status": "error", "error": "page did not render …" }
+  ],
+  "summary": {
+    "compared": 1, "errors": 1, "mean": 0.9714,
+    "worst": { "url": "/about", "width": 1440, "score": 0.9714 },
+    "belowThreshold": 0
+  }
+}
+```
+
+Paths are relative to the out dir. Results are in route-then-width order.
 
 ## What it does to make two loads comparable
 
@@ -211,7 +302,7 @@ Source is TypeScript in `src/`, compiled to ESM in `dist/`. Import specifiers ke
 
 ```bash
 npm test           # unit tier — no browser, ~4s
-npm run test:visual  # drives Chromium over the fixture corpus, ~50s
+npm run test:visual  # drives Chromium over the fixture corpus, ~40s
 npm run test:all
 ```
 
@@ -219,9 +310,9 @@ Built on `node:test`, no test dependencies. Running them needs a Chromium for th
 `npx playwright install chromium`.
 
 The suite is black-box: it spawns `node src/cli.ts` and reads results back from stdout,
-`report.html`, and the written PNGs. Nothing under `src/` is imported, so what is asserted is
-what a user gets. The two output formats it depends on are parsed in exactly one place,
-`tests/helpers/parse.ts`.
+`report.html`, `results.json`, and the written PNGs. Nothing under `src/` is imported at
+runtime (only the `results.json` types), so what is asserted is what a user gets. The output
+formats it depends on are parsed in exactly one place, `tests/helpers/parse.ts`.
 
 **`tests/unit/`** — argument parsing, exit codes, route normalization, and config discovery,
 validation and precedence. All of it through `--dry-run`, which exits before the browser.

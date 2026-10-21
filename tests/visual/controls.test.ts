@@ -17,6 +17,7 @@
  * a threshold asked for one.
  */
 import assert from "node:assert/strict";
+import sharp from "sharp";
 import { after, before, test } from "node:test";
 import { CONTROLS, toPath } from "../helpers/corpus.ts";
 import {
@@ -26,7 +27,15 @@ import {
   renderdiffArgs,
   type CliResult,
 } from "../helpers/cli.ts";
-import { card, parseProgress, parseReport, row, type Report } from "../helpers/parse.ts";
+import {
+  card,
+  parseProgress,
+  parseReport,
+  parseSummary,
+  result,
+  results,
+  type Report,
+} from "../helpers/parse.ts";
 import { startFixtureSite, type FixtureSite } from "../helpers/server.ts";
 
 const WIDTHS = [1440, 375];
@@ -120,59 +129,179 @@ const PRICING = { 1440: 192, 375: 232 } as Record<number, number>;
 
 for (const width of WIDTHS) {
   test(`color @${width} is exactly one region, on the recoloured swatch`, () => {
-    const r = row(parseProgress(run.stdout), "/color", width);
-    assert.equal(r.regions, 1, context(run));
+    const r = result(results(run.outDir), "/color", width);
+    assert.equal(r.regions.length, 1, context(run));
     // Swatch three of the first strip, 208×160 (343 wide at 375), snapped out to the 16px grid.
     const swatch =
       width === 1440
         ? { x: 736, y: 168, w: 208, h: 160 }
         : { x: 16, y: 576, w: 343, h: 160 };
-    const g = r.largest!;
+    const g = r.regions[0]!;
     assert.ok(g.x <= swatch.x && g.y <= swatch.y, `${JSON.stringify(g)}${context(run)}`);
     assert.ok(g.x + g.w >= swatch.x + swatch.w && g.y + g.h >= swatch.y + swatch.h);
     assert.ok(g.w - swatch.w < 32 && g.h - swatch.h < 32, `region too loose: ${JSON.stringify(g)}`);
     assert.deepEqual(r.bands, [], "a recolour moves no rows");
-    assert.equal(r.added + r.removed, 0, "a recolour changes no text");
+    assert.deepEqual(r.text, { added: [], removed: [] }, "a recolour changes no text");
     const listed = card(report, "/color", width).regions;
-    assert.equal(listed.length, 1, "the card lists the same single region");
-    assert.deepEqual({ ...listed[0], pixels: undefined }, { ...g, pixels: undefined });
-    assert.ok(listed[0]!.pixels > 0);
+    assert.deepEqual(listed, [g], "the card lists the same single region");
+    assert.ok(g.pixels > 0);
   });
 
   test(`taller @${width} aligns: one 272px band on the right, the rest identical`, () => {
-    const r = row(parseProgress(run.stdout), "/taller", width);
-    assert.equal(r.bands.length, 1, context(run));
-    const [b] = r.bands;
+    const r = result(results(run.outDir), "/taller", width);
+    assert.equal(r.bands?.length, 1, context(run));
+    const [b] = r.bands!;
     assert.equal(b!.side, "right");
-    assert.equal(b!.delta, -272);
+    assert.equal(b!.h, 272);
     // The 32px gap before the band is identical to the one after, so the band may start
     // anywhere along it. Measured: y=985 @1440, 1025 @375.
     assert.ok(Math.abs(b!.y - FOURTH_BAND[width]!) <= 32, `band at y=${b!.y}${context(run)}`);
     assert.equal(r.alignedScore, 1, "every paired row should match exactly");
-    assert.equal(r.removed, 2, "Band four and its line exist on the right only");
-    assert.equal(r.added, 0);
+    assert.equal(r.text.removed.length, 2, "Band four and its line exist on the right only");
+    assert.equal(r.text.added.length, 0);
   });
 
   test(`shifted @${width} has no band: a horizontal shift moves no rows`, () => {
-    const r = row(parseProgress(run.stdout), "/shifted", width);
+    const r = result(results(run.outDir), "/shifted", width);
     // Every row with a glyph or an edge differs, so rows either pair in place or (at 375)
     // differ past the edit-distance cap. Neither is a band.
     assert.deepEqual(r.bands, [], context(run));
-    assert.equal(r.added + r.removed, 0, "same text on both sides");
+    assert.deepEqual(r.text, { added: [], removed: [] }, "same text on both sides");
   });
 
   test(`nav @${width} names the missing link and the 24px it took`, () => {
-    const r = row(parseProgress(run.stdout), "/nav", width);
+    const r = result(results(run.outDir), "/nav", width);
     assert.equal(r.heightDelta, -24, context(run));
-    assert.deepEqual(r.bands.map((b) => [b.side, b.delta]), [["right", -24]], context(run));
+    assert.deepEqual(r.bands?.map((b) => [b.side, b.h]), [["right", 24]], context(run));
     // The link's blank top rows match the line above, so the band may slide a few rows.
     // Measured: y=196 @1440, 236 @375.
-    assert.ok(Math.abs(r.bands[0]!.y - PRICING[width]!) <= 8, `band at y=${r.bands[0]!.y}`);
+    assert.ok(Math.abs(r.bands![0]!.y - PRICING[width]!) <= 8, `band at y=${r.bands![0]!.y}`);
     assert.equal(r.alignedScore, 1);
     const c = card(report, "/nav", width);
     assert.deepEqual(c.removed, ["Pricing"], context(run));
     assert.deepEqual(c.added, []);
-    assert.equal(r.removed, 1);
+    assert.deepEqual(r.text, { added: [], removed: ["Pricing"] });
+  });
+}
+
+for (const route of ["/color", "/nav"]) {
+  for (const width of WIDTHS) {
+    test(`results.json agrees with the report card for ${route} @${width}`, () => {
+      const r = result(results(run.outDir), route, width);
+      const c = card(report, route, width);
+      // The card rounds percentages to two places; the JSON has the full value.
+      assert.equal(Number((r.score * 100).toFixed(2)) / 100, c.score, context(run));
+      assert.equal(r.diffPixels, c.diffPixels);
+      assert.equal(r.totalPixels, c.totalPixels);
+      assert.equal(r.heightDelta, c.heightDelta);
+      assert.equal(r.widthDelta, c.widthDelta);
+      assert.equal(r.unstablePixels, c.unstablePixels);
+      assert.deepEqual(r.regions.slice(0, 5), c.regions);
+      assert.deepEqual(r.text, { added: c.added, removed: c.removed });
+      assert.deepEqual(Object.values(r.images), c.images);
+      assert.deepEqual(r.crops.map((x) => x.path), c.crops);
+    });
+  }
+}
+
+test("results.json carries the run meta and a summary that matches the report", () => {
+  const { meta, summary, results: rows } = results(run.outDir);
+  assert.equal(meta.tool, "renderdiff");
+  assert.match(meta.version, /^\d+\.\d+\.\d+/);
+  assert.deepEqual([meta.left, meta.right, meta.widths], [site.left, site.right, WIDTHS]);
+  assert.equal(meta.threshold, null);
+  assert.ok(meta.blockUrlPatterns.length && meta.hideSelectors.length);
+  assert.equal(rows.length, CONTROLS.length * WIDTHS.length);
+  for (const r of rows) {
+    if (r.status === "compared") assert.ok(r.score < 1 && r.score * 1e4 === Math.round(r.score * 1e4), `${r.url}@${r.width}: ${r.score}`);
+  }
+  assert.equal(summary.compared, report.cards.length);
+  assert.equal(summary.errors, 0);
+  assert.equal(summary.belowThreshold, 0);
+  assert.equal(Number((summary.worst!.score * 100).toFixed(2)) / 100, Math.min(...report.cards.map((c) => c.score)));
+});
+
+test("piped stdout is one compact summary: no clean routes, widths collapsed, a verdict", () => {
+  const { clean, routes, verdict } = parseSummary(run.stdout);
+  const res = results(run.outDir);
+  assert.deepEqual(clean, [], context(run));
+  assert.deepEqual([...routes.keys()], CONTROLS.map(toPath));
+  const worst = res.summary.worst!;
+  assert.deepEqual(verdict, {
+    differ: CONTROLS.length,
+    routes: CONTROLS.length,
+    shots: CONTROLS.length * WIDTHS.length,
+    total: CONTROLS.length * WIDTHS.length,
+    errors: 0,
+    worst: { score: Number((worst.score * 100).toFixed(2)) / 100, route: worst.url, width: worst.width },
+    below: null,
+    results: run.file("results.json"),
+  });
+  // Both widths agree on everything but the score, so they share one row.
+  const nav = routes.get("/nav")!;
+  assert.deepEqual(nav.rows.map((r) => r.widths), [WIDTHS], context(run));
+  assert.match(nav.rows[0]!.text, /^[\d.]+%–[\d.]+%  h-24  band -24@y~\d+  aligned 100\.00%  .*text -"Pricing"$/);
+  assert.doesNotMatch(run.stdout, /\[\d+\/\d+\]|^Report:/m, "no per-shot lines when piped");
+});
+
+test("--progress prints a line per shot with the score results.json has", async () => {
+  const r = await runCli([
+    ...renderdiffArgs({ left: site.left, right: site.right, routes: ["/nav"], widths: [1440] }),
+    "--progress",
+  ]);
+  assert.equal(r.code, 0, context(r));
+  const [p] = parseProgress(r.stdout);
+  const j = result(results(r.outDir), "/nav", 1440);
+  assert.equal(p!.score, Number((j.score * 100).toFixed(2)) / 100, context(r));
+  assert.deepEqual([p!.heightDelta, p!.bands.map((b) => b.delta), p!.removed], [-24, [-24], 1]);
+  assert.match(r.stdout, /^Results: .*results\.json$/m);
+});
+
+const tokens = (w: number, h: number) => Math.ceil(w / 28) * Math.ceil(h / 28);
+
+test("every crop fits Claude's image budget, at most three per comparison", async () => {
+  let seen = 0;
+  for (const r of results(run.outDir).results) {
+    if (r.status !== "compared") continue;
+    assert.ok(r.crops.length <= 3, `${r.url}@${r.width} has ${r.crops.length} crops`);
+    for (const [i, c] of r.crops.entries()) {
+      assert.equal(c.path, `${r.url.slice(1)}.${r.width}.c${i + 1}.png`);
+      const m = await sharp(run.file(c.path)).metadata();
+      assert.ok(Math.max(m.width!, m.height!) <= 1568, `${c.path} is ${m.width}×${m.height}`);
+      assert.ok(tokens(m.width!, m.height!) <= 1568, `${c.path} is ${tokens(m.width!, m.height!)} tokens`);
+      assert.ok(c.scale >= 0.75 && c.scale <= 1, `${c.path} at ${c.scale}`);
+      seen++;
+    }
+  }
+  assert.ok(seen >= CONTROLS.length * WIDTHS.length, context(run));
+});
+
+test("/nav @1440 crops the missing link, not the content it pushed up", async () => {
+  const r = result(results(run.outDir), "/nav", 1440);
+  assert.equal(r.crops.length, 1, context(run));
+  const [c] = r.crops;
+  assert.equal(c!.kind, "band");
+  assert.ok(Math.abs(c!.right.y - PRICING[1440]!) <= 8 && c!.right.h === 24, JSON.stringify(c));
+  assert.equal(c!.left.h, 0, "the left side lacks the rows: an insertion point");
+  assert.equal(c!.scale, 1);
+  // As wide as the link plus context, not the page.
+  assert.ok((await sharp(run.file(c!.path)).metadata()).width! <= 400);
+});
+
+test("/taller @1440 crops the extra band, left over right at native scale", () => {
+  const r = result(results(run.outDir), "/taller", 1440);
+  assert.equal(r.crops.length, 1, context(run));
+  const [c] = r.crops;
+  assert.deepEqual([c!.kind, c!.right.h, c!.left.h, c!.layout, c!.scale], ["band", 272, 0, "stacked", 1]);
+});
+
+for (const width of WIDTHS) {
+  test(`/color @${width} crops the one region, the same box on both sides`, () => {
+    const r = result(results(run.outDir), "/color", width);
+    assert.equal(r.crops.length, 1, context(run));
+    const [c] = r.crops;
+    const { pixels, ...box } = r.regions[0]!;
+    assert.deepEqual([c!.kind, c!.left, c!.right, c!.scale, c!.clipped], ["region", box, box, 1, false]);
   });
 }
 
@@ -186,9 +315,9 @@ test("the height badge is rendered on the taller and nav rows and nowhere else",
       `${c.route}@${c.width} height delta ${c.heightDelta}${context(run)}`,
     );
   }
-  // And on stdout, in the same places.
-  for (const r of parseProgress(run.stdout)) {
-    assert.equal(r.heightDelta !== 0, moved.includes(r.route));
+  // And in the compact stdout rows, in the same places.
+  for (const [route, { rows }] of parseSummary(run.stdout).routes) {
+    for (const r of rows) assert.equal(/  h[+-]\d+/.test(r.text), moved.includes(route), r.text);
   }
 });
 

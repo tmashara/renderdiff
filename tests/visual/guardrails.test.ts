@@ -27,7 +27,7 @@ import {
   tempDir,
   type CliResult,
 } from "../helpers/cli.ts";
-import { card, parseProgress, parseReport } from "../helpers/parse.ts";
+import { card, parseReport, parseSummary, result, results } from "../helpers/parse.ts";
 import { startFixtureSite, type FixtureSite } from "../helpers/server.ts";
 import { EXPECT_HEIGHT } from "../fixtures/pages/tall/page.ts";
 
@@ -93,6 +93,15 @@ describe("the render gate", () => {
     assert.match(report.errors[0]!.message, /text=\d+ chars/);
   });
 
+  test("results.json lists the refused route as an error, beside the compared one", () => {
+    const res = results(run.outDir);
+    const blank = res.results.find((r) => r.url === "/blank");
+    assert.equal(blank?.status, "error", context(run));
+    assert.match(blank.status === "error" ? blank.error : "", /page did not render/);
+    assert.equal(res.results.find((r) => r.url === "/animated")?.status, "compared");
+    assert.deepEqual([res.summary.compared, res.summary.errors], [1, 1]);
+  });
+
   test("an unmeasured route is neither a pass nor a fail, but still exits 1", () => {
     assert.equal(run.code, 1, `an errored route must exit 1${context(run)}`);
     const report = parseReport(run.report()!);
@@ -150,7 +159,12 @@ describe("the stability check", () => {
     assert.equal(c.diffPixels, 0, `unstable pixels counted against the score${context(run)}`);
     // Exactly the 928x160 box: every pixel of it changes between any two shots, nothing else does.
     assert.equal(c.unstablePixels, 928 * 160, context(run));
-    assert.equal(parseProgress(run.stdout)[0]!.unstablePixels, 928 * 160, context(run));
+    assert.equal(result(results(run.outDir), "/ticker", 1440).unstablePixels, 928 * 160, context(run));
+    // Unmeasured is not clean: the summary gives it a row that names the unstable pixels.
+    const { clean, routes, verdict } = parseSummary(run.stdout);
+    assert.deepEqual(clean, [], context(run));
+    assert.match(routes.get("/ticker")!.rows[0]!.text, /unstable 148,480px/);
+    assert.equal(verdict.differ, 0, "no pixel differs");
   });
 
   test("a page that is mostly unstable is an error, not a score", async () => {
@@ -354,25 +368,77 @@ describe("network blocking", () => {
   });
 });
 
+describe("crops", () => {
+  test("a change too tall for one legible crop is clipped to its top, not shrunk or split", async () => {
+    const run = await capture(["/tall-region"]);
+    assert.equal(run.code, 0, context(run));
+    const r = result(results(run.outDir), "/tall-region", 1440);
+    assert.equal(r.crops.length, 1, context(run));
+    const [c] = r.crops;
+    assert.equal(c!.clipped, true);
+    assert.ok(c!.scale >= 0.75, `scaled to ${c!.scale}`);
+    const m = await sharp(run.file(c!.path)).metadata();
+    assert.ok(Math.ceil(m.width! / 28) * Math.ceil(m.height! / 28) <= 1568, `${m.width}×${m.height}`);
+  });
+});
+
+describe("band pairing", () => {
+  test("a block removed at the top and another added at the bottom stay two bands", async () => {
+    const run = await capture(["/reorder"]);
+    const r = result(results(run.outDir), "/reorder", 1440);
+    assert.deepEqual(r.bands?.map((b) => [b.side, b.h]), [["left", 96], ["right", 96]], context(run));
+    assert.deepEqual(r.crops.map((c) => c.kind), ["band", "band"]);
+  });
+
+  test("a stripe recoloured inside identical rows is one region, not a band pair", async () => {
+    const run = await capture(["/stripe"]);
+    const r = result(results(run.outDir), "/stripe", 1440);
+    assert.deepEqual(r.bands, [], context(run));
+    assert.equal(r.regions.length, 1);
+    assert.deepEqual(r.crops.map((c) => c.kind), ["region"]);
+  });
+});
+
 describe("the run summary", () => {
   test("errors are listed separately from scores on stdout", async () => {
     const run = await capture(["/blank", "/animated"]);
-    const rows = parseProgress(run.stdout);
-    assert.equal(rows.find((r) => r.route === "/blank")!.score, null);
-    assert.equal(rows.find((r) => r.route === "/animated")!.score, 1);
-    assert.match(run.stdout, /^Errors \(1\):$/m);
-    assert.match(run.stdout, /\/blank@1440: page did not render/);
+    const { clean, routes, verdict } = parseSummary(run.stdout);
+    assert.deepEqual(clean, ["/animated"], context(run));
+    const blank = routes.get("/blank")!;
+    assert.deepEqual(blank.rows, []);
+    assert.equal(blank.errors.length, 1);
+    // In full: the reason is what tells a blank page from a broken asset pipeline.
+    assert.match(blank.errors[0]!.message, /^page did not render on either side \(left: .+; right: .+\) at \/blank$/);
+    assert.deepEqual([verdict.differ, verdict.routes, verdict.errors], [0, 2, 1]);
+  });
+
+  test("a route that only errored doesn't count as differing, and one message covers its widths", async () => {
+    const run = await capture(["/blank"], { widths: [1440, 375] });
+    const { routes, verdict } = parseSummary(run.stdout);
+    assert.deepEqual([verdict.differ, verdict.routes, verdict.shots, verdict.total, verdict.errors], [0, 1, 0, 2, 2], context(run));
+    const errors = routes.get("/blank")!.errors;
+    assert.equal(errors.length, 1, context(run));
+    assert.deepEqual(errors[0]!.widths, [1440, 375]);
+  });
+
+  test("a threshold failure is on the verdict line even when another route errored", async () => {
+    const run = await runCli(
+      renderdiffArgs({ left: site.left, right: site.right, routes: ["/color", "/blank"], widths: [1440], threshold: 0.99 }),
+    );
+    assert.equal(run.code, 1, context(run));
+    assert.deepEqual(parseSummary(run.stdout).verdict.below, { count: 1, threshold: 0.99 }, context(run));
+    assert.match(run.stderr, /1 route\(s\) below 99\.00%/);
   });
 });
 
 describe("the output directory", () => {
-  const into = (outDir: string) =>
+  const into = (outDir: string, routes = ["/animated"]) =>
     runCli(
       [
         ...renderdiffArgs({
           left: site.left,
           right: site.right,
-          routes: ["/animated"],
+          routes,
           widths: [1440],
         }),
         "--out",
@@ -398,6 +464,16 @@ describe("the output directory", () => {
     const second = await into(dir);
     assert.equal(second.code, 0, context(second));
     assert.ok(!fs.existsSync(path.join(dir, "stale.375.diff.png")), "the old run was not wiped");
+  });
+
+  test("a previous run with region crops and results.json is wiped and reused", async () => {
+    const dir = path.join(tempDir(), "out");
+    const first = await into(dir, ["/color"]);
+    assert.equal(first.code, 0, context(first));
+    assert.ok(fs.existsSync(path.join(dir, "color.1440.c1.png")), context(first));
+    assert.ok(fs.existsSync(path.join(dir, "results.json")));
+    const second = await into(dir, ["/color"]);
+    assert.equal(second.code, 0, context(second));
   });
 
   test("an interrupted run's directory, with images but no report, is reused", async () => {

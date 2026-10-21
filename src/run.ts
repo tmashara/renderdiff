@@ -3,12 +3,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { chromium, errors, type Page } from "playwright";
 import { cancelUnstable, capture, prepare, type Shot } from "./capture.ts";
-import { compare } from "./compare.ts";
-import { CONTEXT_OPTIONS, type ResolvedConfig, type Route } from "./config.ts";
+import { compare, crops, type Band } from "./compare.ts";
+import { CONTEXT_OPTIONS, version, type ResolvedConfig, type Route } from "./config.ts";
 import { fmtBand, fmtRegion, pct, signed } from "./format.ts";
 import {
   stats,
   writeReport,
+  writeResults,
   type ComparedResult,
   type ErrorResult,
   type RouteResult,
@@ -26,6 +27,8 @@ interface RunOpts {
   routes: Route[];
   cfg: ResolvedConfig;
   open: boolean;
+  /** A line per shot as it lands; otherwise one compact summary at the end. */
+  progress: boolean;
 }
 
 const slug = (url: string) =>
@@ -54,14 +57,15 @@ function slugs(routes: Route[]): Map<Route, string> {
 /** Only a directory holding nothing but files renderdiff writes is safe to wipe. */
 const ours = (f: string) =>
   f === "report.html" ||
-  /^[a-z0-9_-]+\.[\d.]+\.(left|right|diff)\.png$/.test(f);
+  f === "results.json" ||
+  /^[a-z0-9_-]+\.[\d.]+\.(left|right|diff|c\d+)\.png$/.test(f);
 
 function wipeable(dir: string): boolean {
   if (!fs.existsSync(dir)) return true;
   return fs.statSync(dir).isDirectory() && fs.readdirSync(dir).every(ours);
 }
 
-export async function run({ routes, cfg, open }: RunOpts): Promise<number> {
+export async function run({ routes, cfg, open, progress }: RunOpts): Promise<number> {
   if (!wipeable(cfg.outDir)) {
     console.error(
       `✗ output directory ${cfg.outDir} holds files renderdiff didn't write — ` +
@@ -117,7 +121,7 @@ export async function run({ routes, cfg, open }: RunOpts): Promise<number> {
         }
         const unstablePixels = await cancelUnstable(leftShot, rightShot);
 
-        const { diffPng, ...metrics } = await compare(leftShot, rightShot);
+        const { diffPng, spots, ...metrics } = await compare(leftShot, rightShot);
         if (unstablePixels > MAX_UNSTABLE_SHARE * metrics.totalPixels) {
           throw new Error(
             `page did not settle: ${unstablePixels}px unstable at ${route}`,
@@ -133,10 +137,13 @@ export async function run({ routes, cfg, open }: RunOpts): Promise<number> {
         };
         const write = (name: string, buf: Buffer) =>
           fs.promises.writeFile(path.join(cfg.outDir, name), buf);
+        const made = await crops(leftShot.png, rightShot.png, spots);
+        const cropped = made.map(({ png, ...c }, i) => ({ path: `${base}.c${i + 1}.png`, ...c }));
         await Promise.all([
           write(images.left, leftShot.png),
           write(images.right, rightShot.png),
           write(images.diff, diffPng),
+          ...made.map((c, i) => write(cropped[i]!.path, c.png)),
         ]);
 
         results.push({
@@ -146,6 +153,7 @@ export async function run({ routes, cfg, open }: RunOpts): Promise<number> {
           ...metrics,
           unstablePixels,
           images,
+          crops: cropped,
         });
         const { regions, bands, alignedScore, text } = metrics;
         const details = [
@@ -159,8 +167,10 @@ export async function run({ routes, cfg, open }: RunOpts): Promise<number> {
             ? `text: ${text.added.length} added, ${text.removed.length} removed`
             : "",
         ].filter(Boolean);
+        ++done;
+        if (!progress) continue;
         console.log(
-          `  [${++done}/${jobs.length}] ${pct(metrics.score)}  ${label}` +
+          `  [${done}/${jobs.length}] ${pct(metrics.score)}  ${label}` +
             (metrics.heightDelta
               ? `  (height ${signed(metrics.heightDelta)}px)`
               : "") +
@@ -176,51 +186,59 @@ export async function run({ routes, cfg, open }: RunOpts): Promise<number> {
           status: "error",
           error: e instanceof Error ? e.message : String(e),
         });
-        console.log(`  [${++done}/${jobs.length}] ERROR  ${label}`);
+        ++done;
+        if (progress) console.log(`  [${done}/${jobs.length}] ERROR  ${label}`);
       }
     }
     await leftCtx.close();
     await rightCtx.close();
   };
 
-  console.log(
-    `Capturing ${jobs.length} pair(s) with ${cfg.concurrency} worker(s)...\n`,
-  );
+  if (progress) {
+    console.log(
+      `Capturing ${jobs.length} pair(s) with ${cfg.concurrency} worker(s)...\n`,
+    );
+  }
   await Promise.all(Array.from({ length: cfg.concurrency }, worker));
   await browser.close();
 
-  const reportPath = await writeReport(
-    results,
-    {
-      left: cfg.left,
-      right: cfg.right,
-      generatedAt: new Date().toISOString(),
-      clock: new Date(now).toISOString(),
-    },
-    cfg,
-  );
+  // Workers finish out of order; job order keeps results.json stable across runs.
+  const order = (r: RouteResult) =>
+    routes.indexOf(r.url) * cfg.widths.length + cfg.widths.indexOf(r.width);
+  results.sort((a, b) => order(a) - order(b));
 
-  summarize(results, reportPath);
+  const meta = {
+    tool: "renderdiff" as const,
+    version: version(),
+    generatedAt: new Date().toISOString(),
+    left: cfg.left,
+    right: cfg.right,
+    widths: cfg.widths,
+    threshold: cfg.threshold,
+    clock: new Date(now).toISOString(),
+    blockUrlPatterns: cfg.blockUrlPatterns,
+    hideSelectors: cfg.hideSelectors,
+    masks: cfg.masks.map(({ urlPath, reason }) => ({ urlPath, reason })),
+  };
+  const reportPath = await writeReport(results, meta, cfg);
+  const resultsPath = writeResults(results, meta, cfg.outDir);
+
+  if (progress) summarize(results, reportPath, resultsPath);
+  else console.log(compact(results, routes, resultsPath, cfg.threshold));
 
   if (open) {
     const opener = process.platform === "darwin" ? "open" : "xdg-open";
     spawn(opener, [reportPath], { detached: true, stdio: "ignore" }).unref();
   }
 
-  const errors = results.filter((r) => r.status === "error");
-  if (errors.length) return 1;
-
-  if (cfg.threshold !== null) {
-    const below = results.filter(
-      (r) => r.status === "compared" && r.score < cfg.threshold!,
-    );
-    if (below.length) {
-      console.error(`\n✗ ${below.length} route(s) below ${pct(cfg.threshold)}.`);
-      return 1;
-    }
+  // Reported before the error exit, so an errored route can't hide a threshold failure.
+  const below = results.filter(
+    (r) => r.status === "compared" && cfg.threshold !== null && r.score < cfg.threshold,
+  );
+  if (below.length) {
+    console.error(`\n✗ ${below.length} route(s) below ${pct(cfg.threshold!)}.`);
   }
-
-  return 0;
+  return below.length || results.some((r) => r.status === "error") ? 1 : 0;
 }
 
 /** A missing browser binary is the likeliest first-run failure — name the fix. */
@@ -259,7 +277,7 @@ async function shoot(
   }
 }
 
-function summarize(results: RouteResult[], reportPath: string) {
+function summarize(results: RouteResult[], reportPath: string, resultsPath: string) {
   const compared = results.filter(
     (r): r is ComparedResult => r.status === "compared",
   );
@@ -284,4 +302,95 @@ function summarize(results: RouteResult[], reportPath: string) {
   }
 
   console.log(`\nReport: ${reportPath}`);
+  console.log(`Results: ${resultsPath}`);
+}
+
+/** At most this many text-diff lines per compact row. */
+const TEXT_LINES = 3;
+
+/**
+ * The non-TTY summary, sized for an agent's context: clean routes on one line, then each
+ * differing route with its widths collapsed where everything but the score agrees, and a
+ * one-line verdict that names results.json.
+ */
+export function compact(
+  results: RouteResult[],
+  routes: Route[],
+  resultsPath: string,
+  threshold: number | null,
+): string {
+  const out: string[] = [];
+  const clean: Route[] = [];
+  let differ = 0;
+  for (const route of routes) {
+    const rows = results.filter((r) => r.url === route);
+    const ok = rows.filter((r): r is ComparedResult => r.status === "compared");
+    // Unstable pixels went unmeasured, so a shot with any is not clean, only unchanged.
+    const same = ok.filter((r) => r.diffPixels === 0 && r.unstablePixels === 0);
+    const changed = ok.filter((r) => !same.includes(r));
+    if (same.length === rows.length) {
+      clean.push(route);
+      continue;
+    }
+    if (changed.some((r) => r.diffPixels > 0)) differ++;
+    out.push(route + (same.length ? `  clean @${same.map((r) => r.width).join(",")}` : ""));
+    const groups = new Map<string, ComparedResult[]>();
+    for (const r of changed) {
+      const key = JSON.stringify([
+        r.heightDelta,
+        r.widthDelta,
+        r.bands?.map((b) => [b.side, b.h]) ?? null,
+        r.alignedScore === null ? null : pct(r.alignedScore),
+        r.text,
+      ]);
+      groups.set(key, [...(groups.get(key) ?? []), r]);
+    }
+    for (const g of groups.values()) out.push(`  @${g.map((r) => r.width).join(",")}  ${row(g)}`);
+    const failed = new Map<string, number[]>();
+    for (const r of rows) if (r.status === "error") failed.set(r.error, [...(failed.get(r.error) ?? []), r.width]);
+    for (const [error, widths] of failed) out.push(`  @${widths.join(",")}  ERROR ${error}`);
+  }
+  if (clean.length) out.unshift(`clean: ${clean.join(" ")}`);
+  const compared = results.filter((r): r is ComparedResult => r.status === "compared");
+  const shots = compared.filter((r) => r.diffPixels > 0).length;
+  const errors = results.length - compared.length;
+  const worst = compared.length ? stats(compared).worst : null;
+  out.push(
+    `renderdiff: ${differ} of ${routes.length} routes differ (${shots} of ${results.length} shots), ` +
+      `${errors} error${errors === 1 ? "" : "s"}` +
+      (worst ? `, worst ${pct(worst.score)} ${worst.url}@${worst.width}` : "") +
+      (threshold === null ? "" : `, ${compared.filter((r) => r.score < threshold).length} below ${pct(threshold)}`) +
+      ` — ${resultsPath}`,
+  );
+  return out.join("\n");
+}
+
+/** One compact row for comparisons that agree on everything but score, regions and unstable px. */
+function row(g: ComparedResult[]): string {
+  const [r] = g as [ComparedResult];
+  const span = (ns: number[], f: (n: number) => string) => {
+    const [lo, hi] = [Math.min(...ns), Math.max(...ns)];
+    return lo === hi ? f(lo) : `${f(lo)}–${f(hi)}`;
+  };
+  const regions = g.map((x) => x.regions.length);
+  const unstable = Math.max(...g.map((x) => x.unstablePixels));
+  // Band y varies with width; a collapsed row shows the first one's, marked approximate.
+  const y = (b: Band) => `@y${g.length > 1 ? "~" : ""}${b.y}`;
+  const text = [...r.text.added.map((t) => `+"${t}"`), ...r.text.removed.map((t) => `-"${t}"`)];
+  return [
+    span(g.map((x) => x.score), pct),
+    r.heightDelta ? `h${signed(r.heightDelta)}` : "",
+    r.widthDelta ? `w${signed(r.widthDelta)}` : "",
+    r.bands === null ? "unaligned" : "",
+    ...(r.bands ?? []).map((b) => `band ${b.side === "left" ? "+" : "-"}${b.h}${y(b)}`),
+    r.alignedScore !== null ? `aligned ${pct(r.alignedScore)}` : "",
+    Math.max(...regions) ? `${span(regions, String)} reg` : "",
+    unstable ? `unstable ${unstable.toLocaleString("en-US")}px` : "",
+    text.length
+      ? `text ${text.slice(0, TEXT_LINES).join(" ")}` +
+        (text.length > TEXT_LINES ? ` (+${text.length - TEXT_LINES} more)` : "")
+      : "",
+  ]
+    .filter(Boolean)
+    .join("  ");
 }

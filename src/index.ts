@@ -25,7 +25,12 @@ export {
 
 export {
   type ComparedResult,
+  type CropResult,
   type ErrorResult,
+  type Results,
   type RouteResult,
   type RunMeta,
+  type Summary,
 } from "./report.ts";
+
+export { type Band, type Box, type Region, type TextDiff } from "./compare.ts";

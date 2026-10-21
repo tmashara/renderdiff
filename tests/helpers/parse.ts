@@ -1,16 +1,93 @@
 /**
  * The only module that knows renderdiff's output formats.
  *
- * A black-box suite has to read results back out of the two things the tool produces: the
- * progress lines on stdout and `report.html`. That coupling is real, so it lives in exactly
- * one file — if `run.ts`'s log line or `report.ts`'s markup changes, this is the only place
- * that needs fixing.
+ * A black-box suite has to read results back out of what the tool produces: the compact
+ * summary on stdout (what a pipe gets), the `--progress` lines, `report.html` and
+ * `results.json`. That coupling is real, so it lives in
+ * exactly one file — if `run.ts`'s log line or `report.ts`'s markup changes, this is the only
+ * place that needs fixing.
  *
- * Scores come from stdout (one line per comparison, plus indented detail lines for regions,
- * bands and text-diff counts). The report is parsed only for claims that are specific to
+ * Metrics come from `results.json`. stdout is parsed only to pin its own formats: the compact
+ * summary and, with `--progress`, one line per comparison. The report is parsed only for claims that are specific to
  * the report: pixel counts, image filenames, the listed regions and text lines, the Errors
- * section, and the "What was neutralized" disclosure.
+ * section, and the "What was neutralized" disclosure. `results.json` is read as-is, typed by
+ * the contract `src/index.ts` exports (a type-only import, erased at runtime).
  */
+import fs from "node:fs";
+import path from "node:path";
+import type { ComparedResult, Results } from "../../src/index.ts";
+
+/** `results.json` from a run's out dir. */
+export function results(outDir: string): Results {
+  return JSON.parse(fs.readFileSync(path.join(outDir, "results.json"), "utf8"));
+}
+
+/** The compared entry for one comparison in `results.json`. Throws with context when absent. */
+export function result(res: Results, route: string, width: number): ComparedResult {
+  const found = res.results.find((r) => r.url === route && r.width === width);
+  if (found?.status !== "compared") {
+    const seen = res.results.map((r) => `${r.url}@${r.width}:${r.status}`).join(", ") || "(none)";
+    throw new Error(`no compared result for ${route}@${width}; saw: ${seen}`);
+  }
+  return found;
+}
+
+export interface Summary {
+  /** Routes on the `clean:` line. */
+  clean: string[];
+  /** Each differing route: widths that were clean, then one row per collapsed width group. */
+  routes: Map<string, { clean: number[]; rows: { widths: number[]; text: string }[]; errors: { widths: number[]; message: string }[] }>;
+  verdict: {
+    differ: number;
+    routes: number;
+    shots: number;
+    total: number;
+    errors: number;
+    /** Null when nothing was compared. */
+    worst: { score: number; route: string; width: number } | null;
+    /** Null unless a threshold was set. */
+    below: { count: number; threshold: number } | null;
+    results: string;
+  };
+}
+
+const VERDICT =
+  /^renderdiff: (\d+) of (\d+) routes differ \((\d+) of (\d+) shots\), (\d+) errors?(?:, worst ([\d.]+)% (\S+)@(\d+))?(?:, (\d+) below ([\d.]+)%)? — (.+)$/;
+
+/** The compact summary printed when stdout is not a TTY. Throws when there is no verdict line. */
+export function parseSummary(stdout: string): Summary {
+  const lines = stdout.split("\n");
+  const v = lines.map((l) => VERDICT.exec(l)).find(Boolean);
+  if (!v) throw new Error(`no verdict line in:\n${stdout}`);
+  const clean = /^clean: (.*)$/m.exec(stdout)?.[1]!.split(" ") ?? [];
+  const routes: Summary["routes"] = new Map();
+  let at: ReturnType<Summary["routes"]["get"]>;
+  for (const line of lines) {
+    let m;
+    if ((m = /^(\/\S*)(?:  clean @([\d,]+))?$/.exec(line))) {
+      at = { clean: m[2] ? m[2].split(",").map(Number) : [], rows: [], errors: [] };
+      routes.set(m[1]!, at);
+    } else if (at && (m = /^  @([\d,]+)  ERROR (.*)$/.exec(line))) {
+      at.errors.push({ widths: m[1]!.split(",").map(Number), message: m[2]! });
+    } else if (at && (m = /^  @([\d,]+)  (.*)$/.exec(line))) {
+      at.rows.push({ widths: m[1]!.split(",").map(Number), text: m[2]! });
+    }
+  }
+  return {
+    clean,
+    routes,
+    verdict: {
+      differ: Number(v[1]),
+      routes: Number(v[2]),
+      shots: Number(v[3]),
+      total: Number(v[4]),
+      errors: Number(v[5]),
+      worst: v[6] ? { score: Number(v[6]) / 100, route: v[7]!, width: Number(v[8]) } : null,
+      below: v[9] ? { count: Number(v[9]), threshold: Number(v[10]) / 100 } : null,
+      results: v[11]!,
+    },
+  };
+}
 
 export interface ProgressRow {
   route: string;
@@ -121,6 +198,8 @@ export interface ReportCard {
   added: string[];
   removed: string[];
   images: string[];
+  /** Region crop links in the findings block. */
+  crops: string[];
 }
 
 export interface ReportErrorRow {
@@ -191,6 +270,7 @@ export function parseReport(html: string): Report {
       added: [...card.matchAll(/<li class="add">\+ ([^<]*)<\/li>/g)].map((m) => unesc(m[1]!)),
       removed: [...card.matchAll(/<li class="del">- ([^<]*)<\/li>/g)].map((m) => unesc(m[1]!)),
       images: [...card.matchAll(/<a href="([^"]+)"/g)].map((m) => m[1]!),
+      crops: [...card.matchAll(/<a class="crop" href="([^"]+)"/g)].map((m) => m[1]!),
     });
   }
 

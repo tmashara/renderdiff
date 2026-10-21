@@ -12,7 +12,7 @@
  * there is no tolerance to calibrate and nothing to drift — a single differing pixel is a real
  * finding, either in the fixture or in the comparison.
  *
- * One browser launch for the whole file: a single run covers every route at both widths, and
+ * One browser launch for the whole file: a single run covers every route at every width, and
  * the tests below read its results.
  */
 import assert from "node:assert/strict";
@@ -27,11 +27,14 @@ import {
   renderdiffArgs,
   type CliResult,
 } from "../helpers/cli.ts";
-import { card, parseProgress, parseReport, row, type Report } from "../helpers/parse.ts";
+import { card, parseReport, parseSummary, result, results, type Report } from "../helpers/parse.ts";
 import { startFixtureSite, type FixtureSite } from "../helpers/server.ts";
 
-/** One desktop, one mobile. Both sides switch layout at 480px, so 375 is a real second case. */
-const WIDTHS = [1440, 375];
+/**
+ * Every default width, plus 600: three 288px cards stop fitting below 960 and both sides switch
+ * layout at 480, and a breakpoint hard-coded for 704 and 896 would still break at 600.
+ */
+const WIDTHS = [1440, 1152, 896, 704, 600, 375];
 
 let site: FixtureSite;
 let run: CliResult;
@@ -63,13 +66,17 @@ after(async () => {
 
 test("the run succeeds and measures every pair", () => {
   assert.equal(run.code, 0, `expected a clean exit${context(run)}`);
-  const rows = parseProgress(run.stdout);
+  const rows = results(run.outDir).results;
   assert.equal(rows.length, EQUIVALENCE.length * WIDTHS.length, context(run));
-  assert.equal(
-    rows.filter((r) => r.score === null).length,
-    0,
-    `some routes errored${context(run)}`,
-  );
+  assert.deepEqual(rows.filter((r) => r.status === "error"), [], `some routes errored${context(run)}`);
+});
+
+test("stdout puts every route on the clean line and nothing else", () => {
+  const { clean, routes, verdict } = parseSummary(run.stdout);
+  assert.deepEqual(clean, EQUIVALENCE.map(toPath), context(run));
+  assert.equal(routes.size, 0);
+  assert.equal(verdict.differ, 0);
+  assert.equal(verdict.shots, 0);
 });
 
 test("the report contains no error section", () => {
@@ -101,19 +108,18 @@ for (const dir of EQUIVALENCE) {
       assert.equal(c.widthDelta, 0, `${dir} @${width} differs in width${context(run)}`);
     });
 
-    test(`${dir} @${width} reports the same score on stdout as in the report`, () => {
-      // The console summary and the HTML report are generated separately; a disagreement
+    test(`${dir} @${width} reports the same score in results.json as in the report`, () => {
+      // results.json and the HTML report are generated separately; a disagreement
       // between them would mean one of the two is lying.
-      assert.equal(row(parseProgress(run.stdout), route, width).score, card(report, route, width).score);
+      assert.equal(result(results(run.outDir), route, width).score, card(report, route, width).score);
     });
 
     test(`${dir} @${width} has no regions, no bands and no text diff`, () => {
-      const r = row(parseProgress(run.stdout), route, width);
-      assert.equal(r.regions, 0, context(run));
+      const r = result(results(run.outDir), route, width);
+      assert.deepEqual(r.regions, [], context(run));
       assert.deepEqual(r.bands, []);
       assert.equal(r.alignedScore, null);
-      assert.equal(r.unaligned, false);
-      assert.equal(r.added + r.removed, 0, `same text on both sides${context(run)}`);
+      assert.deepEqual(r.text, { added: [], removed: [] }, `same text on both sides${context(run)}`);
       const c = card(report, route, width);
       assert.deepEqual([c.regions, c.added, c.removed], [[], [], []]);
     });

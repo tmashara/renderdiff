@@ -6,12 +6,11 @@
 <link rel="stylesheet" href="/shared/base.css">
 <style>
 /* LEFT: the pre-flexbox idiom — floats, explicit margins, and a clearfix.
-   Margins are trimmed on the last column and the last row so the outer edges match a
-   `gap`, which only applies between items. */
+   Every card carries a left and bottom gap and the container pulls them back with negative
+   margins, so the outer edges match a `gap` however many cards fit on a row. */
 @media (min-width: 481px) {
-  .cols > .card { float: left; margin: 0 var(--gap) var(--gap) 0; }
-  .cols > .card:nth-child(3n) { margin-right: 0; }
-  .cols > .card:nth-child(n + 4) { margin-bottom: 0; }
+  .cols { margin: 0 0 calc(-1 * var(--gap)) calc(-1 * var(--gap)); }
+  .cols > .card { float: left; margin: 0 0 var(--gap) var(--gap); }
   .cols::after { content: ""; display: block; clear: both; }
 }
 @media (max-width: 480px) {

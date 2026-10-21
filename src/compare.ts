@@ -1,5 +1,5 @@
 import pixelmatch from "pixelmatch";
-import sharp from "sharp";
+import sharp, { type OverlayOptions } from "sharp";
 import type { Shot } from "./capture.ts";
 import { MASK_COLOR } from "./config.ts";
 
@@ -15,7 +15,10 @@ import { MASK_COLOR } from "./config.ts";
  * the score from being noise.
  */
 
-/** A connected patch of differing pixels, in page px, snapped outward to the 16px grid. */
+/**
+ * A connected patch of differing pixels, snapped outward to the 16px grid, in left page px.
+ * With bands it comes from the realigned rows, so content a band merely pushed down isn't one.
+ */
 export interface Region {
   x: number;
   y: number;
@@ -54,6 +57,22 @@ export interface Diff {
   alignedScore: number | null;
   text: TextDiff;
   diffPng: Buffer;
+  /** What to crop: bands, largest first, then regions. */
+  spots: Spot[];
+}
+
+export interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** A change located on each side, in that side's page px. `h` 0 is where the other side's band would go. */
+export interface Spot {
+  kind: "band" | "region";
+  left: Box;
+  right: Box;
 }
 
 const PIXELMATCH = { threshold: 0.1, includeAA: false, alpha: 0.25 };
@@ -117,6 +136,17 @@ export async function compare(left: Shot, right: Shot): Promise<Diff> {
     .png()
     .toBuffer();
 
+  const cw = Math.min(lw, rw);
+  const aligned = diffPixels
+    ? align(l, r, w, cw, lh, rh)
+    : { bands: [], alignedScore: null, regions: [], spots: [] };
+  const found = aligned.regions ?? regions(out, w, cw, Math.min(lh, rh));
+  const spots = aligned.regions
+    ? aligned.spots
+    : [
+        ...aligned.spots,
+        ...found.map(({ pixels, ...box }): Spot => ({ kind: "region", left: box, right: box })),
+      ];
   // Padding is magenta against real content, so a height difference lands in
   // `diffPixels` and drags the score down. Intended: a page 400px shorter than the
   // one it's compared against has not reached parity. `heightDelta` names the cause.
@@ -126,10 +156,12 @@ export async function compare(left: Shot, right: Shot): Promise<Diff> {
     totalPixels: w * h,
     heightDelta: lh - rh,
     widthDelta: lw - rw,
-    regions: diffPixels ? regions(out, w, Math.min(lw, rw), Math.min(lh, rh)) : [],
-    ...(diffPixels ? align(l, r, w, lh, rh) : { bands: [], alignedScore: null }),
+    regions: found,
+    bands: aligned.bands,
+    alignedScore: aligned.alignedScore,
     text,
     diffPng,
+    spots,
   };
 }
 
@@ -320,13 +352,16 @@ function compact(hash: Uint32Array, changed: Uint8Array) {
 /**
  * Pair rows across the two shots by Myers over row hashes. Each gap between matched rows
  * pairs its rows top-down; whatever one side has left over is a band. Paired rows are
- * restacked and pixelmatched for the aligned score.
+ * restacked and pixelmatched for the aligned score and for regions, mapped back to each side.
+ * `regions` is null when there is nothing realigned to take them from.
  */
-function align(l: Buffer, r: Buffer, w: number, lh: number, rh: number) {
+function align(l: Buffer, r: Buffer, w: number, cw: number, lh: number, rh: number) {
   const ha = rowHashes(l, w, lh),
     hb = rowHashes(r, w, rh);
   const matched = myers(ha, hb);
-  if (!matched) return { bands: lh === rh ? [] : null, alignedScore: null };
+  if (!matched) {
+    return { bands: lh === rh ? [] : null, alignedScore: null, regions: null, spots: [] };
+  }
   const ca = new Uint8Array(lh).fill(1),
     cb = new Uint8Array(rh).fill(1);
   for (const [i, j] of matched) ca[i] = cb[j] = 0;
@@ -336,8 +371,17 @@ function align(l: Buffer, r: Buffer, w: number, lh: number, rh: number) {
   const packed = pairUp(ca, cb);
   // Compacting each side alone can misalign their gaps and turn an in-place change into a band pair.
   const height = (p: typeof raw) => p.bands.reduce((t, b) => t + b.h, 0);
-  const { bands, rows } = height(packed) <= height(raw) ? packed : raw;
-  if (!bands.length || !rows.length) return { bands, alignedScore: null };
+  const { bands, at, rows } = inPlace(height(packed) <= height(raw) ? packed : raw, ha, hb);
+  // A band is rows on one side and a zero-height seam on the other, as wide as what's drawn in it.
+  const spots = bands
+    .map((b, i): Spot => {
+      const { x, w: bw } = inkX(b.side === "left" ? l : r, w, cw, b.y, b.y + b.h);
+      const here = { x, y: b.y, w: bw, h: b.h };
+      const seam = { x, y: at[i]!, w: bw, h: 0 };
+      return { kind: "band", left: b.side === "left" ? here : seam, right: b.side === "right" ? here : seam };
+    })
+    .sort((a, b) => b.left.h + b.right.h - (a.left.h + a.right.h));
+  if (!bands.length || !rows.length) return { bands, alignedScore: null, regions: null, spots };
   const stride = w * 4;
   const a = Buffer.alloc(rows.length * stride),
     b = Buffer.alloc(rows.length * stride);
@@ -355,9 +399,69 @@ function align(l: Buffer, r: Buffer, w: number, lh: number, rh: number) {
       masked++;
     }
   }
-  const diff = pixelmatch(a, b, undefined, w, rows.length, PIXELMATCH);
+  const out = Buffer.alloc(rows.length * stride);
+  const diff = pixelmatch(a, b, out, w, rows.length, PIXELMATCH);
   const measured = rows.length * w - masked;
-  return { bands, alignedScore: measured > 0 ? 1 - diff / measured : null };
+  const found = diff ? regions(out, w, cw, rows.length) : [];
+  const side = (g: Region, s: 0 | 1) => {
+    const y = rows[g.y]![s];
+    return { y, h: rows[g.y + g.h - 1]![s] + 1 - y };
+  };
+  for (const { pixels, ...g } of found) {
+    spots.push({ kind: "region", left: { ...g, ...side(g as Region, 0) }, right: { ...g, ...side(g as Region, 1) } });
+  }
+  return {
+    bands,
+    alignedScore: measured > 0 ? 1 - diff / measured : null,
+    regions: found.map((g) => ({ ...g, ...side(g, 0) })),
+    spots,
+  };
+}
+
+/**
+ * A recolour inside a run of identical rows comes out of Myers as a left band and a right band
+ * of the same height. When pairing the span straight leaves every row outside the two bands
+ * identical, that is one change in place: pair it row for row, so it reads as a region. A
+ * block removed at one place and another added elsewhere fails that test and stays two bands.
+ */
+function inPlace(p: ReturnType<typeof pairUp>, ha: Uint32Array, hb: Uint32Array) {
+  let { bands, at, rows } = p;
+  for (let i = 0; i + 1 < bands.length; i++) {
+    const [a, b] = [bands[i]!, bands[i + 1]!];
+    if (a.side === b.side || a.h !== b.h) continue;
+    const ls = a.side === "left" ? a.y : at[i]!,
+      rs = a.side === "right" ? a.y : at[i]!;
+    const le = b.side === "left" ? b.y + b.h : at[i + 1]!,
+      re = b.side === "right" ? b.y + b.h : at[i + 1]!;
+    if (le - ls !== re - rs) continue;
+    const span = Array.from({ length: le - ls }, (_, k): [number, number] => [ls + k, rs + k]);
+    const inBand = (side: Band["side"], y: number) =>
+      [a, b].some((n) => n.side === side && y >= n.y && y < n.y + n.h);
+    // Matched rows always hash alike, so test the straight pairing about to replace them.
+    if (!span.every(([ly, ry]) => inBand("left", ly) || inBand("right", ry) || ha[ly] === hb[ry])) continue;
+    rows = [...rows.filter(([ly]) => ly < ls), ...span, ...rows.filter(([ly]) => ly >= le)];
+    bands = bands.filter((_, j) => j !== i && j !== i + 1);
+    at = at.filter((_, j) => j !== i && j !== i + 1);
+    i--;
+  }
+  return { bands, at, rows };
+}
+
+/** Columns holding anything but each row's x=0 colour, over rows `y0..y1`; the full width if none. */
+function inkX(raw: Buffer, stride: number, w: number, y0: number, y1: number) {
+  const px = new Uint32Array(raw.buffer, raw.byteOffset, raw.length / 4);
+  let x0 = w,
+    x1 = -1;
+  for (let y = y0; y < y1; y++) {
+    const bg = px[y * stride]!;
+    for (let x = 0; x < w; x++) {
+      if (px[y * stride + x] !== bg) {
+        x0 = Math.min(x0, x);
+        x1 = Math.max(x1, x);
+      }
+    }
+  }
+  return x1 < 0 ? { x: 0, w } : { x: x0, w: x1 - x0 + 1 };
 }
 
 /** Pair each side's kept rows in order; each gap pairs top-down and its leftover is a band. */
@@ -367,17 +471,137 @@ function pairUp(ca: Uint8Array, cb: Uint8Array) {
   const ka = [...ca.keys()].filter((i) => !ca[i]),
     kb = [...cb.keys()].filter((j) => !cb[j]);
   const bands: Band[] = [];
+  /** Where each band sits on the other side. */
+  const at: number[] = [];
   const rows: [number, number][] = [];
   let x = 0,
     y = 0;
   for (const [px, py] of [...ka.map((i, n) => [i, kb[n]!] as const), [lh, rh] as const]) {
     const k = Math.min(px - x, py - y);
     for (let j = 0; j < k; j++) rows.push([x + j, y + j]);
-    if (px - x > k) bands.push({ side: "left", y: x + k, h: px - x - k });
-    if (py - y > k) bands.push({ side: "right", y: y + k, h: py - y - k });
+    if (px - x > k) bands.push({ side: "left", y: x + k, h: px - x - k }), at.push(py);
+    if (py - y > k) bands.push({ side: "right", y: y + k, h: py - y - k }), at.push(px);
     if (px < lh) rows.push([px, py]);
     x = px + 1;
     y = py + 1;
   }
-  return { bands, rows };
+  return { bands, at, rows };
+}
+
+const CROP_PAD = 48;
+const CROP_GAP = 8;
+/** Narrower than this, a crop loses the context that says where on the page it is. */
+const CROP_MIN_W = 320;
+/** Claude's image budget: past either limit, `Read` downscales the image. */
+const CROP_EDGE = 1568;
+const CROP_TOKENS = 1568;
+const TILE = 28;
+/** Below this, text stops being legible; clip the crop instead. */
+const MIN_SCALE = 0.75;
+const SEAM = 2;
+export const MAX_CROPS = 3;
+
+export interface Crop {
+  png: Buffer;
+  kind: Spot["kind"];
+  left: Box;
+  right: Box;
+  /** Left on top (`stacked`) or on the left (`side`), always. */
+  layout: "stacked" | "side";
+  scale: number;
+  /** Only the top rows (or left columns) of the change fit the budget at `MIN_SCALE`. */
+  clipped: boolean;
+}
+
+const tokens = (w: number, h: number) => Math.ceil(w / TILE) * Math.ceil(h / TILE);
+
+/** Largest scale ≤ 1 at which a `w`×`h` sheet fits the budget. */
+function fit(w: number, h: number): number {
+  let s = Math.min(1, CROP_EDGE / Math.max(w, h));
+  while (tokens(Math.floor(w * s), Math.floor(h * s)) > CROP_TOKENS) s -= 0.005;
+  return s;
+}
+
+/** The sheet size for two panels of `w` × `lh` / `rh`. */
+const sheet = (stacked: boolean, w: number, lh: number, rh: number) =>
+  stacked ? { w, h: lh + CROP_GAP + rh } : { w: 2 * w + CROP_GAP, h: Math.max(lh, rh) };
+const fits = (s: { w: number; h: number }) => fit(s.w, s.h) >= MIN_SCALE;
+
+/**
+ * Up to `MAX_CROPS` PNGs, one per spot in order: left and right at native scale (never below
+ * `MIN_SCALE`, clipped instead), each padded for context with a 1px red box around the change,
+ * or a 2px red seam where the other side's band would go. A full-page shot Read by an agent is
+ * downscaled past legibility; a crop isn't.
+ */
+export async function crops(left: Buffer, right: Buffer, spots: Spot[]): Promise<Crop[]> {
+  if (!spots.length) return [];
+  const [lm, rm] = await Promise.all([sharp(left).metadata(), sharp(right).metadata()]);
+  const cw = Math.min(lm.width!, rm.width!);
+  const heights = [lm.height!, rm.height!] as const;
+  return Promise.all(
+    spots.slice(0, MAX_CROPS).map(async (g): Promise<Crop> => {
+      const boxes = [g.left, g.right] as const;
+      const bx = Math.min(g.left.x, g.right.x);
+      const bw = Math.max(g.left.x + g.left.w, g.right.x + g.right.w) - bx;
+      const want = Math.min(cw, Math.max(CROP_MIN_W, bw + 2 * CROP_PAD));
+      let x0 = Math.max(0, Math.min(cw - want, Math.round(bx + bw / 2 - want / 2)));
+      let width = want;
+      const top = boxes.map((b, i) => Math.max(0, Math.min(b.y, heights[i]! - 1) - CROP_PAD));
+      const tall = boxes.map((b, i) => Math.min(heights[i]!, b.y + b.h + CROP_PAD) - top[i]! + (b.h ? 0 : SEAM));
+      const stacked = width >= Math.max(...tall);
+      let clipped = false;
+      // Too wide even at MIN_SCALE: keep the left columns, starting at the change.
+      const maxW = Math.floor((stacked ? CROP_EDGE : (CROP_EDGE - CROP_GAP) / 2) / MIN_SCALE);
+      if (width > maxW) {
+        x0 = Math.max(0, bx - CROP_PAD);
+        width = Math.min(maxW, cw - x0);
+        clipped = true;
+      }
+      // Too tall: keep the top rows, trimming the taller panel first.
+      while (!fits(sheet(stacked, width, tall[0]!, tall[1]!))) {
+        const i = tall[0]! >= tall[1]! ? 0 : 1;
+        tall[i] = Math.floor(tall[i]! * 0.95);
+        clipped = true;
+      }
+      const panels = await Promise.all(
+        [left, right].map((png, i) => panel(png, boxes[i]!, x0, top[i]!, width, tall[i]!)),
+      );
+      const { w: W, h: H } = sheet(stacked, width, tall[0]!, tall[1]!);
+      const scale = fit(W, H);
+      let png = await sharp({ create: { width: W, height: H, channels: 4, background: "#808080" } })
+        .composite([
+          { input: panels[0]!, left: 0, top: 0 },
+          { input: panels[1]!, ...(stacked ? { left: 0, top: tall[0]! + CROP_GAP } : { left: width + CROP_GAP, top: 0 }) },
+        ])
+        .png()
+        .toBuffer();
+      if (scale < 1) png = await sharp(png).resize(Math.floor(W * scale), Math.floor(H * scale)).png().toBuffer();
+      return { png, kind: g.kind, left: g.left, right: g.right, layout: stacked ? "stacked" : "side", scale: Math.round(scale * 100) / 100, clipped };
+    }),
+  );
+}
+
+/** One side's `width`×`height` panel from page row `top`: a box round the change, or a seam inserted at it. */
+async function panel(png: Buffer, b: Box, x0: number, top: number, width: number, height: number) {
+  const layers: OverlayOptions[] = [];
+  if (b.h === 0) {
+    // Rows above the seam, the seam, then rows from `b.y` down: nothing on the page is hidden.
+    const above = Math.min(height, b.y - top);
+    const below = Math.min(height - above - SEAM, (await sharp(png).metadata()).height! - b.y);
+    if (above > 0) layers.push({ input: await sharp(png).extract({ left: x0, top, width, height: above }).toBuffer(), left: 0, top: 0 });
+    if (above + SEAM <= height) {
+      layers.push({ input: { create: { width, height: SEAM, channels: 4, background: "#ff0000" } }, left: 0, top: above });
+    }
+    if (below > 0) layers.push({ input: await sharp(png).extract({ left: x0, top: b.y, width, height: below }).toBuffer(), left: 0, top: above + SEAM });
+  } else {
+    const h = Math.min(height, (await sharp(png).metadata()).height! - top);
+    layers.push({ input: await sharp(png).extract({ left: x0, top, width, height: h }).toBuffer(), left: 0, top: 0 });
+    // One pixel outside the change, so the outline covers none of it.
+    const [rx, ry] = [b.x - x0 - 1, b.y - top - 1];
+    const svg =
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
+      `<rect x="${rx + 0.5}" y="${ry + 0.5}" width="${b.w + 1}" height="${b.h + 1}" fill="none" stroke="#ff0000" stroke-width="1" shape-rendering="crispEdges"/></svg>`;
+    layers.push({ input: Buffer.from(svg), left: 0, top: 0 });
+  }
+  return sharp({ create: { width, height, channels: 4, background: "#808080" } }).composite(layers).png().toBuffer();
 }
