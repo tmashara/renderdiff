@@ -67,7 +67,8 @@ changed and where:
 
 - **text** — read it first. `removed` lines are on the right (reference) only, `added` on
   the left (your change) only; the report card lists them. A removed line is missing
-  content whatever the score says.
+  content whatever the score says. Masked elements are left out, but unmasked text that
+  changes per load (a ticker, a clock) appears whenever the sides differed at capture.
 - **band** — rows one side has that the other lacks (`-` = only right has them, `+` = only
   left). Everything below a band is pushed down, so the red below it is one cause, not
   many. `aligned` near 100% means the band *is* the whole difference. `y` is approximate
@@ -104,7 +105,7 @@ site — you're a guest there.
 | `ERROR` rows | Unmeasured, not failed. They exit 1 because an unmeasured route isn't a verified one. Report them as unverified. |
 | Uniform low score, whole page shifted | Almost always a height or font-loading difference near the top pushing everything down. A `band` line names where; compare left and right at that `y`. No band means the shift is horizontal or the content itself changed. |
 | `text: N added, M removed` | Content differs. Read the lines on the report card: a removed line is something the reference shows and your change doesn't. |
-| `rows too different to align` | The pages share too few identical rows to align, so no bands. Fine for a horizontal shift; otherwise the pages are very different. |
+| `rows too different to align` | The pages differ in height but share too few identical rows to align, so no bands. Either they are very different, or the edits total more than 2,000 rows, or sub-threshold noise touches every row. Use the height badge and regions. |
 | `unstable Npx` badge | Pixels that kept changing between shots of the same load on one origin (a ticker, a carousel, a video). Painted out on both sides and excluded from the measurement, so the score covers only the rest. A large number means a big region went unmeasured — look at the magenta on the images. |
 | `page did not settle: Npx unstable at …` | More than 25% of the page kept changing between shots, so too little was measured to score. Mask or stop the moving part (a carousel, a background video). |
 

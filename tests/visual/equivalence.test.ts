@@ -17,6 +17,7 @@
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import sharp from "sharp";
 import { after, before, test } from "node:test";
 import { EQUIVALENCE, toPath } from "../helpers/corpus.ts";
 import {
@@ -127,6 +128,13 @@ for (const dir of EQUIVALENCE) {
     });
   }
 }
+
+test("a pixel-identical pair writes a fully transparent diff", async () => {
+  const c = card(report, toPath(EQUIVALENCE[0]!), WIDTHS[0]!);
+  const diff = c.images.find((n) => n.endsWith(".diff.png"));
+  assert.ok(diff, `no diff image linked${context(run)}`);
+  assert.equal((await sharp(run.file(diff)).stats()).channels[3]!.max, 0);
+});
 
 test("every comparison landed in the green band", () => {
   // Restates the group claim in one place, so a regression that only hits some routes still

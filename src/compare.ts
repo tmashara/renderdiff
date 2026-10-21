@@ -46,7 +46,7 @@ export interface Diff {
   /** Painted-height and -width deltas (left − right), straight from the PNGs. */
   heightDelta: number;
   widthDelta: number;
-  /** Largest first. */
+  /** Largest first, within the area both shots cover; padding is the deltas and bands. */
   regions: Region[];
   /** Null when the rows were too different to align. */
   bands: Band[] | null;
@@ -62,6 +62,9 @@ const PIXELMATCH = { threshold: 0.1, includeAA: false, alpha: 0.25 };
 const MAX_EDIT = 2000;
 
 const CELL = 16;
+
+/** `MASK_COLOR` (#FF00FF, opaque) as one little-endian RGBA word. */
+const MAGENTA = 0xffff00ff;
 
 /**
  * Pad a shot onto a common (w, h) canvas so both frames are the same size for
@@ -102,10 +105,9 @@ export async function compare(left: Shot, right: Shot): Promise<Diff> {
 
   const text = textDiff(left.text, right.text);
   const out = Buffer.alloc(w * h * 4);
-  // Identical shots skip pixelmatch and leave the diff PNG fully transparent.
-  const same = l.equals(r);
+  // Identical shots skip pixelmatch's grey drawing and leave the diff PNG fully transparent.
   // `l`/`r`/`out` are Buffers, i.e. Uint8Arrays — pixelmatch takes them directly.
-  const diffPixels = same ? 0 : pixelmatch(l, r, out, w, h, PIXELMATCH);
+  const diffPixels = l.equals(r) ? 0 : pixelmatch(l, r, out, w, h, PIXELMATCH);
 
   // Default zlib level: the diff PNG is a local intermediate (mostly transparent with
   // sparse red), so max compression buys little size for noticeably more CPU per job.
@@ -124,8 +126,8 @@ export async function compare(left: Shot, right: Shot): Promise<Diff> {
     totalPixels: w * h,
     heightDelta: lh - rh,
     widthDelta: lw - rw,
-    regions: diffPixels ? regions(out, w, h) : [],
-    ...(same ? { bands: [], alignedScore: null } : align(l, r, w, lh, rh)),
+    regions: diffPixels ? regions(out, w, Math.min(lw, rw), Math.min(lh, rh)) : [],
+    ...(diffPixels ? align(l, r, w, lh, rh) : { bands: [], alignedScore: null }),
     text,
     diffPng,
   };
@@ -133,7 +135,7 @@ export async function compare(left: Shot, right: Shot): Promise<Diff> {
 
 /**
  * Myers' O((N+M)·D) diff: the matched index pairs of a shortest edit script, in order.
- * Null once the edit distance passes `maxD`.
+ * Null once the edit distance passes `maxD`, unless the edit is one pure insertion or deletion.
  */
 function myers<T>(
   a: ArrayLike<T>,
@@ -141,8 +143,18 @@ function myers<T>(
   maxD = MAX_EDIT,
 ): [number, number][] | null {
   const n = a.length,
-    m = b.length,
-    max = Math.min(n + m, maxD),
+    m = b.length;
+  let p = 0,
+    s = 0;
+  while (p < n && p < m && a[p] === b[p]) p++;
+  while (s < n - p && s < m - p && a[n - 1 - s] === b[m - 1 - s]) s++;
+  if (p + s === n || p + s === m) {
+    const pairs: [number, number][] = [];
+    for (let i = 0; i < p; i++) pairs.push([i, i]);
+    for (let i = s; i > 0; i--) pairs.push([n - i, m - i]);
+    return pairs;
+  }
+  const max = Math.min(n + m, maxD),
     off = max + 1;
   const v = new Int32Array(2 * max + 3);
   // trace[d][k + d] is v[k] after round d.
@@ -201,14 +213,17 @@ function textDiff(a: string[], b: string[]): TextDiff {
   };
 }
 
-/** Connected components (8-way) over 16px cells holding any pixel pixelmatch painted as a diff. */
-function regions(out: Buffer, w: number, h: number): Region[] {
+/**
+ * Connected components (8-way) over 16px cells holding any pixel pixelmatch painted as a diff,
+ * within the top-left `w`×`h` of the `stride`-wide diff.
+ */
+function regions(out: Buffer, stride: number, w: number, h: number): Region[] {
   const cw = Math.ceil(w / CELL),
     ch = Math.ceil(h / CELL);
   const cells = new Uint32Array(cw * ch);
-  for (let y = 0, o = 0; y < h; y++) {
+  for (let y = 0; y < h; y++) {
     const row = ((y / CELL) | 0) * cw;
-    for (let x = 0; x < w; x++, o += 4) {
+    for (let x = 0, o = y * stride * 4; x < w; x++, o += 4) {
       // diffColor red; unchanged pixels are grey and AA ones yellow, so neither matches.
       if (out[o] === 255 && out[o + 1] === 0 && out[o + 2] === 0) {
         cells[row + ((x / CELL) | 0)]!++;
@@ -311,28 +326,17 @@ function align(l: Buffer, r: Buffer, w: number, lh: number, rh: number) {
   const ha = rowHashes(l, w, lh),
     hb = rowHashes(r, w, rh);
   const matched = myers(ha, hb);
-  if (!matched) return { bands: null, alignedScore: null };
+  if (!matched) return { bands: lh === rh ? [] : null, alignedScore: null };
   const ca = new Uint8Array(lh).fill(1),
     cb = new Uint8Array(rh).fill(1);
   for (const [i, j] of matched) ca[i] = cb[j] = 0;
+  const raw = pairUp(ca, cb);
   compact(ha, ca);
   compact(hb, cb);
-  const ka = [...ca.keys()].filter((i) => !ca[i]),
-    kb = [...cb.keys()].filter((j) => !cb[j]);
-  const pairs = ka.map((i, n) => [i, kb[n]!] as const);
-  const bands: Band[] = [];
-  const rows: [number, number][] = [];
-  let x = 0,
-    y = 0;
-  for (const [px, py] of [...pairs, [lh, rh] as const]) {
-    const k = Math.min(px - x, py - y);
-    for (let j = 0; j < k; j++) rows.push([x + j, y + j]);
-    if (px - x > k) bands.push({ side: "left", y: x + k, h: px - x - k });
-    if (py - y > k) bands.push({ side: "right", y: y + k, h: py - y - k });
-    if (px < lh) rows.push([px, py]);
-    x = px + 1;
-    y = py + 1;
-  }
+  const packed = pairUp(ca, cb);
+  // Compacting each side alone can misalign their gaps and turn an in-place change into a band pair.
+  const height = (p: typeof raw) => p.bands.reduce((t, b) => t + b.h, 0);
+  const { bands, rows } = height(packed) <= height(raw) ? packed : raw;
   if (!bands.length || !rows.length) return { bands, alignedScore: null };
   const stride = w * 4;
   const a = Buffer.alloc(rows.length * stride),
@@ -341,6 +345,39 @@ function align(l: Buffer, r: Buffer, w: number, lh: number, rh: number) {
     l.copy(a, j * stride, ly * stride, (ly + 1) * stride);
     r.copy(b, j * stride, ry * stride, (ry + 1) * stride);
   });
+  // Unstable pixels and masks are magenta at page coordinates, which a band shifts apart.
+  const pa = new Uint32Array(a.buffer, a.byteOffset, rows.length * w),
+    pb = new Uint32Array(b.buffer, b.byteOffset, rows.length * w);
+  let masked = 0;
+  for (let i = 0; i < pa.length; i++) {
+    if (pa[i] === MAGENTA || pb[i] === MAGENTA) {
+      pa[i] = pb[i] = MAGENTA;
+      masked++;
+    }
+  }
   const diff = pixelmatch(a, b, undefined, w, rows.length, PIXELMATCH);
-  return { bands, alignedScore: 1 - diff / (rows.length * w) };
+  const measured = rows.length * w - masked;
+  return { bands, alignedScore: measured > 0 ? 1 - diff / measured : null };
+}
+
+/** Pair each side's kept rows in order; each gap pairs top-down and its leftover is a band. */
+function pairUp(ca: Uint8Array, cb: Uint8Array) {
+  const lh = ca.length,
+    rh = cb.length;
+  const ka = [...ca.keys()].filter((i) => !ca[i]),
+    kb = [...cb.keys()].filter((j) => !cb[j]);
+  const bands: Band[] = [];
+  const rows: [number, number][] = [];
+  let x = 0,
+    y = 0;
+  for (const [px, py] of [...ka.map((i, n) => [i, kb[n]!] as const), [lh, rh] as const]) {
+    const k = Math.min(px - x, py - y);
+    for (let j = 0; j < k; j++) rows.push([x + j, y + j]);
+    if (px - x > k) bands.push({ side: "left", y: x + k, h: px - x - k });
+    if (py - y > k) bands.push({ side: "right", y: y + k, h: py - y - k });
+    if (px < lh) rows.push([px, py]);
+    x = px + 1;
+    y = py + 1;
+  }
+  return { bands, rows };
 }

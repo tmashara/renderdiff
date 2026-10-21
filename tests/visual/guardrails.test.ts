@@ -283,9 +283,10 @@ describe("masks", () => {
     assert.ok(c.diffPixels > 0, `the fixture did not drift${context(run)}`);
     assert.ok(c.score < 0.999, `expected < 0.999, got ${c.score}${context(run)}`);
     assert.equal(c.heightDelta, 0, "masking should never have been about height");
+    assert.deepEqual([c.added.length, c.removed.length], [1, 1], `the counter is text${context(run)}`);
   });
 
-  test("masking it reaches parity, and the report says what was masked", async () => {
+  test("masking it reaches parity, drops it from the text diff, and the report says what was masked", async () => {
     const run = await capture(["/drifting"], {
       config: path.join(CONFIGS, "mask-drifting.mjs"),
     });
@@ -295,6 +296,8 @@ describe("masks", () => {
       0,
       `the mask did not cover the drifting value${context(run)}`,
     );
+    const c = cardFor(run, "/drifting");
+    assert.deepEqual([c.added, c.removed], [[], []], `masked text leaked into the text diff${context(run)}`);
 
     // The report has to list the reasons it actually masked, or it can drift from the config.
     const report = parseReport(run.report()!);

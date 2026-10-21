@@ -106,6 +106,20 @@ export async function capture(
     .catch(() => {});
   await page.addStyleTag({ content: cfg.neutralizeCss }); // anything injected late
 
+  // Masks only paint the PNG, so hide them for the text read too; visibility keeps layout.
+  const masks = masksFor(cfg, page, urlPath);
+  const hidden: string[][] = [];
+  for (const l of masks) {
+    hidden.push(
+      await l.evaluateAll((els) =>
+        els.map((e) => {
+          const prev = (e as HTMLElement).style.visibility;
+          (e as HTMLElement).style.visibility = "hidden";
+          return prev;
+        }),
+      ),
+    );
+  }
   const { scrollHeight, innerText, media } = await page.evaluate(() => ({
     scrollHeight: document.documentElement.scrollHeight,
     innerText: document.body.innerText || "",
@@ -118,6 +132,13 @@ export async function capture(
       return r.width * r.height >= 1024;
     }),
   }));
+  // Reverse order, so an element two masks share gets its original value back.
+  for (let i = masks.length - 1; i >= 0; i--) {
+    await masks[i]!.evaluateAll(
+      (els, prev) => els.forEach((e, j) => ((e as HTMLElement).style.visibility = prev[j] ?? "")),
+      hidden[i]!,
+    );
+  }
   const text = innerText
     .split("\n")
     .map((line) => line.replace(/\s+/g, " ").trim())
@@ -138,7 +159,7 @@ export async function capture(
   await page.evaluate(() => window.scrollTo(0, 0));
   const boxes = (
     await Promise.all(
-      (await Promise.all(masksFor(cfg, page, urlPath).map((l) => l.all())))
+      (await Promise.all(masks.map((l) => l.all())))
         .flat()
         .map((el) => el.boundingBox()),
     )
