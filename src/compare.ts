@@ -381,3 +381,57 @@ function pairUp(ca: Uint8Array, cb: Uint8Array) {
   }
   return { bands, rows };
 }
+
+const CROP_PAD = 48;
+const CROP_GAP = 8;
+const CROP_MAX = 1200;
+export const MAX_CROPS = 5;
+
+/**
+ * One PNG per region (the largest `MAX_CROPS`): left | right | diff side by side, each the
+ * padded region box clipped to the area both shots cover, scaled down to `CROP_MAX` on the
+ * long side. A full-page diff Read by an agent is downscaled past legibility; a crop isn't.
+ */
+export async function crops(
+  left: Buffer,
+  right: Buffer,
+  diff: Buffer,
+  found: Region[],
+): Promise<Buffer[]> {
+  if (!found.length) return [];
+  const [lm, rm] = await Promise.all([sharp(left).metadata(), sharp(right).metadata()]);
+  const cw = Math.min(lm.width!, rm.width!);
+  const ch = Math.min(lm.height!, rm.height!);
+  return Promise.all(
+    found.slice(0, MAX_CROPS).map(async (g) => {
+      const x = Math.max(0, g.x - CROP_PAD);
+      const y = Math.max(0, g.y - CROP_PAD);
+      const box = {
+        left: x,
+        top: y,
+        width: Math.min(cw, g.x + g.w + CROP_PAD) - x,
+        height: Math.min(ch, g.y + g.h + CROP_PAD) - y,
+      };
+      const panels = await Promise.all(
+        [left, right, diff].map((png) => sharp(png).extract(box).toBuffer()),
+      );
+      const sheet = await sharp({
+        create: {
+          width: 3 * box.width + 2 * CROP_GAP,
+          height: box.height,
+          channels: 4,
+          background: "#808080",
+        },
+      })
+        .composite(
+          panels.map((input, i) => ({ input, left: i * (box.width + CROP_GAP), top: 0 })),
+        )
+        .png()
+        .toBuffer();
+      return sharp(sheet)
+        .resize(CROP_MAX, CROP_MAX, { fit: "inside", withoutEnlargement: true })
+        .png()
+        .toBuffer();
+    }),
+  );
+}

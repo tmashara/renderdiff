@@ -10,12 +10,10 @@
  * Per-site knobs (masks for content that drifts, extra selectors to hide, defaults for
  * the flags below) live in a `renderdiff.config.ts` / `.mjs` in the working directory.
  */
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   loadConfig,
   resolveConfig,
+  version,
   type CliOverrides,
   type ResolvedConfig,
   type Route,
@@ -99,8 +97,10 @@ const HELP = `
     renderdiff <route…> --left <url> --right <url> [options]
 
   Screenshots each route on both origins at several viewport widths, pixel-diffs the
-  pairs, and writes a scored HTML report. Routes are literal paths — no globs, no
-  discovery. Exits 1 if any route errors or falls below --threshold.
+  pairs, and writes a scored HTML report (report.html) plus results.json — every score,
+  region, band, text-diff line and image path, for scripts and agents — and a
+  side-by-side crop of each of the largest diff regions. Routes are literal paths — no
+  globs, no discovery. Exits 1 if any route errors or falls below --threshold.
 
   Options
     --left <url>        Left origin, e.g. http://localhost:3000        (required)
@@ -180,19 +180,6 @@ async function preflight(left: string, right: string) {
   );
   console.error("  collapse every page and diff as garbage).\n");
   process.exit(2);
-}
-
-function version(): string {
-  const pkg = path.join(
-    path.dirname(fileURLToPath(import.meta.url)),
-    "..",
-    "package.json",
-  );
-  try {
-    return JSON.parse(fs.readFileSync(pkg, "utf8")).version ?? "unknown";
-  } catch {
-    return "unknown";
-  }
 }
 
 let args: Args;

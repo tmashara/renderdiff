@@ -27,7 +27,10 @@ export interface ComparedResult extends BaseResult {
   alignedScore: number | null;
   /** innerText line diff; `added` is on left only, `removed` on right only. */
   text: TextDiff;
+  /** Paths relative to the out dir. */
   images: { left: string; right: string; diff: string };
+  /** `{slug}.{width}.r{n}.png` for the largest regions: left | right | diff, `crops[i]` is `regions[i]`. */
+  crops: string[];
 }
 
 /** A route that threw before it could be diffed — neither a pass nor a fail. */
@@ -39,11 +42,35 @@ export interface ErrorResult extends BaseResult {
 export type RouteResult = ComparedResult | ErrorResult;
 
 export interface RunMeta {
+  tool: "renderdiff";
+  version: string;
+  generatedAt: string;
   left: string;
   right: string;
-  generatedAt: string;
+  widths: number[];
+  threshold: number | null;
   /** The instant both sides' clocks start at on every load, ISO. */
   clock: string;
+  blockUrlPatterns: string[];
+  hideSelectors: string[];
+  masks: { urlPath: string; reason: string }[];
+}
+
+export interface Summary {
+  compared: number;
+  errors: number;
+  /** Null when nothing was compared. */
+  mean: number | null;
+  worst: { url: string; width: number; score: number } | null;
+  /** Comparisons under `meta.threshold`; 0 when no threshold was set. */
+  belowThreshold: number;
+}
+
+/** The shape of `results.json`, written to the out dir on every run. */
+export interface Results {
+  meta: RunMeta;
+  results: RouteResult[];
+  summary: Summary;
 }
 
 /** Sort ascending by score; surface the mean and the worst (lowest-scoring) row. */
@@ -51,6 +78,36 @@ export function stats(rows: ComparedResult[]) {
   const sorted = [...rows].sort((a, b) => a.score - b.score);
   const mean = sorted.reduce((s, r) => s + r.score, 0) / sorted.length;
   return { sorted, mean, worst: sorted[0]! };
+}
+
+export function writeResults(
+  results: RouteResult[],
+  meta: RunMeta,
+  outDir: string,
+): string {
+  const compared = results.filter(
+    (r): r is ComparedResult => r.status === "compared",
+  );
+  const { mean, worst } = compared.length
+    ? stats(compared)
+    : { mean: null, worst: null };
+  const out: Results = {
+    meta,
+    results,
+    summary: {
+      compared: compared.length,
+      errors: results.length - compared.length,
+      mean,
+      worst: worst && { url: worst.url, width: worst.width, score: worst.score },
+      belowThreshold:
+        meta.threshold === null
+          ? 0
+          : compared.filter((r) => r.score < meta.threshold!).length,
+    },
+  };
+  const file = path.join(outDir, "results.json");
+  fs.writeFileSync(file, JSON.stringify(out, null, 2) + "\n");
+  return file;
 }
 
 const esc = (s: string) =>
@@ -90,6 +147,13 @@ function findings(r: ComparedResult): string {
         .slice(0, LIST_CAP)
         .map((g) => `<li>${fmtRegion(g)} — ${g.pixels.toLocaleString("en-US")} px</li>`)
         .join("")}</ul>`,
+    );
+  }
+  if (r.crops.length) {
+    items.push(
+      `<div class="crops">${r.crops
+        .map((c) => `<a class="crop" href="${c}" target="_blank"><img loading="lazy" src="${c}"></a>`)
+        .join("")}</div>`,
     );
   }
   if (r.bands?.length) {
@@ -168,6 +232,8 @@ export async function writeReport(
   .findings { font-size:12px; color:var(--mut); margin:0 0 .75rem }
   .findings p { margin:.25rem 0 0 }
   .findings ul { margin:.25rem 0; font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace }
+  .crops { display:flex; flex-wrap:wrap; gap:.5rem; margin:.25rem 0 }
+  .crops img { width:auto; max-width:100%; max-height:160px }
   .findings .add { color:#2e7d32 } .findings .del { color:#c62828 }
   .unstable { background:rgba(255,0,255,.12); padding:.1rem .4rem; border-radius:4px }
   .delta { background:rgba(181,137,0,.15); padding:.1rem .4rem; border-radius:4px }

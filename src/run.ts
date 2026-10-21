@@ -3,12 +3,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { chromium, errors, type Page } from "playwright";
 import { cancelUnstable, capture, prepare, type Shot } from "./capture.ts";
-import { compare } from "./compare.ts";
-import { CONTEXT_OPTIONS, type ResolvedConfig, type Route } from "./config.ts";
+import { compare, crops } from "./compare.ts";
+import { CONTEXT_OPTIONS, version, type ResolvedConfig, type Route } from "./config.ts";
 import { fmtBand, fmtRegion, pct, signed } from "./format.ts";
 import {
   stats,
   writeReport,
+  writeResults,
   type ComparedResult,
   type ErrorResult,
   type RouteResult,
@@ -54,7 +55,8 @@ function slugs(routes: Route[]): Map<Route, string> {
 /** Only a directory holding nothing but files renderdiff writes is safe to wipe. */
 const ours = (f: string) =>
   f === "report.html" ||
-  /^[a-z0-9_-]+\.[\d.]+\.(left|right|diff)\.png$/.test(f);
+  f === "results.json" ||
+  /^[a-z0-9_-]+\.[\d.]+\.(left|right|diff|r\d+)\.png$/.test(f);
 
 function wipeable(dir: string): boolean {
   if (!fs.existsSync(dir)) return true;
@@ -133,10 +135,13 @@ export async function run({ routes, cfg, open }: RunOpts): Promise<number> {
         };
         const write = (name: string, buf: Buffer) =>
           fs.promises.writeFile(path.join(cfg.outDir, name), buf);
+        const sheets = await crops(leftShot.png, rightShot.png, diffPng, metrics.regions);
+        const cropPaths = sheets.map((_, i) => `${base}.r${i + 1}.png`);
         await Promise.all([
           write(images.left, leftShot.png),
           write(images.right, rightShot.png),
           write(images.diff, diffPng),
+          ...sheets.map((buf, i) => write(cropPaths[i]!, buf)),
         ]);
 
         results.push({
@@ -146,6 +151,7 @@ export async function run({ routes, cfg, open }: RunOpts): Promise<number> {
           ...metrics,
           unstablePixels,
           images,
+          crops: cropPaths,
         });
         const { regions, bands, alignedScore, text } = metrics;
         const details = [
@@ -189,18 +195,28 @@ export async function run({ routes, cfg, open }: RunOpts): Promise<number> {
   await Promise.all(Array.from({ length: cfg.concurrency }, worker));
   await browser.close();
 
-  const reportPath = await writeReport(
-    results,
-    {
-      left: cfg.left,
-      right: cfg.right,
-      generatedAt: new Date().toISOString(),
-      clock: new Date(now).toISOString(),
-    },
-    cfg,
-  );
+  // Workers finish out of order; job order keeps results.json stable across runs.
+  const order = (r: RouteResult) =>
+    routes.indexOf(r.url) * cfg.widths.length + cfg.widths.indexOf(r.width);
+  results.sort((a, b) => order(a) - order(b));
 
-  summarize(results, reportPath);
+  const meta = {
+    tool: "renderdiff" as const,
+    version: version(),
+    generatedAt: new Date().toISOString(),
+    left: cfg.left,
+    right: cfg.right,
+    widths: cfg.widths,
+    threshold: cfg.threshold,
+    clock: new Date(now).toISOString(),
+    blockUrlPatterns: cfg.blockUrlPatterns,
+    hideSelectors: cfg.hideSelectors,
+    masks: cfg.masks.map(({ urlPath, reason }) => ({ urlPath, reason })),
+  };
+  const reportPath = await writeReport(results, meta, cfg);
+  const resultsPath = writeResults(results, meta, cfg.outDir);
+
+  summarize(results, reportPath, resultsPath);
 
   if (open) {
     const opener = process.platform === "darwin" ? "open" : "xdg-open";
@@ -259,7 +275,7 @@ async function shoot(
   }
 }
 
-function summarize(results: RouteResult[], reportPath: string) {
+function summarize(results: RouteResult[], reportPath: string, resultsPath: string) {
   const compared = results.filter(
     (r): r is ComparedResult => r.status === "compared",
   );
@@ -284,4 +300,5 @@ function summarize(results: RouteResult[], reportPath: string) {
   }
 
   console.log(`\nReport: ${reportPath}`);
+  console.log(`Results: ${resultsPath}`);
 }

@@ -26,6 +26,10 @@ export {
 export {
   type ComparedResult,
   type ErrorResult,
+  type Results,
   type RouteResult,
   type RunMeta,
+  type Summary,
 } from "./report.ts";
+
+export { type Band, type Region, type TextDiff } from "./compare.ts";
