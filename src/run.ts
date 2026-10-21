@@ -4,7 +4,7 @@ import path from "node:path";
 import { chromium, errors, type Page } from "playwright";
 import { cancelUnstable, capture, prepare, type Shot } from "./capture.ts";
 import { compare, crops, type Band } from "./compare.ts";
-import { CONTEXT_OPTIONS, version, type ResolvedConfig, type Route } from "./config.ts";
+import { CONTEXT_OPTIONS, label, version, type ResolvedConfig, type Route } from "./config.ts";
 import { fmtBand, fmtRegion, pct, signed } from "./format.ts";
 import {
   stats,
@@ -38,18 +38,20 @@ const slug = (url: string) =>
         .slice(1)
         .toLowerCase()
         .replace(/\//g, "-")
-        .replace(/[^a-z0-9-]/g, "_")
-        .slice(0, 200);
+        .replace(/[^a-z0-9-]/g, "_");
 
-/** Route -> file stem, unique across the run. Suffixes follow route order, so reruns agree. */
-function slugs(routes: Route[]): Map<Route, string> {
-  const out = new Map<Route, string>();
+const stem = (r: Route) =>
+  (r.left === r.right ? slug(r.left) : `${slug(r.left)}~${slug(r.right)}`).slice(0, 200);
+
+/** Route label -> file stem, unique across the run. Suffixes follow route order, so reruns agree. */
+function slugs(routes: Route[]): Map<string, string> {
+  const out = new Map<string, string>();
   const used = new Set<string>();
   for (const route of routes) {
-    let s = slug(route);
-    for (let n = 2; used.has(s); n++) s = `${slug(route)}-${n}`;
+    let s = stem(route);
+    for (let n = 2; used.has(s); n++) s = `${stem(route)}-${n}`;
     used.add(s);
-    out.set(route, s);
+    out.set(label(route), s);
   }
   return out;
 }
@@ -58,7 +60,7 @@ function slugs(routes: Route[]): Map<Route, string> {
 const ours = (f: string) =>
   f === "report.html" ||
   f === "results.json" ||
-  /^[a-z0-9_-]+\.[\d.]+\.(left|right|diff|c\d+)\.png$/.test(f);
+  /^[a-z0-9_~@-]+\.[\d.]+\.(left|right|diff|c\d+)\.png$/.test(f);
 
 function wipeable(dir: string): boolean {
   if (!fs.existsSync(dir)) return true;
@@ -99,12 +101,13 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
 
     for (let job = queue.shift(); job; job = queue.shift()) {
       const { route, width } = job;
-      const label = `${route} @${width}`;
+      const name = label(route);
+      const tag = `${name} @${width}`;
       try {
         // allSettled, not all: a page must not start the next job while still loading this one.
         const settled = await Promise.allSettled([
-          shoot(leftPage, cfg.left + route, route, width, cfg, now),
-          shoot(rightPage, cfg.right + route, route, width, cfg, now),
+          shoot(leftPage, cfg.left + route.left, route, width, cfg, now),
+          shoot(rightPage, cfg.right + route.right, route, width, cfg, now),
         ]);
         const failed = settled.find((r) => r.status === "rejected");
         if (failed) throw failed.reason;
@@ -116,7 +119,7 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
         if (leftShot.blank && rightShot.blank) {
           throw new Error(
             `page did not render on either side ` +
-              `(left: ${leftShot.blank}; right: ${rightShot.blank}) at ${route}`,
+              `(left: ${leftShot.blank}; right: ${rightShot.blank}) at ${name}`,
           );
         }
         const unstablePixels = await cancelUnstable(leftShot, rightShot);
@@ -124,12 +127,12 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
         const { diffPng, spots, ...metrics } = await compare(leftShot, rightShot);
         if (unstablePixels > MAX_UNSTABLE_SHARE * metrics.totalPixels) {
           throw new Error(
-            `page did not settle: ${unstablePixels}px unstable at ${route}`,
+            `page did not settle: ${unstablePixels}px unstable at ${name}`,
           );
         }
         const measured = metrics.totalPixels - unstablePixels;
         metrics.score = measured > 0 ? 1 - metrics.diffPixels / measured : 0;
-        const base = `${stems.get(route)}.${width}`;
+        const base = `${stems.get(name)}.${width}`;
         const images = {
           left: `${base}.left.png`,
           right: `${base}.right.png`,
@@ -147,7 +150,8 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
         ]);
 
         results.push({
-          url: route,
+          url: name,
+          ...route,
           width,
           status: "compared",
           ...metrics,
@@ -170,7 +174,7 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
         ++done;
         if (!progress) continue;
         console.log(
-          `  [${done}/${jobs.length}] ${pct(metrics.score)}  ${label}` +
+          `  [${done}/${jobs.length}] ${pct(metrics.score)}  ${tag}` +
             (metrics.heightDelta
               ? `  (height ${signed(metrics.heightDelta)}px)`
               : "") +
@@ -181,13 +185,14 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
         );
       } catch (e) {
         results.push({
-          url: route,
+          url: name,
+          ...route,
           width,
           status: "error",
           error: e instanceof Error ? e.message : String(e),
         });
         ++done;
-        if (progress) console.log(`  [${done}/${jobs.length}] ERROR  ${label}`);
+        if (progress) console.log(`  [${done}/${jobs.length}] ERROR  ${tag}`);
       }
     }
     await leftCtx.close();
@@ -203,8 +208,9 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
   await browser.close();
 
   // Workers finish out of order; job order keeps results.json stable across runs.
+  const names = routes.map(label);
   const order = (r: RouteResult) =>
-    routes.indexOf(r.url) * cfg.widths.length + cfg.widths.indexOf(r.width);
+    names.indexOf(r.url) * cfg.widths.length + cfg.widths.indexOf(r.width);
   results.sort((a, b) => order(a) - order(b));
 
   const meta = {
@@ -224,7 +230,7 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
   const resultsPath = writeResults(results, meta, cfg.outDir);
 
   if (progress) summarize(results, reportPath, resultsPath);
-  else console.log(compact(results, routes, resultsPath, cfg.threshold));
+  else console.log(compact(results, names, resultsPath, cfg.threshold));
 
   if (open) {
     const opener = process.platform === "darwin" ? "open" : "xdg-open";
@@ -263,17 +269,17 @@ const transient = (e: unknown) =>
 async function shoot(
   page: Page,
   url: string,
-  urlPath: string,
+  route: Route,
   width: number,
   cfg: ResolvedConfig,
   now: number,
 ): Promise<Shot> {
   try {
-    return await capture(page, url, urlPath, width, cfg, now);
+    return await capture(page, url, route, width, cfg, now);
   } catch (e) {
     if (!transient(e)) throw e;
     await page.waitForTimeout(1000);
-    return await capture(page, url, urlPath, width, cfg, now);
+    return await capture(page, url, route, width, cfg, now);
   }
 }
 
@@ -315,12 +321,12 @@ const TEXT_LINES = 3;
  */
 export function compact(
   results: RouteResult[],
-  routes: Route[],
+  routes: string[],
   resultsPath: string,
   threshold: number | null,
 ): string {
   const out: string[] = [];
-  const clean: Route[] = [];
+  const clean: string[] = [];
   let differ = 0;
   for (const route of routes) {
     const rows = results.filter((r) => r.url === route);

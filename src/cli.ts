@@ -2,7 +2,7 @@
 /**
  * Screenshot diff between two origins.
  *
- *   renderdiff <route…> --left <url> --right <url>
+ *   renderdiff <left-origin> <right-origin> <route…>
  *
  * Screenshots the given routes on both origins at several viewport widths and
  * pixel-diffs them. Routes are required and literal — the tool does no route discovery.
@@ -11,7 +11,9 @@
  * the flags below) live in a `renderdiff.config.ts` / `.mjs` in the working directory.
  */
 import {
+  label,
   loadConfig,
+  parseRoutes,
   resolveConfig,
   version,
   type CliOverrides,
@@ -47,6 +49,7 @@ function parseArgs(argv: string[]): Args {
     version: false,
     routes: [],
   };
+  const origins: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const raw = argv[i]!;
     // Accept both `--flag value` and `--flag=value`.
@@ -89,7 +92,18 @@ function parseArgs(argv: string[]): Args {
       if (t < 0 || t > 1) throw new Error(`--threshold expects 0..1, got ${t}`);
       a.threshold = t;
     } else if (v.startsWith("-")) throw new Error(`unknown flag: ${v}`);
+    else if (v.includes("://")) origins.push(v);
     else a.routes.push(v);
+  }
+  if (origins.length > 2) {
+    throw new Error(`at most two origins (left, right), got ${origins.length}: ${origins.join(" ")}`);
+  }
+  for (const [i, side] of (["left", "right"] as const).entries()) {
+    if (origins[i] === undefined) continue;
+    if (a[side] !== undefined) {
+      throw new Error(`${side} origin given twice: ${origins[i]} and --${side} ${a[side]}`);
+    }
+    a[side] = origins[i];
   }
   return a;
 }
@@ -98,17 +112,21 @@ const HELP = `
   renderdiff — screenshot diff between two origins
 
   Usage
-    renderdiff <route…> --left <url> --right <url> [options]
+    renderdiff <left-origin> <right-origin> <route…> [options]
 
-  Screenshots each route on both origins at several viewport widths, pixel-diffs the
-  pairs, and writes a scored HTML report (report.html) plus results.json — every score,
-  region, band, text-diff line and image path, for scripts and agents — and up to
-  three crops per comparison of the bands and largest regions, left beside or over
-  right. Routes are literal paths — no globs, no discovery. Exits 1 if any route errors or falls below --threshold.
+    renderdiff http://localhost:3000 https://example.com / /about
+    renderdiff http://localhost:3000 https://example.com /pricing::/plans
+
+  Any argument containing :// is an origin: the first is left, the second right (or
+  pass --left / --right). A route is a literal path, loaded on both sides; /a::/b loads
+  /a on the left and /b on the right. No globs, no discovery.
+
+  Writes report.html, results.json and crops of each change to --out. Exits 1 if a
+  route errors or falls below --threshold, 2 on bad arguments or an origin that is down.
 
   Options
-    --left <url>        Left origin, e.g. http://localhost:3000        (required)
-    --right <url>       Right origin, e.g. https://example.com         (required)
+    --left <url>        Left origin, instead of the first positional one.
+    --right <url>       Right origin, instead of the second positional one.
     --width <n>         Viewport width; repeatable. Replaces the defaults.
     --threshold <0..1>  Fail if any comparison scores below this.
     --out <dir>         Output directory                   (default: ./renderdiff-out)
@@ -124,18 +142,12 @@ const HELP = `
 
   Default widths: 1440, 1152, 896, 704, 375
 
-  Example
-    renderdiff / /about /pricing --left http://localhost:3000 --right https://example.com
-
-  Config file
-    A renderdiff.config.ts (or .mjs) in the working directory supplies defaults for the
-    flags above, plus the things flags cannot express: per-route masks for content
-    that legitimately drifts, extra selectors to hide, extra URLs to block.
-    CLI flags always win over the config file.
+  Masks, hidden selectors, blocked URLs and route lists go in a config file; CLI flags
+  win over it. See the README, or skills/renderdiff/reference.md.
 `;
 
 const usage = () => {
-  console.error("  Usage: renderdiff <route…> --left <url> --right <url>");
+  console.error("  Usage: renderdiff <left-origin> <right-origin> <route…>");
   console.error("  Try:   renderdiff --help");
 };
 
@@ -146,12 +158,6 @@ function die(message: string): never {
   usage();
   process.exit(2);
 }
-
-/** `pricing` / `/pricing/` -> `/pricing`; `/` stays `/`. */
-const normalize = (url: string) => {
-  const trimmed = url.replace(/^\/+/, "").replace(/\/+$/, "");
-  return trimmed ? `/${trimmed}` : "/";
-};
 
 const alive = async (origin: string) => {
   try {
@@ -225,19 +231,19 @@ if (!rawRoutes.length) {
   die("no routes given.");
 }
 
-const glob = rawRoutes.find((r) => r.includes("*"));
-if (glob) {
-  die(`globs are not supported (${glob}) — pass literal paths.`);
+let routes: Route[];
+try {
+  routes = parseRoutes(rawRoutes);
+} catch (e) {
+  die(e instanceof Error ? e.message : String(e));
 }
-
-const routes: Route[] = [...new Set(rawRoutes.map(normalize))];
 
 if (configPath) console.log(`Config: ${configPath}`);
 console.log(`Routes: ${routes.length}`);
 
 if (args.dryRun) {
   for (const r of routes) {
-    console.log(`  ${r.padEnd(52)} ${cfg.left}${r}  |  ${cfg.right}${r}`);
+    console.log(`  ${label(r).padEnd(52)} ${cfg.left}${r.left}  |  ${cfg.right}${r.right}`);
   }
   process.exit(0);
 }

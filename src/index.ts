@@ -20,6 +20,7 @@ export {
   type Mask,
   type ResolvedConfig,
   type Route,
+  type RouteSpec,
   type RenderdiffConfig,
 } from "./config.ts";
 

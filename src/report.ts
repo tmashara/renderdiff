@@ -5,7 +5,11 @@ import { CONTEXT_OPTIONS, type ResolvedConfig } from "./config.ts";
 import { floor4, fmtBand, fmtRegion, pct, signed } from "./format.ts";
 
 interface BaseResult {
+  /** The route: `/a`, or `/a::/b` for a pair. */
   url: string;
+  /** The path loaded on each side; both equal `url` unless it is a pair. */
+  left: string;
+  right: string;
   width: number;
 }
 

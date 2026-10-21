@@ -10,8 +10,51 @@ import type { Locator, Page } from "playwright";
  * Precedence is always: CLI flag > config file > built-in default.
  */
 
-/** A route to diff — a URL path. Extensionless, no trailing slash. `/` for the index. */
-export type Route = string;
+/**
+ * A route to diff: the path loaded on each side, normalized (no trailing slash, `/` for the
+ * index). Both are the same path unless the route is a pair.
+ */
+export interface Route {
+  left: string;
+  right: string;
+}
+
+/** A route as written: `/a`, the pair `/a::/b`, or `{ left, right? }` (right defaults to left). */
+export type RouteSpec = string | { left: string; right?: string };
+
+/** `pricing` / `/pricing/` -> `/pricing`; `/` stays `/`. */
+export const normalize = (url: string) => {
+  const trimmed = url.replace(/^\/+/, "").replace(/\/+$/, "");
+  return trimmed ? `/${trimmed}` : "/";
+};
+
+/** `/a` for a plain route, `/a::/b` for a pair — the route's name in stdout and results.json. */
+export const label = (r: Route) => (r.left === r.right ? r.left : `${r.left}::${r.right}`);
+
+/**
+ * Specs -> normalized, deduplicated routes; throws on an empty side or a glob. A string is a
+ * pair when it has a `::` followed by `/` (or ending it, so `/a::` is an empty side, not a
+ * literal), which keeps `?q=std::vector` and `/wiki/Talk:Foo` single routes.
+ */
+export function parseRoutes(specs: RouteSpec[]): Route[] {
+  const out = new Map<string, Route>();
+  for (const spec of specs) {
+    let sides: [string, string];
+    if (typeof spec === "string") {
+      const i = spec.search(/::(?=\/|$)/);
+      sides = i === -1 ? [spec, spec] : [spec.slice(0, i), spec.slice(i + 2)];
+    } else {
+      sides = [spec.left, spec.right ?? spec.left];
+    }
+    const shown = typeof spec === "string" ? spec : JSON.stringify(spec);
+    if (!sides[0] || !sides[1]) throw new Error(`route ${shown} has an empty side`);
+    const glob = sides.find((s) => s.includes("*"));
+    if (glob) throw new Error(`globs are not supported (${glob}) — pass literal paths.`);
+    const route = { left: normalize(sides[0]), right: normalize(sides[1]) };
+    out.set(label(route), route);
+  }
+  return [...out.values()];
+}
 
 /**
  * Viewports to compare at. Each value sits *inside* a common responsive band rather
@@ -113,7 +156,10 @@ export const MASK_COLOR = "#FF00FF";
  * drift.
  */
 export interface Mask {
-  /** Exact `urlPath` this applies to, e.g. `/pricing`. */
+  /**
+   * The route path this applies to, e.g. `/pricing`. On a pair it matches either side's
+   * path and paints both, so the noise still cancels.
+   */
   urlPath: string;
   /** Why it drifts — surfaced verbatim in the report. */
   reason: string;
@@ -127,7 +173,7 @@ export interface RenderdiffConfig {
   /** Right origin, e.g. `https://example.com`. A trailing slash is stripped. */
   right?: string;
   /** Routes to diff when none are passed on the command line. */
-  routes?: Route[];
+  routes?: RouteSpec[];
   /** Viewport widths. Replaces {@link DEFAULT_WIDTHS} outright. */
   widths?: number[];
   /** Fail the run if any comparison scores below this, 0..1. */
@@ -177,13 +223,9 @@ export function defineConfig(config: RenderdiffConfig): RenderdiffConfig {
   return config;
 }
 
-export function masksFor(
-  cfg: ResolvedConfig,
-  page: Page,
-  urlPath: string,
-): Locator[] {
+export function masksFor(cfg: ResolvedConfig, page: Page, route: Route): Locator[] {
   return cfg.masks
-    .filter((m) => m.urlPath === urlPath)
+    .filter((m) => m.urlPath === route.left || m.urlPath === route.right)
     .map((m) => m.locate(page));
 }
 
@@ -253,10 +295,27 @@ function validate(c: Record<string, unknown>, file: string) {
   for (const key of ["left", "right", "outDir", "extraCss"]) {
     if (c[key] !== undefined && typeof c[key] !== "string") bad(key, "a string");
   }
-  for (const key of ["routes", "blockUrlPatterns", "hideSelectors"]) {
+  for (const key of ["blockUrlPatterns", "hideSelectors"]) {
     if (c[key] !== undefined && !isStrArray(c[key])) {
       bad(key, "an array of strings");
     }
+  }
+  if (c.routes !== undefined) {
+    if (!Array.isArray(c.routes)) bad("routes", "an array");
+    (c.routes as unknown[]).forEach((r, i) => {
+      if (typeof r === "string") return;
+      if (typeof r !== "object" || r === null || Array.isArray(r)) {
+        bad(`routes[${i}]`, "a string or an object { left, right? }");
+      }
+      const o = r as Record<string, unknown>;
+      for (const key of Object.keys(o)) {
+        if (key !== "left" && key !== "right") {
+          throw new Error(`${file}: \`routes[${i}].${key}\` is not a route key (left, right)`);
+        }
+      }
+      if (typeof o.left !== "string") bad(`routes[${i}].left`, "a string");
+      if (o.right !== undefined && typeof o.right !== "string") bad(`routes[${i}].right`, "a string");
+    });
   }
   if (c.widths !== undefined) {
     if (
@@ -347,6 +406,6 @@ export function resolveConfig(
       STILL_CSS +
       `${hideSelectors.join(",")}{display:none!important}\n` +
       (file.extraCss ?? ""),
-    masks: file.masks ?? [],
+    masks: (file.masks ?? []).map((m) => ({ ...m, urlPath: normalize(m.urlPath) })),
   };
 }

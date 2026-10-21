@@ -202,6 +202,56 @@ describe("routes", () => {
   });
 });
 
+describe("positional origins", () => {
+  test("the first is left, the second right, in any position", async () => {
+    const r = await runCli(["--dry-run", "/a", L, "--width", "375", R], { noOut: true });
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(r.stdout, /http:\/\/left\.test\/a\s+\|\s+http:\/\/right\.test\/a/);
+  });
+
+  test("one positional origin is left; --right supplies the other", async () => {
+    const r = await runCli(["--dry-run", L, "/a", "--right", R], { noOut: true });
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(r.stdout, /http:\/\/left\.test\/a\s+\|\s+http:\/\/right\.test\/a/);
+  });
+
+  test("a third origin exits 2", () =>
+    rejects(["--dry-run", L, R, "http://third.test", "/a"], "at most two origins"));
+
+  test("a positional origin and the same side's flag exit 2", () =>
+    rejects(["--dry-run", L, "/a", "--left", R], "left origin given twice"));
+});
+
+describe("route pairs", () => {
+  test("a pair loads its own path on each side", async () => {
+    const r = await dry(["/pricing::/plans/"]);
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(r.stdout, /^  \/pricing::\/plans +http:\/\/left\.test\/pricing  \|  http:\/\/right\.test\/plans$/m);
+  });
+
+  test("a pair with identical sides is the plain route", async () => {
+    const r = await dry(["/a::/a", "/a", "a::/a/"]);
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(r.stdout, /^Routes: 1$/m);
+    assert.doesNotMatch(r.stdout, /::/);
+  });
+
+  test("an empty side exits 2", async () => {
+    await rejects(["--dry-run", L, R, "/a::"], "route /a:: has an empty side");
+    await rejects(["--dry-run", L, R, "::/a"], "route ::/a has an empty side");
+  });
+
+  test("a :: not followed by a slash stays part of one route", async () => {
+    const r = await dry(["/q?x=std::vector", "/wiki/Talk:Foo"]);
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(r.stdout, /^Routes: 2$/m);
+    assert.ok(r.stdout.includes(`${L}/q?x=std::vector  |  ${R}/q?x=std::vector`), r.stdout);
+  });
+
+  test("a glob on the right side is refused", () =>
+    rejects(["--dry-run", L, R, "/a::/blog/*"], "globs are not supported (/blog/*)"));
+});
+
 describe("preflight", () => {
   // Port 1 is reserved and never listening, so this is a closed port rather than a race
   // against something we just shut down.
