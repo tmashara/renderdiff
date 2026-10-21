@@ -22,7 +22,7 @@ import {
   cleanupTempDirs,
   context,
   runCli,
-  vdiffArgs,
+  renderdiffArgs,
   type CliResult,
 } from "../helpers/cli.ts";
 import { card, parseProgress, parseReport } from "../helpers/parse.ts";
@@ -50,7 +50,7 @@ after(async () => {
 /** One CLI run against the fixture site. */
 const capture = (routes: string[], opts: { widths?: number[]; config?: string } = {}) =>
   runCli(
-    vdiffArgs({
+    renderdiffArgs({
       left: site.left,
       right: site.right,
       routes,

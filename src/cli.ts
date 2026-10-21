@@ -2,13 +2,13 @@
 /**
  * Screenshot diff between two origins.
  *
- *   vdiff <route…> --left <url> --right <url>
+ *   renderdiff <route…> --left <url> --right <url>
  *
  * Screenshots the given routes on both origins at several viewport widths and
  * pixel-diffs them. Routes are required and literal — the tool does no route discovery.
  *
  * Per-site knobs (masks for content that drifts, extra selectors to hide, defaults for
- * the flags below) live in a `vdiff.config.ts` / `.mjs` in the working directory.
+ * the flags below) live in a `renderdiff.config.ts` / `.mjs` in the working directory.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -93,10 +93,10 @@ function parseArgs(argv: string[]): Args {
 }
 
 const HELP = `
-  vdiff — screenshot diff between two origins
+  renderdiff — screenshot diff between two origins
 
   Usage
-    vdiff <route…> --left <url> --right <url> [options]
+    renderdiff <route…> --left <url> --right <url> [options]
 
   Screenshots each route on both origins at several viewport widths, pixel-diffs the
   pairs, and writes a scored HTML report. Routes are literal paths — no globs, no
@@ -107,9 +107,9 @@ const HELP = `
     --right <url>       Right origin, e.g. https://example.com         (required)
     --width <n>         Viewport width; repeatable. Replaces the defaults.
     --threshold <0..1>  Fail if any comparison scores below this.
-    --out <dir>         Output directory                        (default: ./vdiff-out)
+    --out <dir>         Output directory                   (default: ./renderdiff-out)
     --concurrency <n>   Parallel workers                                 (default: 2)
-    --config <path>     Config file. Default: vdiff.config.{ts,mts,js,mjs} in cwd.
+    --config <path>     Config file. Default: renderdiff.config.{ts,mts,js,mjs} in cwd.
     --dry-run           Print the URL pairs and exit. No browser.
     --open              Open the report when the run finishes.
     -h, --help          Show this.
@@ -118,18 +118,18 @@ const HELP = `
   Default widths: 1440, 1152, 896, 704, 375
 
   Example
-    vdiff / /about /pricing --left http://localhost:3000 --right https://example.com
+    renderdiff / /about /pricing --left http://localhost:3000 --right https://example.com
 
   Config file
-    A vdiff.config.ts (or .mjs) in the working directory supplies defaults for the
+    A renderdiff.config.ts (or .mjs) in the working directory supplies defaults for the
     flags above, plus the things flags cannot express: per-route masks for content
     that legitimately drifts, extra selectors to hide, extra URLs to block.
     CLI flags always win over the config file.
 `;
 
 const usage = () => {
-  console.error("  Usage: vdiff <route…> --left <url> --right <url>");
-  console.error("  Try:   vdiff --help");
+  console.error("  Usage: renderdiff <route…> --left <url> --right <url>");
+  console.error("  Try:   renderdiff --help");
 };
 
 // A function declaration, not a const arrow: TypeScript only lets a `never`-returning

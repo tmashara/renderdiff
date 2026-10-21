@@ -2,10 +2,10 @@
  * Library entry point. The CLI (`dist/cli.js`) is the primary interface; this exists so
  * a config file can be type-checked:
  *
- *   import { defineConfig } from "vdiff";
+ *   import { defineConfig } from "renderdiff";
  *   export default defineConfig({ … });
  *
- * That import only resolves when `vdiff` is also installed in the project (or linked) —
+ * That import only resolves when `renderdiff` is also installed in the project (or linked) —
  * a globally-installed CLI is not importable from an arbitrary directory. A plain
  * object export works everywhere and needs nothing from this module.
  */
@@ -20,7 +20,7 @@ export {
   type Mask,
   type ResolvedConfig,
   type Route,
-  type VdiffConfig,
+  type RenderdiffConfig,
 } from "./config.ts";
 
 export {

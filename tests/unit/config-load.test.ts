@@ -29,7 +29,7 @@ const R = "http://right.test";
 
 /** A temp cwd holding the given fixture configs under the given names. */
 function cwdWith(files: Record<string, string>): string {
-  const cwd = tempDir("vdiff-cfg-");
+  const cwd = tempDir("renderdiff-cfg-");
   for (const [name, fixture] of Object.entries(files)) {
     fs.copyFileSync(path.join(CONFIGS, fixture), path.join(cwd, name));
   }
@@ -39,33 +39,33 @@ function cwdWith(files: Record<string, string>): string {
 const at = (fixture: string) => path.join(CONFIGS, fixture);
 
 describe("discovery", () => {
-  test("a vdiff.config.mjs in the working directory is found and echoed", async () => {
-    const cwd = cwdWith({ "vdiff.config.mjs": "ok.mjs" });
+  test("a renderdiff.config.mjs in the working directory is found and echoed", async () => {
+    const cwd = cwdWith({ "renderdiff.config.mjs": "ok.mjs" });
     const r = await runCli(["--dry-run", "/a", "--left", L, "--right", R], {
       cwd,
       noOut: true,
     });
     assert.equal(r.code, 0, r.stderr);
-    assert.match(r.stdout, /^Config: .*vdiff\.config\.mjs$/m);
+    assert.match(r.stdout, /^Config: .*renderdiff\.config\.mjs$/m);
   });
 
-  test("a vdiff.config.ts is found — the type-stripping path", async () => {
-    const cwd = cwdWith({ "vdiff.config.ts": "ok.ts" });
+  test("a renderdiff.config.ts is found — the type-stripping path", async () => {
+    const cwd = cwdWith({ "renderdiff.config.ts": "ok.ts" });
     const r = await runCli(["--dry-run", "/a", "--left", L, "--right", R], {
       cwd,
       noOut: true,
     });
     assert.equal(r.code, 0, r.stderr);
-    assert.match(r.stdout, /^Config: .*vdiff\.config\.ts$/m);
+    assert.match(r.stdout, /^Config: .*renderdiff\.config\.ts$/m);
   });
 
   test(".ts is probed before .mjs", async () => {
-    const cwd = cwdWith({ "vdiff.config.ts": "ok.ts", "vdiff.config.mjs": "ok.mjs" });
+    const cwd = cwdWith({ "renderdiff.config.ts": "ok.ts", "renderdiff.config.mjs": "ok.mjs" });
     const r = await runCli(["--dry-run", "/a", "--left", L, "--right", R], {
       cwd,
       noOut: true,
     });
-    assert.match(r.stdout, /^Config: .*vdiff\.config\.ts$/m);
+    assert.match(r.stdout, /^Config: .*renderdiff\.config\.ts$/m);
   });
 
   test("no config file is not an error — flags alone are enough", async () => {
@@ -75,7 +75,7 @@ describe("discovery", () => {
   });
 
   test("an unrelated filename is not picked up", async () => {
-    const cwd = cwdWith({ "vdiff.conf.mjs": "ok.mjs" });
+    const cwd = cwdWith({ "renderdiff.conf.mjs": "ok.mjs" });
     const r = await runCli(["--dry-run", "/a", "--left", L, "--right", R], {
       cwd,
       noOut: true,
@@ -93,7 +93,7 @@ describe("discovery", () => {
   });
 
   test("--config at a missing path exits 2 rather than falling back", async () => {
-    const cwd = cwdWith({ "vdiff.config.mjs": "ok.mjs" });
+    const cwd = cwdWith({ "renderdiff.config.mjs": "ok.mjs" });
     const r = await runCli(
       ["--dry-run", "/a", "--left", L, "--right", R, "--config", "nope.mjs"],
       { cwd, noOut: true },
@@ -173,9 +173,9 @@ describe("precedence", () => {
   });
 
   test("routes from the config are normalized too", async () => {
-    const cwd = tempDir("vdiff-cfg-");
+    const cwd = tempDir("renderdiff-cfg-");
     fs.writeFileSync(
-      path.join(cwd, "vdiff.config.mjs"),
+      path.join(cwd, "renderdiff.config.mjs"),
       'export default { routes: ["about", "/pricing/"] };\n',
     );
     const r = await runCli(["--dry-run", "--left", L, "--right", R], { cwd, noOut: true });
@@ -186,9 +186,9 @@ describe("precedence", () => {
   });
 
   test("a glob in the config is refused as well as one on the command line", async () => {
-    const cwd = tempDir("vdiff-cfg-");
+    const cwd = tempDir("renderdiff-cfg-");
     fs.writeFileSync(
-      path.join(cwd, "vdiff.config.mjs"),
+      path.join(cwd, "renderdiff.config.mjs"),
       'export default { routes: ["/blog/**"] };\n',
     );
     const r = await runCli(["--dry-run", "--left", L, "--right", R], { cwd, noOut: true });
@@ -197,9 +197,9 @@ describe("precedence", () => {
   });
 
   test("left and right can come from the config alone", async () => {
-    const cwd = tempDir("vdiff-cfg-");
+    const cwd = tempDir("renderdiff-cfg-");
     fs.writeFileSync(
-      path.join(cwd, "vdiff.config.mjs"),
+      path.join(cwd, "renderdiff.config.mjs"),
       `export default { left: "${L}", right: "${R}", routes: ["/a"] };\n`,
     );
     const r = await runCli(["--dry-run"], { cwd, noOut: true });
@@ -208,9 +208,9 @@ describe("precedence", () => {
   });
 
   test("a --left flag overrides the config's left", async () => {
-    const cwd = tempDir("vdiff-cfg-");
+    const cwd = tempDir("renderdiff-cfg-");
     fs.writeFileSync(
-      path.join(cwd, "vdiff.config.mjs"),
+      path.join(cwd, "renderdiff.config.mjs"),
       'export default { left: "http://from-config.test", right: "http://cfg-right.test", routes: ["/a"] };\n',
     );
     const r = await runCli(["--dry-run", "--left", L], { cwd, noOut: true });

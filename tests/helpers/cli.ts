@@ -5,7 +5,7 @@
  * Two rules are enforced here rather than left to each test:
  *
  *  1. **cwd is always a fresh temp directory.** `loadConfig()` probes cwd for
- *     `vdiff.config.{ts,mts,js,mjs}`. Running from the repo root would silently pick up a
+ *     `renderdiff.config.{ts,mts,js,mjs}`. Running from the repo root would silently pick up a
  *     config someone adds there later, and the failure would look like a test bug.
  *  2. **`--out` always points into a temp directory.** `run()` starts with
  *     `fs.rmSync(outDir, {recursive:true, force:true})`, so a mistargeted `--out` deletes
@@ -24,7 +24,7 @@ const CLI = path.join(REPO_ROOT, "src", "cli.ts");
 const tempDirs: string[] = [];
 
 /** A temp directory that `cleanupTempDirs()` will remove. */
-export function tempDir(prefix = "vdiff-test-"): string {
+export function tempDir(prefix = "renderdiff-test-"): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   tempDirs.push(dir);
   return dir;
@@ -66,8 +66,8 @@ export function runCli(
   args: string[],
   opts: CliOptions = {},
 ): Promise<CliResult> {
-  const cwd = opts.cwd ?? tempDir("vdiff-cwd-");
-  const outDir = path.join(tempDir("vdiff-out-"), "out");
+  const cwd = opts.cwd ?? tempDir("renderdiff-cwd-");
+  const outDir = path.join(tempDir("renderdiff-out-"), "out");
   const argv = opts.noOut ? [...args] : [...args, "--out", outDir];
 
   return new Promise((resolve, reject) => {
@@ -98,7 +98,7 @@ export function runCli(
       if (signal === "SIGKILL") {
         reject(
           new Error(
-            `vdiff timed out.\n--- stdout ---\n${stdout}\n--- stderr ---\n${stderr}`,
+            `renderdiff timed out.\n--- stdout ---\n${stdout}\n--- stderr ---\n${stderr}`,
           ),
         );
         return;
@@ -122,7 +122,7 @@ export function runCli(
  * Both origins plus routes, in the order the CLI wants them. Widths default to two — one
  * desktop, one mobile — because every capture costs a browser page load.
  */
-export function vdiffArgs(opts: {
+export function renderdiffArgs(opts: {
   left: string;
   right: string;
   routes: string[];

@@ -20,7 +20,7 @@ Three groups:
 
 ## Authoring rules
 
-Breaking any of these produces a flaky suite, and the flake looks like a vdiff bug.
+Breaking any of these produces a flaky suite, and the flake looks like a renderdiff bug.
 
 1. **Integer pixels only.** Fixed widths, fixed gaps, fixed heights. No percentage that
    doesn't divide evenly. Float `33.333%` and grid `1fr` round leftover space differently,

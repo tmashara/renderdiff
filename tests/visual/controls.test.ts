@@ -22,7 +22,7 @@ import {
   cleanupTempDirs,
   context,
   runCli,
-  vdiffArgs,
+  renderdiffArgs,
   type CliResult,
 } from "../helpers/cli.ts";
 import { card, parseProgress, parseReport, type Report } from "../helpers/parse.ts";
@@ -38,7 +38,7 @@ before(
   async () => {
     site = await startFixtureSite();
     run = await runCli(
-      vdiffArgs({
+      renderdiffArgs({
         left: site.left,
         right: site.right,
         routes: CONTROLS.map(toPath),
@@ -129,7 +129,7 @@ test("the height badge is rendered on the taller rows and nowhere else", () => {
 
 test("--threshold turns a low score into a failure", async () => {
   const r = await runCli(
-    vdiffArgs({
+    renderdiffArgs({
       left: site.left,
       right: site.right,
       routes: ["/shifted"],
@@ -145,7 +145,7 @@ test("--threshold turns a low score into a failure", async () => {
 
 test("the same run passes when no threshold is set", async () => {
   const r = await runCli(
-    vdiffArgs({
+    renderdiffArgs({
       left: site.left,
       right: site.right,
       routes: ["/shifted"],
@@ -158,7 +158,7 @@ test("the same run passes when no threshold is set", async () => {
 
 test("a threshold the run clears does not fail it", async () => {
   const r = await runCli(
-    vdiffArgs({
+    renderdiffArgs({
       left: site.left,
       right: site.right,
       routes: ["/shifted"],

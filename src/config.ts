@@ -4,8 +4,8 @@ import { pathToFileURL } from "node:url";
 import type { Locator, Page } from "playwright";
 
 /**
- * Configuration: built-in defaults, the user-facing `VdiffConfig` shape, and the
- * loader that merges a `vdiff.config.*` file into a `ResolvedConfig`.
+ * Configuration: built-in defaults, the user-facing `RenderdiffConfig` shape, and the
+ * loader that merges a `renderdiff.config.*` file into a `ResolvedConfig`.
  *
  * Precedence is always: CLI flag > config file > built-in default.
  */
@@ -21,7 +21,7 @@ export type Route = string;
 export const DEFAULT_WIDTHS = [1440, 1152, 896, 704, 375];
 
 /** Directory a run writes its screenshots and `report.html` into. Relative to cwd. */
-export const DEFAULT_OUT_DIR = "vdiff-out";
+export const DEFAULT_OUT_DIR = "renderdiff-out";
 
 /**
  * Captures run in parallel. Two by default — if one side points at a live site we are
@@ -108,8 +108,8 @@ export interface Mask {
   locate: (page: Page) => Locator;
 }
 
-/** The shape a `vdiff.config.*` file default-exports. Every field is optional. */
-export interface VdiffConfig {
+/** The shape a `renderdiff.config.*` file default-exports. Every field is optional. */
+export interface RenderdiffConfig {
   /** Left origin, e.g. `http://localhost:3000`. A trailing slash is stripped. */
   left?: string;
   /** Right origin, e.g. `https://example.com`. A trailing slash is stripped. */
@@ -149,7 +149,7 @@ export interface ResolvedConfig {
 }
 
 /** Identity helper — exists purely so editors type-check a config file. */
-export function defineConfig(config: VdiffConfig): VdiffConfig {
+export function defineConfig(config: RenderdiffConfig): RenderdiffConfig {
   return config;
 }
 
@@ -165,10 +165,10 @@ export function masksFor(
 
 /** Config filenames probed in cwd, in order. */
 const CONFIG_NAMES = [
-  "vdiff.config.ts",
-  "vdiff.config.mts",
-  "vdiff.config.js",
-  "vdiff.config.mjs",
+  "renderdiff.config.ts",
+  "renderdiff.config.mts",
+  "renderdiff.config.js",
+  "renderdiff.config.mjs",
 ];
 
 const isStrArray = (v: unknown): v is string[] =>
@@ -177,13 +177,10 @@ const isStrArray = (v: unknown): v is string[] =>
 /**
  * Load a config file. An explicit `--config` path must exist; otherwise cwd is probed
  * and finding nothing is fine — the CLI works with flags alone.
- *
- * `.ts` config files rely on Node's built-in type stripping (Node >= 22.18). On older
- * Node, use `.mjs`.
  */
 export async function loadConfig(
   explicitPath?: string,
-): Promise<{ config: VdiffConfig; path: string | null }> {
+): Promise<{ config: RenderdiffConfig; path: string | null }> {
   let file: string | null = null;
 
   if (explicitPath) {
@@ -208,11 +205,7 @@ export async function loadConfig(
     mod = (await import(pathToFileURL(file).href)) as { default?: unknown };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    const hint =
-      file.endsWith(".ts") || file.endsWith(".mts")
-        ? "\n  TypeScript config files need Node >= 22.18 (type stripping). Rename it to vdiff.config.mjs otherwise."
-        : "";
-    throw new Error(`could not load ${file}:\n  ${msg}${hint}`);
+    throw new Error(`could not load ${file}:\n  ${msg}`);
   }
 
   const config = mod.default;
@@ -224,7 +217,7 @@ export async function loadConfig(
   }
 
   validate(config as Record<string, unknown>, file);
-  return { config: config as VdiffConfig, path: file };
+  return { config: config as RenderdiffConfig, path: file };
 }
 
 /** Reject a malformed config here, naming the key, rather than deep inside a run. */
@@ -290,7 +283,7 @@ export interface CliOverrides {
 
 /** Merge built-in defaults, the config file, and CLI flags into one resolved config. */
 export function resolveConfig(
-  file: VdiffConfig,
+  file: RenderdiffConfig,
   cli: CliOverrides,
 ): ResolvedConfig {
   const left = cli.left ?? file.left;
@@ -302,7 +295,7 @@ export function resolveConfig(
   if (missing.length) {
     throw new Error(
       `${missing.join(" and ")} ${missing.length > 1 ? "are" : "is"} required ` +
-        `(pass on the command line, or set left/right in vdiff.config.*)`,
+        `(pass on the command line, or set left/right in renderdiff.config.*)`,
     );
   }
 

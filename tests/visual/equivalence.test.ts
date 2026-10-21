@@ -23,7 +23,7 @@ import {
   cleanupTempDirs,
   context,
   runCli,
-  vdiffArgs,
+  renderdiffArgs,
   type CliResult,
 } from "../helpers/cli.ts";
 import { card, parseProgress, parseReport, row, type Report } from "../helpers/parse.ts";
@@ -40,7 +40,7 @@ before(
   async () => {
     site = await startFixtureSite();
     run = await runCli(
-      vdiffArgs({
+      renderdiffArgs({
         left: site.left,
         right: site.right,
         routes: EQUIVALENCE.map(toPath),

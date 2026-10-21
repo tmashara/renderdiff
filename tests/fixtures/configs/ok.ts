@@ -1,6 +1,5 @@
 /**
- * A TypeScript config. Exercises the type-stripping load path, which is the one that needs
- * Node >= 22.18 and has its own error hint in `loadConfig`.
+ * A TypeScript config. Exercises the type-stripping load path.
  */
 interface FixtureConfig {
   routes: string[];

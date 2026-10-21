@@ -1,5 +1,5 @@
 /**
- * The only module that knows vdiff's output formats.
+ * The only module that knows renderdiff's output formats.
  *
  * A black-box suite has to read results back out of the two things the tool produces: the
  * progress lines on stdout and `report.html`. That coupling is real, so it lives in exactly

@@ -1,19 +1,17 @@
-// Copy to `vdiff.config.ts` in the directory you run `vdiff` from.
+// Copy to `renderdiff.config.ts` in the directory you run `renderdiff` from.
 //
-// Everything here is optional, and CLI flags always win over it. A `.ts` config needs
-// Node >= 22.18 (built-in type stripping); rename to `vdiff.config.mjs` and drop the
-// import/types if you are on older Node.
+// Everything here is optional, and CLI flags always win over it.
 //
-// The `defineConfig` import is only for editor types, and only resolves if `vdiff` is
+// The `defineConfig` import is only for editor types, and only resolves if `renderdiff` is
 // also a devDependency of this project. Without it, `export default { … }` is fine.
-import { defineConfig } from "vdiff";
+import { defineConfig } from "renderdiff";
 
 export default defineConfig({
   // The two origins. The tool has no notion of which is "prod" — it just diffs them.
   left: "http://localhost:3000",
   right: "https://example.com",
 
-  // Diffed when you run bare `vdiff` with no positional routes.
+  // Diffed when you run bare `renderdiff` with no positional routes.
   routes: ["/", "/about", "/pricing"],
 
   // Replaces the default set (1440, 1152, 896, 704, 375).
@@ -23,7 +21,7 @@ export default defineConfig({
   threshold: 0.97,
 
   // Relative to the directory you run in. Wiped at the start of each run.
-  outDir: "vdiff-out",
+  outDir: "renderdiff-out",
 
   // Captures run in parallel. Keep it low if the right origin is someone's live site.
   concurrency: 2,

@@ -1,7 +1,7 @@
 /**
  * The fixture site: two origins serving the same routes, one per side.
  *
- * vdiff compares `left + route` against `right + route`, so the corpus is modelled as two
+ * renderdiff compares `left + route` against `right + route`, so the corpus is modelled as two
  * origins over one directory tree — `pages/<route>/left.html` and `pages/<route>/right.html`.
  * Each server closes over its own side, so the same path yields different markup per origin,
  * which is exactly the situation the tool exists to measure.
@@ -170,5 +170,5 @@ export function listRoutes(): string[] {
     .sort();
 }
 
-/** Directory name -> the URL path vdiff should be given for it. */
+/** Directory name -> the URL path renderdiff should be given for it. */
 export const routePath = (dir: string) => (dir === "home" ? "/" : `/${dir}`);

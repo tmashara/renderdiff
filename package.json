@@ -1,11 +1,18 @@
 {
-  "name": "vdiff",
-  "version": "1.0.0",
+  "name": "renderdiff",
+  "version": "0.1.0",
   "description": "Screenshot diff between two origins — captures routes at several viewport widths, pixel-diffs them, writes a scored HTML report.",
   "type": "module",
   "license": "MIT",
+  "author": "Timur Mashara",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tmashara/renderdiff.git"
+  },
+  "homepage": "https://github.com/tmashara/renderdiff#readme",
+  "bugs": "https://github.com/tmashara/renderdiff/issues",
   "bin": {
-    "vdiff": "./dist/cli.js"
+    "renderdiff": "./dist/cli.js"
   },
   "exports": {
     ".": {
@@ -17,10 +24,10 @@
   "files": [
     "dist",
     "README.md",
-    "vdiff.config.example.ts"
+    "renderdiff.config.example.ts"
   ],
   "engines": {
-    "node": ">=20.11"
+    "node": ">=22.18"
   },
   "scripts": {
     "build": "tsc",

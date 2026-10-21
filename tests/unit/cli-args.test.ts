@@ -29,7 +29,7 @@ async function rejects(args: string[], needle: string) {
   assert.equal(r.code, 2, `expected exit 2 for ${args.join(" ")}\n${r.stderr}`);
   assert.match(r.stderr, new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   // A usage hint always follows, so a bad invocation is self-correcting.
-  assert.match(r.stderr, /Try:\s+vdiff --help/);
+  assert.match(r.stderr, /Try:\s+renderdiff --help/);
 }
 
 describe("help and version", () => {

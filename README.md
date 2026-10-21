@@ -1,4 +1,4 @@
-# vdiff
+# renderdiff
 
 Screenshot diff between two origins.
 
@@ -10,7 +10,7 @@ Useful for the "did I break anything?" question a test suite can't answer: a fra
 migration, a CSS refactor, a dependency bump, a staging-vs-production check.
 
 ```
-vdiff / /about /pricing --left http://localhost:3000 --right https://example.com
+renderdiff / /about /pricing --left http://localhost:3000 --right https://example.com
 ```
 
 ```
@@ -25,22 +25,28 @@ mean 99.12%   worst 97.41% (/about @1440)
     97.41%  /about@1440  height -112px
     99.87%  /pricing@375
 
-Report: /Users/you/site/vdiff-out/report.html
+Report: /Users/you/site/renderdiff-out/report.html
 ```
 
 ## Install
 
 ```bash
-npm install -g vdiff
+npm install -g renderdiff
 npx playwright install chromium   # once, if you don't already have it
 ```
 
-Requires Node >= 20.11.
+Requires Node >= 22.18.
+
+### Agent skill
+
+`skills/renderdiff/SKILL.md` teaches a coding agent to use renderdiff without fooling itself:
+read the diffs, not just the score. Install it with `npx skills add tmashara/renderdiff`, or
+copy the folder into `~/.claude/skills/`.
 
 ## Usage
 
 ```
-vdiff <route…> --left <url> --right <url> [options]
+renderdiff <route…> --left <url> --right <url> [options]
 ```
 
 | Flag | |
@@ -49,9 +55,9 @@ vdiff <route…> --left <url> --right <url> [options]
 | `--right <url>` | Right origin. Required. |
 | `--width <n>` | Viewport width; repeatable. Replaces the defaults. |
 | `--threshold <0..1>` | Exit non-zero if any comparison scores below this. |
-| `--out <dir>` | Output directory. Default `./vdiff-out`. |
+| `--out <dir>` | Output directory. Default `./renderdiff-out`. |
 | `--concurrency <n>` | Parallel workers. Default 2. |
-| `--config <path>` | Config file. Default: `vdiff.config.{ts,mts,js,mjs}` in cwd. |
+| `--config <path>` | Config file. Default: `renderdiff.config.{ts,mts,js,mjs}` in cwd. |
 | `--dry-run` | Print the URL pairs and exit. No browser. |
 | `--open` | Open the report when the run finishes. |
 | `-h, --help` / `-v, --version` | |
@@ -67,13 +73,13 @@ Exit codes: `0` all good · `1` a route errored or scored below `--threshold` ·
 
 ## Config file
 
-Flags cover a one-off run. A `vdiff.config.ts` (or `.mjs`) in the working directory
+Flags cover a one-off run. A `renderdiff.config.ts` (or `.mjs`) in the working directory
 covers a repo you diff repeatedly, and expresses the things flags can't: per-route
 **masks** for content that legitimately drifts, extra selectors to hide, extra URLs to
 block.
 
 ```ts
-import { defineConfig } from "vdiff";
+import { defineConfig } from "renderdiff";
 
 export default defineConfig({
   left: "http://localhost:3000",
@@ -95,17 +101,13 @@ export default defineConfig({
 });
 ```
 
-See [`vdiff.config.example.ts`](./vdiff.config.example.ts) for every field, annotated.
+See [`renderdiff.config.example.ts`](./renderdiff.config.example.ts) for every field, annotated.
 
 **Precedence: CLI flag > config file > built-in default.**
 
-Two notes on the file itself:
-
-- A `.ts` config relies on Node's built-in type stripping (Node >= 22.18). On older
-  Node use `vdiff.config.mjs`.
-- `import { defineConfig } from "vdiff"` is only for editor types, and only resolves if
-  `vdiff` is *also* installed in that project — a globally-installed CLI is not
-  importable from an arbitrary directory. `export default { … }` works everywhere.
+`import { defineConfig } from "renderdiff"` is only for editor types, and only resolves if
+`renderdiff` is *also* installed in that project — a globally-installed CLI is not
+importable from an arbitrary directory; `export default { … }` works everywhere.
 
 ## How it reads
 
@@ -160,7 +162,7 @@ npm install -g .   # install this working copy globally
 
 Source is TypeScript in `src/`, compiled to ESM in `dist/`. Import specifiers keep their
 `.ts` extension in source (`rewriteRelativeImportExtensions` rewrites them on emit), so
-`node src/cli.ts` also runs directly on Node >= 22.18.
+`node src/cli.ts` also runs directly.
 
 ## Tests
 
@@ -170,8 +172,7 @@ npm run test:visual  # drives Chromium over the fixture corpus, ~50s
 npm run test:all
 ```
 
-Built on `node:test`, no test dependencies. Running them needs Node >= 22.18 for type
-stripping (the package itself supports >= 20.11) and a Chromium for the visual tier:
+Built on `node:test`, no test dependencies. Running them needs a Chromium for the visual tier:
 `npx playwright install chromium`.
 
 The suite is black-box: it spawns `node src/cli.ts` and reads results back from stdout,
