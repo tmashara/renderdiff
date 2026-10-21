@@ -55,7 +55,7 @@ renderdiff <route…> --left <url> --right <url> [options]
 | `--right <url>` | Right origin. Required. |
 | `--width <n>` | Viewport width; repeatable. Replaces the defaults. |
 | `--threshold <0..1>` | Exit non-zero if any comparison scores below this. |
-| `--out <dir>` | Output directory. Default `./renderdiff-out`. |
+| `--out <dir>` | Output directory, wiped at the start of a run. Default `./renderdiff-out`. A non-empty directory that doesn't hold a previous report is refused. |
 | `--concurrency <n>` | Parallel workers. Default 2. |
 | `--config <path>` | Config file. Default: `renderdiff.config.{ts,mts,js,mjs}` in cwd. |
 | `--dry-run` | Print the URL pairs and exit. No browser. |

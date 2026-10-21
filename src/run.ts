@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { chromium, type Page } from "playwright";
+import { chromium, errors, type Page } from "playwright";
 import { capture, prepare, type Shot } from "./capture.ts";
 import { compare } from "./compare.ts";
 import type { ResolvedConfig, Route } from "./config.ts";
@@ -26,9 +26,43 @@ interface RunOpts {
 }
 
 const slug = (url: string) =>
-  url === "/" ? "index" : url.slice(1).replace(/\//g, "-");
+  url === "/"
+    ? "index"
+    : url.slice(1).toLowerCase().replace(/\//g, "-").replace(/[^a-z0-9-]/g, "_");
+
+/** Route -> file stem, unique across the run. Suffixes follow route order, so reruns agree. */
+function slugs(routes: Route[]): Map<Route, string> {
+  const out = new Map<Route, string>();
+  const used = new Set<string>();
+  for (const route of routes) {
+    let s = slug(route);
+    for (let n = 2; used.has(s); n++) s = `${slug(route)}-${n}`;
+    used.add(s);
+    out.set(route, s);
+  }
+  return out;
+}
+
+/** Only an absent, empty, or previous-renderdiff directory is safe to wipe. */
+function wipeable(dir: string): boolean {
+  if (!fs.existsSync(dir)) return true;
+  if (!fs.statSync(dir).isDirectory()) return false;
+  if (!fs.readdirSync(dir).length) return true;
+  const report = path.join(dir, "report.html");
+  return (
+    fs.existsSync(report) &&
+    fs.readFileSync(report, "utf8").includes("<title>Visual diff</title>")
+  );
+}
 
 export async function run({ routes, cfg, open }: RunOpts): Promise<number> {
+  if (!wipeable(cfg.outDir)) {
+    console.error(
+      `✗ --out ${cfg.outDir} is not empty and holds no previous renderdiff report — ` +
+        `refusing to wipe it. Pick a new or empty directory.`,
+    );
+    return 2;
+  }
   fs.rmSync(cfg.outDir, { recursive: true, force: true });
   fs.mkdirSync(cfg.outDir, { recursive: true });
 
@@ -36,6 +70,7 @@ export async function run({ routes, cfg, open }: RunOpts): Promise<number> {
   for (const route of routes)
     for (const width of cfg.widths) jobs.push({ route, width });
 
+  const stems = slugs(routes);
   const results: RouteResult[] = [];
   const browser = await launch();
   const queue = [...jobs];
@@ -70,7 +105,7 @@ export async function run({ routes, cfg, open }: RunOpts): Promise<number> {
         );
 
         const { diffPng, ...metrics } = await compare(leftShot, rightShot);
-        const base = `${slug(route)}.${width}`;
+        const base = `${stems.get(route)}.${width}`;
         const images = {
           left: `${base}.left.png`,
           right: `${base}.right.png`,
@@ -163,7 +198,11 @@ async function launch() {
   }
 }
 
-/** One retry: a live site can time out once on a cold edge. */
+const transient = (e: unknown) =>
+  e instanceof errors.TimeoutError ||
+  (e instanceof Error && /net::ERR_/.test(e.message));
+
+/** One retry for a transient failure: a live site can time out once on a cold edge. */
 async function shoot(
   page: Page,
   url: string,
@@ -173,7 +212,8 @@ async function shoot(
 ): Promise<Shot> {
   try {
     return await capture(page, url, urlPath, width, cfg);
-  } catch {
+  } catch (e) {
+    if (!transient(e)) throw e;
     await page.waitForTimeout(1000);
     return await capture(page, url, urlPath, width, cfg);
   }

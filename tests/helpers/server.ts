@@ -84,7 +84,7 @@ async function sharedFile(
   };
 }
 
-function handler(side: Side): http.RequestListener {
+function handler(side: Side, hits: Map<string, number>): http.RequestListener {
   return (req, res) => {
     void (async () => {
       // `preflight()` in src/cli.ts HEADs the origin root and refuses to start unless it
@@ -114,6 +114,7 @@ function handler(side: Side): http.RequestListener {
           return send(200, asset.type, asset.body);
         }
 
+        if (req.method === "GET") hits.set(pathname, (hits.get(pathname) ?? 0) + 1);
         const html = await pageHtml(pathname, side);
         if (html === null) return send(404, "text/html; charset=utf-8", "no such route");
         return send(200, "text/html; charset=utf-8", html);
@@ -128,11 +129,16 @@ export interface FixtureSite {
   /** Origin for the left side, e.g. `http://127.0.0.1:51234`. No trailing slash. */
   left: string;
   right: string;
+  /** Page GETs for a path so far, both origins combined. */
+  hits(pathname: string): number;
   close(): Promise<void>;
 }
 
-async function listen(side: Side): Promise<{ server: http.Server; origin: string }> {
-  const server = http.createServer(handler(side));
+async function listen(
+  side: Side,
+  hits: Map<string, number>,
+): Promise<{ server: http.Server; origin: string }> {
+  const server = http.createServer(handler(side, hits));
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const addr = server.address();
   if (addr === null || typeof addr === "string") {
@@ -143,10 +149,12 @@ async function listen(side: Side): Promise<{ server: http.Server; origin: string
 
 /** Start both origins on ephemeral ports. Always `close()` in an `after` hook. */
 export async function startFixtureSite(): Promise<FixtureSite> {
-  const [l, r] = await Promise.all([listen("left"), listen("right")]);
+  const hits = new Map<string, number>();
+  const [l, r] = await Promise.all([listen("left", hits), listen("right", hits)]);
   return {
     left: l.origin,
     right: r.origin,
+    hits: (pathname) => hits.get(pathname) ?? 0,
     close: async () => {
       await Promise.all(
         [l.server, r.server].map(
