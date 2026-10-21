@@ -57,7 +57,7 @@ export interface Summary {
 }
 
 const VERDICT =
-  /^renderdiff: (\d+) of (\d+) routes differ \((\d+) of (\d+) shots\), (\d+) errors?(?:, worst ([\d.]+)% (\S+)@(\d+))?(?:, (\d+) below ([\d.]+)%)? — (.+)$/;
+  /^renderdiff: (\d+) of (\d+) routes differ \((\d+) of (\d+) shots\), (\d+) errors?(?:, worst ([\d.]+)% (.+?)@(\d+))?(?:, (\d+) below ([\d.]+)%)? — (.+)$/;
 
 /** The compact summary printed when stdout is not a TTY. Throws when there is no verdict line. */
 export function parseSummary(stdout: string): Summary {

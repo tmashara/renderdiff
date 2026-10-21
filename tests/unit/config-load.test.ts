@@ -150,6 +150,10 @@ describe("validation", () => {
     ['{ masks: [{ reason: "x", selector: 1 }] }', /`masks\[0\]\.selector` must be a string/],
     ['{ routes: [{ left: "/a", selector: 1 }] }', /`routes\[0\]\.selector` must be a non-empty string or \{ left, right \}/],
     ['{ routes: [{ left: "/a", selector: "" }] }', /`routes\[0\]\.selector` must be/],
+    [
+      '{ routes: [{ left: "/a", selector: "xpath=//h1 | //h2" }, { left: "/a", selector: { left: "xpath=//h1", right: "//h2" } }] }',
+      /two routes both read as \/a \[xpath=\/\/h1 \| \/\/h2\]; change one of their selectors/,
+    ],
     ['{ routes: [{ left: "/a", selector: { left: ".a" } }] }', /`routes\[0\]\.selector` must be/],
   ];
   for (const [config, needle] of inline) {

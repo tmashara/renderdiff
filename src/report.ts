@@ -164,7 +164,7 @@ function section(rows: ComparedResult[]): string {
 <section>
   <p class="agg">mean <b class="${band(mean)}">${pct(mean)}</b> &middot;
      worst <b class="${band(worst.score)}">${pct(worst.score)}</b>
-     (${esc(worst.url)} @${worst.width}) &middot; ${sorted.length} comparison(s)</p>
+     (${esc(name(worst))} @${worst.width}) &middot; ${sorted.length} comparison(s)</p>
   ${sorted.map(card).join("\n")}
 </section>`;
 }

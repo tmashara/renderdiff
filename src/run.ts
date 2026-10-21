@@ -310,11 +310,11 @@ function summarize(results: RouteResult[], reportPath: string, resultsPath: stri
   if (compared.length) {
     const { sorted, mean, worst } = stats(compared);
     console.log(
-      `\nmean ${pct(mean)}   worst ${pct(worst.score)} (${worst.url} @${worst.width})`,
+      `\nmean ${pct(mean)}   worst ${pct(worst.score)} (${name(worst)} @${worst.width})`,
     );
     for (const r of sorted.slice(0, 10)) {
       console.log(
-        `    ${pct(r.score).padStart(7)}  ${r.url}@${r.width}` +
+        `    ${pct(r.score).padStart(7)}  ${name(r)}@${r.width}` +
           (r.heightDelta ? `  height ${signed(r.heightDelta)}px` : ""),
       );
     }
@@ -323,7 +323,7 @@ function summarize(results: RouteResult[], reportPath: string, resultsPath: stri
   const errors = results.filter((r): r is ErrorResult => r.status === "error");
   if (errors.length) {
     console.log(`\nErrors (${errors.length}):`);
-    for (const e of errors) console.log(`  ${e.url}@${e.width}: ${e.error}`);
+    for (const e of errors) console.log(`  ${name(e)}@${e.width}: ${e.error}`);
   }
 
   console.log(`\nReport: ${reportPath}`);
@@ -383,7 +383,7 @@ export function compact(
   out.push(
     `renderdiff: ${differ} of ${routes.length} routes differ (${shots} of ${results.length} shots), ` +
       `${errors} error${errors === 1 ? "" : "s"}` +
-      (worst ? `, worst ${pct(worst.score)} ${worst.url}@${worst.width}` : "") +
+      (worst ? `, worst ${pct(worst.score)} ${name(worst)}@${worst.width}` : "") +
       (threshold === null ? "" : `, ${compared.filter((r) => r.score < threshold).length} below ${pct(threshold)}`) +
       ` — ${resultsPath}`,
   );

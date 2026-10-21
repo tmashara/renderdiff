@@ -133,14 +133,17 @@ export async function capture(
       ),
     );
   }
-  const { scrollHeight, innerText, media } = await (el ?? page.locator("body")).evaluate((root) => {
-    const M = "img, svg, canvas, video, iframe, input, textarea, select";
+  const { scrollHeight, innerText, pageText, media } = await (el ?? page.locator(":root")).evaluate((root) => {
+    const body = document.body ?? document.documentElement;
     return {
       scrollHeight: document.documentElement.scrollHeight,
-      innerText: (root as HTMLElement).innerText || "",
-      media: [root, ...Array.from(root.querySelectorAll(M))].some((e) => {
+      innerText: ((root === document.documentElement ? body : root) as HTMLElement).innerText || "",
+      pageText: body.innerText?.length ?? 0,
+      media: Array.from(
+        document.querySelectorAll("img, svg, canvas, video, iframe, input, textarea, select"),
+      ).some((e) => {
         const r = e.getBoundingClientRect();
-        return e.matches(M) && r.width * r.height >= 1024;
+        return r.width * r.height >= 1024;
       }),
     };
   });
@@ -155,13 +158,7 @@ export async function capture(
     .split("\n")
     .map((line) => line.replace(/\s+/g, " ").trim())
     .filter(Boolean);
-  const empty = el ? !text.length : innerText.length < 200;
-  const blank =
-    !empty || media
-      ? null
-      : el
-        ? `selector "${selector}" has no text or media`
-        : `height=${scrollHeight}, text=${innerText.length} chars`;
+  const blank = pageText < 200 && !media ? `height=${scrollHeight}, text=${pageText} chars` : null;
   if (scrollHeight > MAX_PAGE_HEIGHT) {
     throw new Error(
       `page is ${scrollHeight}px tall, past the ${MAX_PAGE_HEIGHT}px sanity ceiling ` +
@@ -189,6 +186,9 @@ export async function capture(
     const x = Math.max(0, Math.floor(b.x));
     const y = Math.max(0, Math.floor(b.y));
     clip = { x, y, width: Math.ceil(b.x + b.width) - x, height: Math.ceil(b.y + b.height) - y };
+    if (clip.width <= 0 || clip.height <= 0) {
+      throw new Error(`selector "${selector}" is off the page ${where}`);
+    }
   }
   const boxes = (
     await Promise.all(

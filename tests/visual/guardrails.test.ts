@@ -123,6 +123,13 @@ describe("the render gate", () => {
     assert.match(report.errors[0]!.message, /HTTP 404/);
   });
 
+  test("a document with no <body> is refused at once, not after a wait for one", async () => {
+    const start = Date.now();
+    const run = await capture(["/frameset"]);
+    assert.match(run.stdout, /page did not render on either side/, context(run));
+    assert.ok(Date.now() - start < 5_000, `took ${Date.now() - start}ms${context(run)}`);
+  });
+
   test("a hidden SVG sprite does not count as rendered media", async () => {
     const run = await capture(["/sprite"]);
     assert.equal(run.code, 1, context(run));
@@ -364,21 +371,36 @@ describe("component scope", () => {
   const scoped = (routes: string[], flags: string[], config?: string) =>
     runCli([...renderdiffArgs({ left: site.left, right: site.right, routes, widths: [1440], config }), ...flags]);
 
-  test("a selector matching several elements errors, naming the count and side", async () => {
+  test("a selector matching several elements, or none, errors at once with the count and side", async () => {
     assert.equal(
       (fs.readFileSync(path.join(PAGES_DIR, "flex-vs-grid", "left.html"), "utf8").match(/<article\b/g) ?? []).length,
       6,
     );
-    const run = await scoped(["/flex-vs-grid"], ["--selector", "article"]);
+    const config = path.join(tempDir(), "counts.mjs");
+    fs.writeFileSync(
+      config,
+      'export default { routes: [{ left: "/flex-vs-grid", selector: "article" }, { left: "/flex-vs-grid", selector: ".nope" }] };\n',
+    );
+    const start = Date.now();
+    const run = await scoped([], [], config);
+    // Not after Playwright's 30s wait.
+    assert.ok(Date.now() - start < 5_000, `took ${Date.now() - start}ms${context(run)}`);
     assert.equal(run.code, 1, context(run));
     assert.match(run.stdout, /selector "article" matched 6 elements on left \(\/flex-vs-grid\), expected 1/, context(run));
+    assert.match(run.stdout, /selector "\.nope" matched 0 elements on left/, context(run));
   });
 
-  test("a selector matching nothing errors at once, not after Playwright's 30s wait", async () => {
-    const start = Date.now();
-    const run = await scoped(["/flex-vs-grid"], ["--selector", ".nope"]);
-    assert.match(run.stdout, /selector "\.nope" matched 0 elements on left/, context(run));
-    assert.ok(Date.now() - start < 5_000, `took ${Date.now() - start}ms${context(run)}`);
+  test("an element with no text that differs only in colour is scored, not refused as blank", async () => {
+    const run = await scoped(["/stripe"], ["--selector", ".plain"]);
+    assert.equal(run.code, 0, context(run));
+    const r = result(results(run.outDir), "/stripe", 1440);
+    assert.ok(r.score < 1 && r.diffPixels > 0, context(run));
+  });
+
+  test("an element whose only text is masked compares clean", async () => {
+    const run = await scoped(["/drifting"], ["--selector", "[data-drift]"], path.join(CONFIGS, "mask-selector.mjs"));
+    assert.equal(run.code, 0, context(run));
+    assert.deepEqual(parseSummary(run.stdout).clean, ["/drifting [[data-drift]]"], context(run));
   });
 
   test("an element identical on both sides scores 100%, and its route reads as clean", async () => {
@@ -446,6 +468,7 @@ describe("component scope", () => {
     const summary = parseSummary(run.stdout);
     assert.deepEqual(summary.clean, ["/color [h1]"], context(run));
     assert.ok(summary.routes.has("/color [.swatch >> nth=2]"), context(run));
+    assert.equal(summary.verdict.worst?.route, "/color [.swatch >> nth=2]", context(run));
   });
 });
 

@@ -77,6 +77,10 @@ export function parseRoutes(specs: RouteSpec[], selector?: Sides): Route[] {
       right: normalize(sides[1]),
       selector: selector ?? (typeof own === "string" ? { left: own, right: own } : (own ?? null)),
     };
+    const same = out.get(name(route));
+    if (same && JSON.stringify(same) !== JSON.stringify(route)) {
+      throw new Error(`two routes both read as ${name(route)}; change one of their selectors`);
+    }
     out.set(name(route), route);
   }
   return [...out.values()];
