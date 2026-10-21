@@ -55,6 +55,7 @@ function parseArgs(argv: string[]): Args {
   };
   const origins: string[] = [];
   const sel: { both?: string; left?: string; right?: string } = {};
+  const state: typeof sel = {};
   for (let i = 0; i < argv.length; i++) {
     const raw = argv[i]!;
     // Accept both `--flag value` and `--flag=value`.
@@ -86,6 +87,10 @@ function parseArgs(argv: string[]): Args {
       const s = next();
       if (!s) throw new Error(`${v} needs a value`);
       sel[v === "--selector" ? "both" : v === "--left-selector" ? "left" : "right"] = s;
+    } else if (v === "--storage-state" || v === "--left-storage-state" || v === "--right-storage-state") {
+      const s = next();
+      if (!s) throw new Error(`${v} needs a value`);
+      state[v === "--storage-state" ? "both" : v === "--left-storage-state" ? "left" : "right"] = s;
     }
     else if (v === "--width") {
       const w = num("--width", next());
@@ -122,6 +127,9 @@ function parseArgs(argv: string[]): Args {
     throw new Error(`--${has}-selector needs --${lacks}-selector or --selector`);
   }
   if (left && right) a.selector = { left, right };
+  if (state.both || state.left || state.right) {
+    a.storageState = { left: state.left ?? state.both, right: state.right ?? state.both };
+  }
   return a;
 }
 
@@ -141,6 +149,11 @@ const HELP = `
   With --selector, each side compares the one element it matches instead of the page;
   it must match exactly one. It applies to every route, over the config's own selectors.
 
+  With --storage-state, each side starts with that Playwright storage state (cookies,
+  localStorage), e.g. signed in. Make one with:
+    npx playwright codegen --save-storage=auth.json <url>
+  A before hook in the config runs on each page before it is shot, e.g. to open a menu.
+
   Writes report.html, results.json and crops of each change to --out. Exits 1 if a
   route errors or falls below --threshold, 2 on bad arguments or an origin that is down.
 
@@ -155,6 +168,10 @@ const HELP = `
     --selector <sel>    Compare one element (a Playwright selector) on both sides.
     --left-selector <sel>, --right-selector <sel>
                         That side's selector, over --selector.
+    --storage-state <file>
+                        Start both sides with this storage state JSON. Never commit it.
+    --left-storage-state <file>, --right-storage-state <file>
+                        That side's storage state, over --storage-state.
     --dry-run           Print the URL pairs and exit. No browser.
     --open              Open the report when the run finishes.
     --progress          A line per shot as it finishes. The default on a terminal;

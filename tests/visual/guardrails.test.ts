@@ -535,6 +535,49 @@ describe("before hooks", () => {
   });
 });
 
+describe("storage state", () => {
+  const SECRET = "s3cret-session-token";
+  const authIn = (dir: string) => {
+    fs.writeFileSync(
+      path.join(dir, "auth.json"),
+      JSON.stringify({
+        cookies: [{ name: "session", value: SECRET, domain: "127.0.0.1", path: "/", expires: -1, httpOnly: false, secure: false, sameSite: "Lax" }],
+        origins: [],
+      }),
+    );
+    return dir;
+  };
+  const leaks = (run: CliResult) =>
+    [run.stdout, run.stderr, run.report() ?? "", fs.readFileSync(run.file("results.json"), "utf8")].some((s) => s.includes(SECRET));
+
+  test("one side's file signs in that side only, and only its name is recorded", async () => {
+    const cwd = authIn(tempDir("renderdiff-cwd-"));
+    const run = await runCli(
+      [...renderdiffArgs({ left: site.left, right: site.right, routes: ["/signed-in"], widths: [1440] }), "--left-storage-state", "auth.json"],
+      { cwd },
+    );
+    assert.equal(run.code, 0, context(run));
+    const res = results(run.outDir);
+    const r = result(res, "/signed-in", 1440);
+    assert.deepEqual([r.text.added, r.text.removed], [["Signed in as tester"], ["Signed out"]], context(run));
+    assert.deepEqual(res.meta.storageState, { left: "auth.json", right: null });
+    assert.ok(run.report()!.includes("left storage state <code>auth.json</code>"), context(run));
+    assert.ok(!leaks(run), "the storage state's contents were written out");
+  });
+
+  test("a config's file, relative to the config, signs in both sides", async () => {
+    const dir = authIn(tempDir());
+    fs.writeFileSync(path.join(dir, "c.mjs"), 'export default { storageState: "auth.json" };\n');
+    const run = await capture(["/signed-in"], { config: path.join(dir, "c.mjs") });
+    assert.equal(run.code, 0, context(run));
+    const res = results(run.outDir);
+    const r = result(res, "/signed-in", 1440);
+    assert.deepEqual([r.text.added, r.text.removed], [["Signed in as tester"], ["Signed in as tester (right)"]], context(run));
+    assert.deepEqual(res.meta.storageState, { left: "auth.json", right: "auth.json" });
+    assert.ok(!leaks(run), "the storage state's contents were written out");
+  });
+});
+
 describe("network blocking", () => {
   test("an unblocked third-party script rewrites the page and costs the score", async () => {
     const run = await capture(["/tracker"]);

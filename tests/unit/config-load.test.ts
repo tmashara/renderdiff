@@ -157,6 +157,8 @@ describe("validation", () => {
     ['{ routes: [{ left: "/a", selector: { left: ".a" } }] }', /`routes\[0\]\.selector` must be/],
     ['{ before: "click" }', /`before` must be a function/],
     ['{ routes: [{ left: "/a", before: {} }] }', /`routes\[0\]\.before` must be a function/],
+    ['{ storageState: 1 }', /`storageState` must be a non-empty path/],
+    ['{ storageState: { left: "a.json", center: "b.json" } }', /`storageState` must be a non-empty path/],
   ];
   for (const [config, needle] of inline) {
     test(`${config} exits 2 and names the problem`, async () => {
@@ -167,6 +169,17 @@ describe("validation", () => {
       assert.match(r.stderr, needle);
     });
   }
+
+  test("a config storageState resolves from the config file's directory, not cwd", async () => {
+    const dir = tempDir("renderdiff-cfg-");
+    fs.writeFileSync(path.join(dir, "c.mjs"), 'export default { storageState: { right: "auth.json" } };\n');
+    const r = await runCli(["--dry-run", "/a", "--left", L, "--right", R, "--config", path.join(dir, "c.mjs")], { noOut: true });
+    assert.equal(r.code, 2, r.stderr);
+    assert.ok(r.stderr.includes(`storage state file not found: ${path.join(dir, "auth.json")}`), r.stderr);
+    fs.writeFileSync(path.join(dir, "auth.json"), '{"cookies":[],"origins":[]}');
+    const ok = await runCli(["--dry-run", "/a", "--left", L, "--right", R, "--config", path.join(dir, "c.mjs")], { noOut: true });
+    assert.equal(ok.code, 0, ok.stderr);
+  });
 
   test("object routes sit beside strings; right defaults to left", async () => {
     const cwd = tempDir("renderdiff-cfg-");

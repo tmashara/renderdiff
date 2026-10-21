@@ -105,8 +105,8 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
 
   const worker = async () => {
     // One context per origin so cookies/localStorage never cross between them.
-    const leftCtx = await browser.newContext(CONTEXT_OPTIONS);
-    const rightCtx = await browser.newContext(CONTEXT_OPTIONS);
+    const leftCtx = await browser.newContext({ ...CONTEXT_OPTIONS, storageState: cfg.storageState.left ?? undefined });
+    const rightCtx = await browser.newContext({ ...CONTEXT_OPTIONS, storageState: cfg.storageState.right ?? undefined });
     const leftPage = await leftCtx.newPage();
     const rightPage = await rightCtx.newPage();
     await prepare(leftPage, cfg, now);
@@ -241,6 +241,10 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
     blockUrlPatterns: cfg.blockUrlPatterns,
     hideSelectors: cfg.hideSelectors,
     masks: cfg.masks.map(({ urlPath, reason }) => ({ urlPath, reason })),
+    storageState: {
+      left: cfg.storageState.left && path.basename(cfg.storageState.left),
+      right: cfg.storageState.right && path.basename(cfg.storageState.right),
+    },
   };
   const reportPath = await writeReport(results, meta, cfg);
   const resultsPath = writeResults(results, meta, cfg.outDir);

@@ -79,6 +79,8 @@ export interface RunMeta {
   hideSelectors: string[];
   /** `urlPath` is absent for a mask that applies to every route. */
   masks: { urlPath?: string; reason: string }[];
+  /** The storage state file's basename per side, or null. Never its contents. */
+  storageState: { left: string | null; right: string | null };
 }
 
 export interface Summary {
@@ -289,7 +291,12 @@ export async function writeReport(
 <h1>Visual diff</h1>
 <p class="meta">
   left <code>${esc(meta.left)}</code> vs right <code>${esc(meta.right)}</code><br>
-  ${esc(meta.generatedAt)}
+  ${esc(meta.generatedAt)}${
+    (["left", "right"] as const)
+      .filter((s) => meta.storageState[s])
+      .map((s) => ` &middot; ${s} storage state <code>${esc(meta.storageState[s]!)}</code>`)
+      .join("")
+  }
 </p>
 
 ${section(compared)}

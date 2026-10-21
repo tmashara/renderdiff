@@ -221,6 +221,11 @@ export interface RenderdiffConfig {
   routes?: RouteSpec[];
   /** A {@link Hook} for every route without its own `before`, CLI routes included. */
   before?: Hook;
+  /**
+   * Playwright storage state files (cookies, localStorage) to start each side with, e.g. to be
+   * signed in. One path for both sides, or per side. Relative to the config file.
+   */
+  storageState?: string | { left?: string; right?: string };
   /** Viewport widths. Replaces {@link DEFAULT_WIDTHS} outright. */
   widths?: number[];
   /** Fail the run if any comparison scores below this, 0..1. */
@@ -253,6 +258,8 @@ export interface ResolvedConfig {
   /** The complete stylesheet injected into every page. */
   neutralizeCss: string;
   masks: Mask[];
+  /** Absolute storage state paths, checked to be JSON; null for a side without one. */
+  storageState: { left: string | null; right: string | null };
 }
 
 /** package.json's version; the same relative path resolves from `src/` and `dist/`. */
@@ -330,7 +337,13 @@ export async function loadConfig(
   }
 
   validate(config as Record<string, unknown>, file);
-  return { config: config as RenderdiffConfig, path: file };
+  const c = config as RenderdiffConfig;
+  const s = c.storageState;
+  if (s === undefined) return { config: c, path: file };
+  const at = (p?: string) => p && path.resolve(path.dirname(file), p);
+  const storageState =
+    typeof s === "string" ? at(s)! : { left: at(s.left), right: at(s.right) };
+  return { config: { ...c, storageState }, path: file };
 }
 
 /** Reject a malformed config here, naming the key, rather than deep inside a run. */
@@ -349,6 +362,17 @@ function validate(c: Record<string, unknown>, file: string) {
   }
   const hook = "a function (page, { side, route, width }) => Promise<void>";
   if (c.before !== undefined && typeof c.before !== "function") bad("before", hook);
+  const s = c.storageState as Record<string, unknown> | undefined;
+  if (
+    s !== undefined &&
+    !(typeof s === "string" && s) &&
+    !(
+      typeof s === "object" && s !== null && Object.keys(s).length &&
+      Object.entries(s).every(([k, v]) => ["left", "right"].includes(k) && typeof v === "string" && v)
+    )
+  ) {
+    bad("storageState", "a non-empty path, or { left?, right? } of non-empty paths");
+  }
   if (c.routes !== undefined) {
     if (!Array.isArray(c.routes)) bad("routes", "an array");
     (c.routes as unknown[]).forEach((r, i) => {
@@ -436,6 +460,8 @@ export interface CliOverrides {
   threshold?: number;
   outDir?: string;
   concurrency?: number;
+  /** Per side, from --storage-state / --left-storage-state / --right-storage-state. */
+  storageState?: { left?: string; right?: string };
 }
 
 /** Merge built-in defaults, the config file, and CLI flags into one resolved config. */
@@ -456,6 +482,11 @@ export function resolveConfig(
           : "right origin is required (second positional URL, --right, or right in renderdiff.config.*)",
     );
   }
+
+  const fileState =
+    typeof file.storageState === "string"
+      ? { left: file.storageState, right: file.storageState }
+      : file.storageState;
 
   const hideSelectors = [
     ...DEFAULT_HIDE_SELECTORS,
@@ -484,5 +515,32 @@ export function resolveConfig(
     masks: (file.masks ?? []).map((m) =>
       m.urlPath === undefined ? m : { ...m, urlPath: normalize(m.urlPath) },
     ),
+    storageState: {
+      left: storageFile(cli.storageState?.left ?? fileState?.left),
+      right: storageFile(cli.storageState?.right ?? fileState?.right),
+    },
   };
+}
+
+/** Absolute path to a storage state file that parses as a JSON object. Never echoes its contents. */
+function storageFile(p: string | undefined): string | null {
+  if (!p) return null;
+  const file = path.resolve(process.cwd(), p);
+  let text: string;
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch {
+    throw new Error(`storage state file not found: ${file}`);
+  }
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    // Not the parse error's message: it quotes the file, which holds session tokens.
+    throw new Error(`storage state file is not valid JSON: ${file}`);
+  }
+  if (typeof json !== "object" || json === null || Array.isArray(json)) {
+    throw new Error(`storage state file is not a JSON object: ${file}`);
+  }
+  return file;
 }
