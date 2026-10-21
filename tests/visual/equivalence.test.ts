@@ -106,6 +106,17 @@ for (const dir of EQUIVALENCE) {
       assert.equal(row(parseProgress(run.stdout), route, width).score, card(report, route, width).score);
     });
 
+    test(`${dir} @${width} has no regions, no bands and no text diff`, () => {
+      const r = row(parseProgress(run.stdout), route, width);
+      assert.equal(r.regions, 0, context(run));
+      assert.deepEqual(r.bands, []);
+      assert.equal(r.alignedScore, null);
+      assert.equal(r.unaligned, false);
+      assert.equal(r.added + r.removed, 0, `same text on both sides${context(run)}`);
+      const c = card(report, route, width);
+      assert.deepEqual([c.regions, c.added, c.removed], [[], [], []]);
+    });
+
     test(`${dir} @${width} writes all three images`, () => {
       const c = card(report, route, width);
       assert.equal(c.images.length, 3, "expected left, right and diff");

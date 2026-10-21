@@ -6,9 +6,10 @@
  * one file — if `run.ts`'s log line or `report.ts`'s markup changes, this is the only place
  * that needs fixing.
  *
- * Scores come from stdout (a stable one-line-per-comparison format). The report is parsed
- * only for claims that are specific to the report: pixel counts, image filenames, the
- * Errors section, and the "What was neutralized" disclosure.
+ * Scores come from stdout (one line per comparison, plus indented detail lines for regions,
+ * bands and text-diff counts). The report is parsed only for claims that are specific to
+ * the report: pixel counts, image filenames, the listed regions and text lines, the Errors
+ * section, and the "What was neutralized" disclosure.
  */
 
 export interface ProgressRow {
@@ -20,24 +21,73 @@ export interface ProgressRow {
   heightDelta: number;
   /** Pixels painted out as unstable. 0 when the badge was absent. */
   unstablePixels: number;
+  /** Diff region count, and the largest region's box (null when there are none). */
+  regions: number;
+  largest: Box | null;
+  /** `delta` is signed like `heightDelta`: + for rows only left has, − for rows only right has. */
+  bands: { delta: number; y: number; side: "left" | "right" }[];
+  /** Null when no aligned score was printed. */
+  alignedScore: number | null;
+  /** True when the rows were too different to align. */
+  unaligned: boolean;
+  added: number;
+  removed: number;
+}
+
+export interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 /** `  [2/15] 97.41%  /about @1440  (height -112px)  (unstable 1,024px)` — or `ERROR` in place of the score. */
 const PROGRESS =
   /^\s*\[\d+\/\d+\]\s+(ERROR|[\d.]+%)\s+(\S+)\s+@(\d+)(?:\s+\(height ([+-]?\d+)px\))?(?:\s+\(unstable ([\d,]+)px\))?\s*$/;
 
+/** Indented detail lines under a progress row, e.g. `        3 regions, largest 412×88 at (0,1240)`. */
+const REGIONS = /^\s+(\d+) regions?, largest (\d+)×(\d+) at \((\d+),(\d+)\)$/;
+const BAND = /^\s+band ([+-]\d+)px at y=(\d+) \((left|right)\)$/;
+const ALIGNED = /^\s+aligned ([\d.]+)%$/;
+const TEXT = /^\s+text: (\d+) added, (\d+) removed$/;
+
 export function parseProgress(stdout: string): ProgressRow[] {
   const rows: ProgressRow[] = [];
   for (const line of stdout.split("\n")) {
     const m = PROGRESS.exec(line);
-    if (!m) continue;
-    rows.push({
-      route: m[2]!,
-      width: Number(m[3]),
-      score: m[1] === "ERROR" ? null : Number(m[1]!.slice(0, -1)) / 100,
-      heightDelta: m[4] ? Number(m[4]) : 0,
-      unstablePixels: m[5] ? num(m[5]) : 0,
-    });
+    if (m) {
+      rows.push({
+        route: m[2]!,
+        width: Number(m[3]),
+        score: m[1] === "ERROR" ? null : Number(m[1]!.slice(0, -1)) / 100,
+        heightDelta: m[4] ? Number(m[4]) : 0,
+        unstablePixels: m[5] ? num(m[5]) : 0,
+        regions: 0,
+        largest: null,
+        bands: [],
+        alignedScore: null,
+        unaligned: false,
+        added: 0,
+        removed: 0,
+      });
+      continue;
+    }
+    const last = rows.at(-1);
+    if (!last) continue;
+    let d;
+    if ((d = REGIONS.exec(line))) {
+      last.regions = Number(d[1]);
+      last.largest = { w: Number(d[2]), h: Number(d[3]), x: Number(d[4]), y: Number(d[5]) };
+    } else if ((d = BAND.exec(line))) {
+      last.bands.push({ delta: Number(d[1]), y: Number(d[2]), side: d[3] as "left" | "right" });
+    } else if ((d = ALIGNED.exec(line))) {
+      last.alignedScore = Number(d[1]) / 100;
+    } else if ((d = TEXT.exec(line))) {
+      last.added = Number(d[1]);
+      last.removed = Number(d[2]);
+    } else if (/^\s+rows too different to align$/.test(line)) {
+      last.unaligned = true;
+    }
   }
   return rows;
 }
@@ -63,6 +113,13 @@ export interface ReportCard {
   diffPixels: number;
   totalPixels: number;
   unstablePixels: number;
+  /** Null when the card shows no aligned score. */
+  alignedScore: number | null;
+  /** The listed regions (the card caps the list). */
+  regions: (Box & { pixels: number })[];
+  /** The text-diff lines listed on the card: left-only and right-only. */
+  added: string[];
+  removed: string[];
   images: string[];
 }
 
@@ -84,6 +141,8 @@ export interface Report {
 }
 
 const num = (s: string) => Number(s.replace(/,/g, ""));
+const unesc = (s: string) =>
+  s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
 
 function between(html: string, start: string, end: string): string {
   const i = html.indexOf(start);
@@ -108,6 +167,7 @@ export function parseReport(html: string): Report {
     const height = /<span class="delta">height ([+-]?\d+)px<\/span>/.exec(card);
     const wDelta = /<span class="delta">width ([+-]?\d+)px<\/span>/.exec(card);
     const unstable = /<span class="unstable">([\d,]+) px unstable<\/span>/.exec(card);
+    const aligned = /<span class="aligned">aligned ([\d.]+)%<\/span>/.exec(card);
     cards.push({
       route: route[1]!,
       width: Number(width[1]),
@@ -118,6 +178,18 @@ export function parseReport(html: string): Report {
       diffPixels: num(px[1]!),
       totalPixels: num(px[2]!),
       unstablePixels: unstable ? num(unstable[1]!) : 0,
+      alignedScore: aligned ? Number(aligned[1]) / 100 : null,
+      regions: [
+        ...card.matchAll(/<li>(\d+)×(\d+) at \((\d+),(\d+)\) — ([\d,]+) px<\/li>/g),
+      ].map((m) => ({
+        w: Number(m[1]),
+        h: Number(m[2]),
+        x: Number(m[3]),
+        y: Number(m[4]),
+        pixels: num(m[5]!),
+      })),
+      added: [...card.matchAll(/<li class="add">\+ ([^<]*)<\/li>/g)].map((m) => unesc(m[1]!)),
+      removed: [...card.matchAll(/<li class="del">- ([^<]*)<\/li>/g)].map((m) => unesc(m[1]!)),
       images: [...card.matchAll(/<a href="([^"]+)"/g)].map((m) => m[1]!),
     });
   }
