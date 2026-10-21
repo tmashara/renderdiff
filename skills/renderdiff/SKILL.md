@@ -77,10 +77,11 @@ site — you're a guest there.
 | --- | --- |
 | Magenta bands | One side is taller/wider; the shorter image is padded, and the padding counts against the score on purpose. The `height ±Npx` badge names it. |
 | Score ~100% on every route | Suspect before you celebrate. Confirm both sides actually rendered — two identical error pages diff at ~100%. |
-| `page did not render (height=…, text=…)` | renderdiff refused a shot under 800px tall or under 200 chars of text rather than score a blank as a match. Usually a 404, a failed asset, or a dev server not ready. |
+| `HTTP 404 at …` (or any status ≥ 400) | That side answered with an error status. Usually a route that doesn't exist on one origin, or a dev server not ready. |
+| `page did not render on either side (…)` | Both sides had under 200 chars of text and no images, canvas, video or form controls, so renderdiff refused to score two blanks as a match. Usually a failed asset or an app that never mounted. One blank side isn't refused — it shows up as a low score. |
 | `ERROR` rows | Unmeasured, not failed. They exit 1 because an unmeasured route isn't a verified one. Report them as unverified. |
 | Uniform low score, whole page shifted | Almost always a height or font-loading difference near the top pushing everything down. Compare the top of left vs right. |
-| A masked route warns about tiling | Pages over 16,384px are captured in stitched tiles, where masks can't be applied — that route's masked drift is counting against the score. |
+| `unstable Npx` badge | Pixels that kept changing between shots of the same load on one origin (a ticker, a carousel, a video). Painted out on both sides, so they don't count. A large number means a big region went unmeasured — look at the magenta on the images. |
 
 Report colouring: green above 99.5%, amber to 97%, red below.
 
