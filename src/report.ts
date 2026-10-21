@@ -80,6 +80,10 @@ export function stats(rows: ComparedResult[]) {
   return { sorted, mean, worst: sorted[0]! };
 }
 
+/** Scores to 4 decimals, the precision the report's two-place percentages show. */
+const round = (key: string, v: unknown) =>
+  typeof v === "number" && /^(score|alignedScore|mean)$/.test(key) ? Math.round(v * 1e4) / 1e4 : v;
+
 export function writeResults(
   results: RouteResult[],
   meta: RunMeta,
@@ -105,8 +109,15 @@ export function writeResults(
           : compared.filter((r) => r.score < meta.threshold!).length,
     },
   };
+  const rows = results.map((r) => `    ${JSON.stringify(r, round)}`).join(",\n");
+  // One record per line: greppable, and a reader can pull one route without parsing the rest.
+  const json = JSON.stringify({ ...out, results: [] }, round, 2).replace(
+    '"results": []',
+    // A function, so a `$` in a route or text line isn't read as a replacement pattern.
+    () => (rows ? `"results": [\n${rows}\n  ]` : '"results": []'),
+  );
   const file = path.join(outDir, "results.json");
-  fs.writeFileSync(file, JSON.stringify(out, null, 2) + "\n");
+  fs.writeFileSync(file, json + "\n");
   return file;
 }
 
