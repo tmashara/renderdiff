@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layout parity</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* CONTROL. Same deck as the left side, eight more pixels of gutter. Geometry is pinned so
+   the narrower container shifts the content without reflowing it. */
+.deck { display: grid; grid-template-columns: repeat(2, var(--card-w)); gap: var(--gap); }
+.page { padding-left: 24px; padding-right: 24px; }
+@media (max-width: 480px) {
+  .deck { grid-template-columns: var(--card-w); gap: var(--gap-mobile); }
+  .card { width: var(--card-w); }
+  h1, .lede, .notes { width: var(--card-w); }
+}
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Gutter control</h1>
+<p class="lede">This pair is deliberately different. The right side carries eight more pixels of horizontal padding, so nothing on it lines up with the left.</p>
+
+<div class="deck">
+  <article class="card"><h3>Card one</h3><p>Fixed 288 by 200 box. Its position depends on the page gutter.</p></article>
+  <article class="card"><h3>Card two</h3><p>Fixed 288 by 200 box. Its position depends on the page gutter.</p></article>
+  <article class="card"><h3>Card three</h3><p>Fixed 288 by 200 box. Its position depends on the page gutter.</p></article>
+  <article class="card"><h3>Card four</h3><p>Fixed 288 by 200 box. Its position depends on the page gutter.</p></article>
+  <article class="card"><h3>Card five</h3><p>Fixed 288 by 200 box. Its position depends on the page gutter.</p></article>
+  <article class="card"><h3>Card six</h3><p>Fixed 288 by 200 box. Its position depends on the page gutter.</p></article>
+</div>
+
+<section class="notes">
+<h2>Notes</h2>
+<p>A corpus of only passing cases proves nothing. Without controls like this one, a tool that returned one hundred percent unconditionally would pass the whole suite, and the equivalence fixtures would be measuring nothing at all.</p>
+<p>An eight pixel shift is chosen because it is small enough to miss by eye in a side-by-side and large enough that no reasonable threshold should forgive it.</p>
+</section>
+</div>
+</body>
+</html>

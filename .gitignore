@@ -1,0 +1,5 @@
+node_modules/
+dist/
+vdiff-out/
+*.tgz
+.DS_Store

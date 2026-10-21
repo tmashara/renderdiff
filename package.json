@@ -1,0 +1,49 @@
+{
+  "name": "vdiff",
+  "version": "1.0.0",
+  "description": "Screenshot diff between two origins — captures routes at several viewport widths, pixel-diffs them, writes a scored HTML report.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "vdiff": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "vdiff.config.example.ts"
+  ],
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit -p tsconfig.test.json",
+    "prepare": "tsc",
+    "test": "node --test tests/unit/*.test.ts",
+    "test:visual": "node --test --test-timeout=300000 tests/visual/*.test.ts",
+    "test:all": "npm test && npm run test:visual"
+  },
+  "keywords": [
+    "visual-regression",
+    "screenshot",
+    "diff",
+    "playwright",
+    "pixelmatch"
+  ],
+  "dependencies": {
+    "pixelmatch": "^7.2.0",
+    "playwright": "^1.61.1",
+    "sharp": "^0.35.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.3"
+  }
+}

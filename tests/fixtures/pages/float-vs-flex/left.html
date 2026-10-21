@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layout parity</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* LEFT: the pre-flexbox idiom — floats, explicit margins, and a clearfix.
+   Margins are trimmed on the last column and the last row so the outer edges match a
+   `gap`, which only applies between items. */
+@media (min-width: 481px) {
+  .cols > .card { float: left; margin: 0 var(--gap) var(--gap) 0; }
+  .cols > .card:nth-child(3n) { margin-right: 0; }
+  .cols > .card:nth-child(n + 4) { margin-bottom: 0; }
+  .cols::after { content: ""; display: block; clear: both; }
+}
+@media (max-width: 480px) {
+  .cols > .card { float: none; margin: 0 0 var(--gap-mobile) 0; }
+  .cols > .card:last-child { margin-bottom: 0; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Layout parity check</h1>
+<p class="lede">Both sides of this pair render the same pixels. Only the CSS mechanism differs, so any diff above zero means the comparison pipeline moved, not the page.</p>
+
+<div class="cols">
+  <article class="card"><h3>Column one</h3><p>Floated on one side, a flex item on the other. Same 288 by 200 box either way.</p></article>
+  <article class="card"><h3>Column two</h3><p>Floated on one side, a flex item on the other. Same 288 by 200 box either way.</p></article>
+  <article class="card"><h3>Column three</h3><p>Floated on one side, a flex item on the other. Same 288 by 200 box either way.</p></article>
+  <article class="card"><h3>Column four</h3><p>Floated on one side, a flex item on the other. Same 288 by 200 box either way.</p></article>
+  <article class="card"><h3>Column five</h3><p>Floated on one side, a flex item on the other. Same 288 by 200 box either way.</p></article>
+  <article class="card"><h3>Column six</h3><p>Floated on one side, a flex item on the other. Same 288 by 200 box either way.</p></article>
+</div>
+
+<section class="notes">
+<h2>Notes</h2>
+<p>The geometry here is deliberately integral: fixed widths, fixed gaps, fixed heights, and no fractional boxes anywhere. Different layout mechanisms round leftover space differently, and that rounding is the only thing separating a clean comparison from sub-pixel noise.</p>
+<p>Text is identical on both sides. Nothing loads from the network except assets served by the fixture origin itself, so this page renders the same offline as it does in continuous integration.</p>
+<p>If this pair ever scores below parity, read the diff column of the report before touching the assertion. A loosened threshold quietly stops testing.</p>
+</section>
+</div>
+</body>
+</html>

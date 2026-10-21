@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layout parity</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for DEFAULT_HIDE_SELECTORS.
+   This side carries a consent banner under the exact id one of the real vendors uses; the
+   right side has none. Parity means the built-in stylesheet hid it.
+   It is `position: fixed` on purpose — hiding a banner that occupied space in the flow
+   would reflow this side only, and the reflow would itself be a diff. */
+#onetrust-consent-sdk .ot-band {
+  position: fixed; left: 0; right: 0; bottom: 0; height: 88px;
+  background: #16202b; color: #ffffff; text-align: center;
+  font: 16px/88px ui-monospace, monospace;
+}
+.deck { display: flex; flex-wrap: wrap; gap: var(--gap); }
+.deck > .card { flex: 0 0 var(--card-w); }
+@media (max-width: 480px) {
+  .deck { flex-direction: column; gap: var(--gap-mobile); }
+  .deck > .card { flex: 0 0 auto; }
+}
+</style>
+</head>
+<body>
+<div id="onetrust-consent-sdk"><div class="ot-band">We value your privacy. Accept all cookies?</div></div>
+<div class="page">
+<h1>Consent banner guard rail</h1>
+<p class="lede">This side carries a fixed consent banner and the other does not. Parity means the built-in hide selectors caught it before the shot.</p>
+
+<div class="deck">
+  <article class="card"><h3>Card one</h3><p>Fixed 288 by 200 box, identical on both sides.</p></article>
+  <article class="card"><h3>Card two</h3><p>Fixed 288 by 200 box, identical on both sides.</p></article>
+  <article class="card"><h3>Card three</h3><p>Fixed 288 by 200 box, identical on both sides.</p></article>
+  <article class="card"><h3>Card four</h3><p>Fixed 288 by 200 box, identical on both sides.</p></article>
+  <article class="card"><h3>Card five</h3><p>Fixed 288 by 200 box, identical on both sides.</p></article>
+  <article class="card"><h3>Card six</h3><p>Fixed 288 by 200 box, identical on both sides.</p></article>
+  <article class="card"><h3>Card seven</h3><p>Fixed 288 by 200 box, identical on both sides.</p></article>
+  <article class="card"><h3>Card eight</h3><p>Fixed 288 by 200 box, identical on both sides.</p></article>
+  <article class="card"><h3>Card nine</h3><p>Fixed 288 by 200 box, identical on both sides.</p></article>
+</div>
+
+<section class="notes">
+<h2>Notes</h2>
+<p>Consent chrome should be absent on both sides, which makes it a hide rather than a mask. Content that exists on both sides but drifts is a different problem and belongs in a mask, because hiding it would reflow the page around the gap it leaves.</p>
+<p>Hidden rather than removed, too. Removing a banner after its own script has run tends to wedge the renderer, and a screenshot that never returns is worse than one that is wrong.</p>
+</section>
+</div>
+</body>
+</html>

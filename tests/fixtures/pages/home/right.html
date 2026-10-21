@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layout parity</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+.band { height: 240px; padding: 16px; background: var(--fill); border: 1px solid var(--line); overflow: hidden; }
+/* RIGHT: page shell stacked by grid rows. */
+@media (min-width: 481px) {
+  .shell { display: grid; grid-template-rows: repeat(3, 240px); row-gap: var(--gap); }
+}
+@media (max-width: 480px) {
+  .shell { display: flex; flex-direction: column; gap: var(--gap-mobile); }
+}
+</style>
+</head>
+<body>
+<div class="page">
+<div class="shell">
+  <header class="band">
+    <h1>Layout parity check</h1>
+    <p class="lede">Both sides of this pair render the same pixels. Only the CSS mechanism differs, so any diff above zero means the comparison pipeline moved, not the page.</p>
+  </header>
+  <main class="band">
+    <h2>Main</h2>
+    <p>A fixed 240px band. On one side the shell is a flex column; on the other it is a grid with explicit rows. Neither choice is visible in the output.</p>
+  </main>
+  <footer class="band">
+    <h2>Footer</h2>
+    <p>The last band. Gaps between bands are a fixed 32px, so the two mechanisms have no leftover space to distribute differently.</p>
+  </footer>
+</div>
+
+<section class="notes">
+<h2>Notes</h2>
+<p>The geometry here is deliberately integral: fixed widths, fixed gaps, fixed heights, and no fractional boxes anywhere. Different layout mechanisms round leftover space differently, and that rounding is the only thing separating a clean comparison from sub-pixel noise.</p>
+<p>Text is identical on both sides. Nothing loads from the network except assets served by the fixture origin itself, so this page renders the same offline as it does in continuous integration.</p>
+<p>If this pair ever scores below parity, read the diff column of the report before touching the assertion. A loosened threshold quietly stops testing.</p>
+</section>
+</div>
+</body>
+</html>

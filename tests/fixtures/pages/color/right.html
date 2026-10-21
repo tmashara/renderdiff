@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layout parity</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* CONTROL for sensitivity. Identical geometry; the third swatch is recoloured. */
+.strip { display: flex; gap: var(--gap); }
+.strip + .strip { margin-top: var(--gap); }
+.strip:first-of-type > .swatch:nth-child(3) { background: #c62828; }
+@media (max-width: 480px) {
+  .strip { flex-direction: column; gap: var(--gap-mobile); }
+  .strip + .strip { margin-top: var(--gap-mobile); }
+}
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Colour control</h1>
+<p class="lede">This pair is deliberately different. One swatch on the right is red where this side is blue, and nothing else changes.</p>
+
+<div class="strip">
+  <div class="swatch"><h3>One</h3><p>208 by 160.</p></div>
+  <div class="swatch"><h3>Two</h3><p>208 by 160.</p></div>
+  <div class="swatch"><h3>Three</h3><p>208 by 160.</p></div>
+  <div class="swatch"><h3>Four</h3><p>208 by 160.</p></div>
+</div>
+<div class="strip">
+  <div class="swatch"><h3>Five</h3><p>208 by 160.</p></div>
+  <div class="swatch"><h3>Six</h3><p>208 by 160.</p></div>
+  <div class="swatch"><h3>Seven</h3><p>208 by 160.</p></div>
+  <div class="swatch"><h3>Eight</h3><p>208 by 160.</p></div>
+</div>
+<div class="strip">
+  <div class="swatch"><h3>Nine</h3><p>208 by 160.</p></div>
+  <div class="swatch"><h3>Ten</h3><p>208 by 160.</p></div>
+  <div class="swatch"><h3>Eleven</h3><p>208 by 160.</p></div>
+  <div class="swatch"><h3>Twelve</h3><p>208 by 160.</p></div>
+</div>
+
+<section class="notes">
+<h2>Notes</h2>
+<p>A single 208 by 160 swatch is a small share of the page, so this one lands in the amber band rather than the red one. That is the intended reading: the score is a triage signal that tells you where to look, not a verdict on how bad the change is.</p>
+<p>It still has to move. A recoloured element that scored as parity would mean the comparison was measuring layout instead of pixels.</p>
+</section>
+</div>
+</body>
+</html>

@@ -1,0 +1,165 @@
+import fs from "node:fs";
+import path from "node:path";
+import type { ResolvedConfig } from "./config.ts";
+import { pct, signed } from "./format.ts";
+
+interface BaseResult {
+  url: string;
+  width: number;
+}
+
+/** A route that was captured on both sides and diffed. */
+export interface ComparedResult extends BaseResult {
+  status: "compared";
+  score: number;
+  diffPixels: number;
+  totalPixels: number;
+  heightDelta: number;
+  widthDelta: number;
+  images: { left: string; right: string; diff: string };
+}
+
+/** A route that threw before it could be diffed — neither a pass nor a fail. */
+export interface ErrorResult extends BaseResult {
+  status: "error";
+  error: string;
+}
+
+export type RouteResult = ComparedResult | ErrorResult;
+
+export interface RunMeta {
+  left: string;
+  right: string;
+  generatedAt: string;
+}
+
+/** Sort ascending by score; surface the mean and the worst (lowest-scoring) row. */
+export function stats(rows: ComparedResult[]) {
+  const sorted = [...rows].sort((a, b) => a.score - b.score);
+  const mean = sorted.reduce((s, r) => s + r.score, 0) / sorted.length;
+  return { sorted, mean, worst: sorted[0]! };
+}
+
+const esc = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/** Green above 99.5%, amber to 97%, red below. Tuned to be read, not to be precise. */
+
+const band = (score: number) =>
+  score >= 0.995 ? "good" : score >= 0.97 ? "warn" : "bad";
+
+function section(rows: ComparedResult[]): string {
+  if (!rows.length) return "";
+  const { sorted, mean, worst } = stats(rows);
+
+  return `
+<section>
+  <p class="agg">mean <b class="${band(mean)}">${pct(mean)}</b> &middot;
+     worst <b class="${band(worst.score)}">${pct(worst.score)}</b>
+     (${esc(worst.url)} @${worst.width}) &middot; ${sorted.length} comparison(s)</p>
+  ${sorted.map(card).join("\n")}
+</section>`;
+}
+
+function card(r: ComparedResult): string {
+  const imgs = r.images;
+  return `
+<article class="card">
+  <header>
+    <span class="score ${band(r.score)}">${pct(r.score)}</span>
+    <code>${esc(r.url)}</code>
+    <span class="w">@${r.width}px</span>
+    ${r.heightDelta ? `<span class="delta">height ${signed(r.heightDelta)}px</span>` : ""}
+    ${r.widthDelta ? `<span class="delta">width ${signed(r.widthDelta)}px</span>` : ""}
+    <span class="px">${r.diffPixels.toLocaleString()} / ${r.totalPixels.toLocaleString()} px differ</span>
+  </header>
+  <div class="grid">
+    <figure><figcaption>left</figcaption><a href="${imgs.left}" target="_blank"><img loading="lazy" src="${imgs.left}"></a></figure>
+    <figure><figcaption>right</figcaption><a href="${imgs.right}" target="_blank"><img loading="lazy" src="${imgs.right}"></a></figure>
+    <figure><figcaption>diff</figcaption><a href="${imgs.diff}" target="_blank"><img loading="lazy" src="${imgs.diff}"></a></figure>
+  </div>
+</article>`;
+}
+
+export async function writeReport(
+  results: RouteResult[],
+  meta: RunMeta,
+  cfg: ResolvedConfig,
+): Promise<string> {
+  const compared = results.filter(
+    (r): r is ComparedResult => r.status === "compared",
+  );
+  const errors = results.filter((r): r is ErrorResult => r.status === "error");
+
+  const html = `<!doctype html>
+<meta charset="utf-8">
+<title>Visual diff</title>
+<style>
+  :root { color-scheme: light dark; --bg:#fff; --fg:#1a1a1a; --mut:#666; --line:#e3e3e3; --card:#fafafa; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#16181c; --fg:#e8e8e8; --mut:#999; --line:#2c2f36; --card:#1c1f24; } }
+  * { box-sizing: border-box }
+  body { margin:0; padding:2rem; background:var(--bg); color:var(--fg);
+         font:14px/1.5 ui-sans-serif,system-ui,-apple-system,sans-serif; }
+  h1 { font-size:1.4rem; margin:0 0 .25rem }
+  h2 { font-size:1.05rem; margin:2.5rem 0 .25rem }
+  .meta { color:var(--mut); font-size:12px; margin:0 0 2rem }
+  .meta code { color:var(--fg) }
+  .blurb { color:var(--mut); margin:.25rem 0 .75rem; max-width:70ch }
+  .agg { margin:.25rem 0 1rem }
+  .good { color:#2e7d32 } .warn { color:#b58900 } .bad { color:#c62828 }
+  .card { border:1px solid var(--line); border-radius:8px; background:var(--card);
+          margin:0 0 1rem; padding:.75rem 1rem 1rem; }
+  .card header { display:flex; align-items:center; gap:.75rem; flex-wrap:wrap; margin-bottom:.75rem }
+  .score { font-weight:700; font-variant-numeric:tabular-nums; min-width:4.5rem }
+  .w, .px, .delta { color:var(--mut); font-size:12px }
+  .delta { background:rgba(181,137,0,.15); padding:.1rem .4rem; border-radius:4px }
+  .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:.75rem }
+  @media (max-width:900px) { .grid { grid-template-columns:1fr } }
+  figure { margin:0 }
+  figcaption { color:var(--mut); font-size:11px; text-transform:uppercase;
+               letter-spacing:.05em; margin-bottom:.35rem }
+  img { width:100%; height:auto; border:1px solid var(--line); border-radius:4px;
+        background:#fff; display:block }
+  code { font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace }
+  details { margin:1rem 0; color:var(--mut) }
+  ul { margin:.5rem 0; padding-left:1.25rem }
+</style>
+
+<h1>Visual diff</h1>
+<p class="meta">
+  left <code>${esc(meta.left)}</code> vs right <code>${esc(meta.right)}</code><br>
+  ${esc(meta.generatedAt)}
+</p>
+
+${section(compared)}
+
+${
+  errors.length
+    ? `<section><h2 class="bad">Errors</h2>
+<p class="blurb">These produced no measurement, so they are neither a pass nor a fail.</p>
+<ul>${errors.map((r) => `<li><code>${esc(r.url)}</code> @${r.width}px — ${esc(r.error)}</li>`).join("")}</ul></section>`
+    : ""
+}
+
+<details>
+  <summary>What was neutralized</summary>
+  <p>Blocked on both sides — analytics, consent, and A/B tooling that would otherwise
+     rewrite the DOM differently on each load:</p>
+  <ul>${cfg.blockUrlPatterns.map((p) => `<li><code>${esc(p)}</code></li>`).join("")}</ul>
+  <p>Masked, because they drift — painted over on both sides, so they can neither pass
+     nor fail:</p>
+  ${
+    cfg.masks.length
+      ? `<ul>${cfg.masks.map((m) => `<li>${esc(m.reason)}</li>`).join("")}</ul>`
+      : `<p><em>None configured.</em></p>`
+  }
+  <p>Magenta is padding where one page is taller or wider than the other. It counts
+     against the score on purpose — see the height delta on the row.</p>
+</details>
+`;
+
+  fs.mkdirSync(cfg.outDir, { recursive: true });
+  const out = path.join(cfg.outDir, "report.html");
+  fs.writeFileSync(out, html);
+  return out;
+}

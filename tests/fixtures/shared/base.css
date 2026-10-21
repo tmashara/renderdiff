@@ -1,0 +1,188 @@
+/*
+ * Shared appearance for every fixture page. Linked by both sides of every pair.
+ *
+ * This file owns *looks* — colour, type, box sizes. It deliberately owns no layout
+ * mechanism: each fixture supplies its own in an inline <style>, and that inline block is
+ * the only thing that differs between a pair's two sides.
+ *
+ * Every length here is an integer, and the arithmetic closes exactly:
+ *
+ *   desktop content box   960 - (2 x 16 gutter)      = 928
+ *   three cards + 2 gaps  (3 x 288) + (2 x 32)       = 928
+ *   four swatches + 3 gaps (4 x 208) + (3 x 32)      = 928
+ *   label + value         224 + 704                  = 928   (adjacent, no gap: a
+ *                                                             table-cell has no gap)
+ *
+ * Nothing rounds, so a float grid and a CSS grid land on the same pixels.
+ */
+
+:root {
+  --page: 960px;
+  --gutter: 16px;
+  --content: 928px;
+  --gap: 32px;
+  --gap-mobile: 24px;
+  --card-w: 288px;
+  --card-h: 200px;
+  --label-w: 224px;
+  --value-w: 704px;
+  --swatch: 208px;
+  --swatch-h: 160px;
+
+  --ink: #16202b;
+  --mut: #4a5b6d;
+  --line: #c9d4e2;
+  --fill: #eef2f7;
+  --accent: #1f6feb;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #ffffff;
+  color: var(--ink);
+  /* A fixed local stack. No webfont means no network and no FOUT between the two loads. */
+  font: 16px/24px ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Constant scrollbar behaviour, so the layout viewport width never depends on how tall
+     a particular fixture happens to be. */
+  overflow-y: scroll;
+}
+
+/* min() rather than max-width: at 375px this resolves to exactly 375, and at 1440 the box
+   is exactly 960 regardless of what the scrollbar does to the available width. */
+.page {
+  width: min(var(--page), 100%);
+  margin: 0 auto;
+  padding: 32px var(--gutter);
+}
+
+h1 {
+  font-size: 32px;
+  line-height: 40px;
+  margin: 0 0 16px;
+}
+
+h2 {
+  font-size: 24px;
+  line-height: 32px;
+  margin: 0 0 16px;
+}
+
+h3 {
+  font-size: 16px;
+  line-height: 24px;
+  margin: 0 0 8px;
+}
+
+p {
+  margin: 0 0 16px;
+}
+
+.lede {
+  color: var(--mut);
+  margin: 0 0 32px;
+}
+
+/* Fixed height, so rows stay aligned no matter which mechanism placed them. */
+.card {
+  width: var(--card-w);
+  height: var(--card-h);
+  padding: 16px;
+  background: var(--fill);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.card p {
+  color: var(--mut);
+  margin: 0;
+}
+
+.swatch {
+  width: var(--swatch);
+  height: var(--swatch-h);
+  padding: 16px;
+  background: var(--accent);
+  color: #ffffff;
+  overflow: hidden;
+}
+
+.hero {
+  width: var(--content);
+  height: 320px;
+  background: var(--fill);
+  border: 1px solid var(--line);
+}
+
+/* Explicit even width and height: a box centred by transform:translate(-50%,-50%) only
+   lands on whole pixels when the free space either side is an integer. */
+.hero-box {
+  width: 448px;
+  height: 160px;
+  padding: 16px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+}
+
+.row-label {
+  width: var(--label-w);
+  padding: 16px;
+  background: var(--fill);
+  border: 1px solid var(--line);
+  height: 96px;
+  overflow: hidden;
+}
+
+.row-value {
+  width: var(--value-w);
+  padding: 16px;
+  border: 1px solid var(--line);
+  height: 96px;
+  overflow: hidden;
+  color: var(--mut);
+}
+
+.notes {
+  margin: 32px 0 0;
+  padding: 24px 0 0;
+  border-top: 1px solid var(--line);
+  color: var(--mut);
+}
+
+.shot {
+  display: block;
+  width: var(--card-w);
+  height: 180px;
+  border: 1px solid var(--line);
+}
+
+@media (max-width: 480px) {
+  .page {
+    padding: 24px var(--gutter);
+  }
+  /* 375 - 32 = 343. Full-bleed at mobile, so no centring arithmetic is involved. */
+  .card,
+  .swatch,
+  .hero,
+  .row-label,
+  .row-value,
+  .shot {
+    width: 100%;
+  }
+  .hero {
+    height: 400px;
+  }
+  .hero-box {
+    width: 311px;
+  }
+}

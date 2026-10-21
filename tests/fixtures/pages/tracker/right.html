@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layout parity</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for blockUrlPatterns. This side never requests the script. */
+.deck { display: flex; flex-wrap: wrap; gap: var(--gap); }
+.deck > .card { flex: 0 0 var(--card-w); }
+@media (max-width: 480px) {
+  .deck { flex-direction: column; gap: var(--gap-mobile); }
+  .deck > .card { flex: 0 0 auto; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Network blocking guard rail</h1>
+<p class="lede">This side requests a third-party script that rewrites the page. Parity means the request was aborted at the network layer rather than papered over with CSS.</p>
+
+<div class="deck">
+  <article class="card"><h3>Card one</h3><p>Fixed 288 by 200 box, identical on both sides.</p></article>
+  <article class="card"><h3>Card two</h3><p>Fixed 288 by 200 box, identical on both sides.</p></article>
+  <article class="card"><h3>Card three</h3><p>Fixed 288 by 200 box, identical on both sides.</p></article>
+  <article class="card"><h3>Card four</h3><p>Fixed 288 by 200 box, identical on both sides.</p></article>
+  <article class="card"><h3>Card five</h3><p>Fixed 288 by 200 box, identical on both sides.</p></article>
+  <article class="card"><h3>Card six</h3><p>Fixed 288 by 200 box, identical on both sides.</p></article>
+  <article class="card"><h3>Card seven</h3><p>Fixed 288 by 200 box, identical on both sides.</p></article>
+  <article class="card"><h3>Card eight</h3><p>Fixed 288 by 200 box, identical on both sides.</p></article>
+  <article class="card"><h3>Card nine</h3><p>Fixed 288 by 200 box, identical on both sides.</p></article>
+</div>
+
+<section class="notes">
+<h2>Notes</h2>
+<p>Analytics and experiment tooling has to be stopped symmetrically. Blocking on one origin and not the other is itself a difference, and it is the kind that produces a confident, entirely wrong report.</p>
+<p>An aborted subresource does not stop the page from reaching its loaded state, so a blocked tracker costs nothing but the band it would have drawn.</p>
+</section>
+</div>
+</body>
+</html>

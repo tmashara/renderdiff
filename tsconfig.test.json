@@ -1,0 +1,15 @@
+{
+  // Typechecking config. The build config has `rootDir: "src"`, so `tests/` cannot be added
+  // to it without changing what lands in dist/ — this extends it for `--noEmit` only.
+  //
+  //   npm run build / prepare  -> tsconfig.json      (src only, emits)
+  //   npm run typecheck        -> this file          (src + tests, emits nothing)
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    // The fixture pages are served to a browser, so their generators reference DOM globals.
+    "lib": ["ES2023", "DOM"]
+  },
+  "include": ["src", "tests"]
+}

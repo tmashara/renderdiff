@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layout parity</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* CONTROL for the magenta-padding path. Four bands to the left side's three. */
+.band { height: 240px; padding: 16px; background: var(--fill); border: 1px solid var(--line); overflow: hidden; }
+.shell { display: flex; flex-direction: column; gap: var(--gap); }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Height control</h1>
+<p class="lede">This pair is deliberately different. The right side has one more band than this one, so the two pages do not end at the same pixel.</p>
+
+<div class="shell">
+  <section class="band"><h2>Band one</h2><p>A fixed 240px band.</p></section>
+  <section class="band"><h2>Band two</h2><p>A fixed 240px band.</p></section>
+  <section class="band"><h2>Band three</h2><p>A fixed 240px band.</p></section>
+  <section class="band"><h2>Band four</h2><p>A fixed 240px band.</p></section>
+</div>
+
+<section class="notes">
+<h2>Notes</h2>
+<p>A page four hundred pixels shorter than the one it is compared against has not reached parity, so the padding is counted rather than cropped away. The height delta on the row names the cause, which is the part a bare percentage cannot tell you.</p>
+</section>
+</div>
+</body>
+</html>

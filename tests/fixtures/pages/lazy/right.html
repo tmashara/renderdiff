@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layout parity</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for the settle-scroll. This side loads eagerly; the left side loads lazily. */
+.gallery { display: flex; flex-direction: column; gap: var(--gap); }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Lazy loading guard rail</h1>
+<p class="lede">Eight images, most of them below the fold, loaded lazily on this side and eagerly on the other. Parity here means the page was scrolled and settled before the shot.</p>
+
+<div class="gallery">
+  <img class="shot" loading="eager" src="/shared/img/slate.svg" alt="slate">
+  <img class="shot" loading="eager" src="/shared/img/azure.svg" alt="azure">
+  <img class="shot" loading="eager" src="/shared/img/moss.svg" alt="moss">
+  <img class="shot" loading="eager" src="/shared/img/slate.svg" alt="slate">
+  <img class="shot" loading="eager" src="/shared/img/azure.svg" alt="azure">
+  <img class="shot" loading="eager" src="/shared/img/moss.svg" alt="moss">
+  <img class="shot" loading="eager" src="/shared/img/slate.svg" alt="slate">
+  <img class="shot" loading="eager" src="/shared/img/azure.svg" alt="azure">
+</div>
+
+<section class="notes">
+<h2>Notes</h2>
+<p>Lazy images are the standard way a screenshot diff produces a false failure: the tool shoots before the browser has decided the image is needed, and every run disagrees with the last. Scrolling the full height and then returning to the top is what makes the two loads comparable.</p>
+<p>Every asset here is served by the fixture origin, so this page renders identically offline and in continuous integration.</p>
+</section>
+</div>
+</body>
+</html>
