@@ -105,6 +105,50 @@ describe("the render gate", () => {
   test("a healthy route in the same run is unaffected", () => {
     assert.equal(cardFor(run, "/animated").diffPixels, 0, context(run));
   });
+
+  test("an HTTP error status is an error that names the status", async () => {
+    const run = await capture(["/no-such-route"]);
+    assert.equal(run.code, 1, context(run));
+    const report = parseReport(run.report()!);
+    assert.equal(report.errors.length, 1, context(run));
+    assert.match(report.errors[0]!.message, /HTTP 404/);
+  });
+
+  test("a short, nearly textless page with form controls is compared, not refused", async () => {
+    // A sign-in form: under 200 chars of text, which the gate used to refuse on its own.
+    const run = await capture(["/short"], { widths: [1440, 375] });
+    assert.equal(run.code, 0, context(run));
+    for (const width of [1440, 375]) {
+      assert.equal(cardFor(run, "/short", width).diffPixels, 0, context(run));
+    }
+  });
+});
+
+describe("determinism", () => {
+  test("new Date() and Math.random() render identically on both sides, unmasked", async () => {
+    const run = await capture(["/clock"], { widths: [1440, 375] });
+    assert.equal(run.code, 0, context(run));
+    for (const width of [1440, 375]) {
+      assert.equal(cardFor(run, "/clock", width).diffPixels, 0, context(run));
+    }
+  });
+});
+
+describe("the stability check", () => {
+  test("a ticking element is reported as unstable and does not cost the score", async () => {
+    const run = await capture(["/ticker"]);
+    assert.equal(run.code, 0, context(run));
+    const c = cardFor(run, "/ticker");
+    assert.equal(c.diffPixels, 0, `unstable pixels counted against the score${context(run)}`);
+    // Exactly the 928x160 box: every pixel of it changes between any two shots, nothing else does.
+    assert.equal(c.unstablePixels, 928 * 160, context(run));
+    assert.equal(parseProgress(run.stdout)[0]!.unstablePixels, 928 * 160, context(run));
+  });
+
+  test("a static page reports nothing unstable", async () => {
+    const run = await capture(["/animated"]);
+    assert.equal(cardFor(run, "/animated").unstablePixels, 0, context(run));
+  });
 });
 
 describe("motion", () => {
@@ -120,6 +164,18 @@ describe("motion", () => {
 });
 
 describe("lazy images", () => {
+  for (const route of ["/lazy-deep", "/lazy-js"]) {
+    test(`${route}: images more than 4,000px below the fold load before the shot`, async () => {
+      const run = await capture([route], { widths: [1440, 375] });
+      assert.equal(run.code, 0, context(run));
+      for (const width of [1440, 375]) {
+        const c = cardFor(run, route, width);
+        assert.equal(c.diffPixels, 0, `unloaded images at ${width}${context(run)}`);
+        assert.equal(c.heightDelta, 0);
+      }
+    });
+  }
+
   test("images below the fold are loaded before the shot", async () => {
     // The left side loads lazily, the right eagerly, and the fixture origin delays every image
     // by 150ms. Without the settle-scroll the left side would show empty boxes. Two pages that
@@ -179,6 +235,25 @@ describe("the tiled capture path", () => {
   test("the stitched pair compares as identical", () => {
     // Flex column against grid auto-rows, at 18,000px.
     assert.equal(cardFor(run, "/tall").diffPixels, 0, context(run));
+  });
+
+  test("masks are applied in every tile", async () => {
+    const masked = await capture(["/tall"], { config: path.join(CONFIGS, "mask-tall.mjs") });
+    assert.equal(masked.code, 0, context(masked));
+    const pixel = async (file: string, y: number) => [
+      ...(await sharp(masked.file(file))
+        .extract({ left: 720, top: y, width: 1, height: 1 })
+        .removeAlpha()
+        .raw()
+        .toBuffer()),
+    ];
+    // Blocks are 180px: block 50 spans 8,820-9,000 (tile one), block 100 17,820-18,000 (tile two).
+    for (const side of ["left", "right"]) {
+      const file = `tall.1440.${side}.png`;
+      assert.deepEqual(await pixel(file, 8_910), [255, 0, 255], `block 50 unmasked on ${side}`);
+      assert.deepEqual(await pixel(file, 17_910), [255, 0, 255], `block 100 unmasked on ${side}`);
+      assert.notDeepEqual(await pixel(file, 9_090), [255, 0, 255], `block 51 masked on ${side}`);
+    }
   });
 });
 
@@ -336,7 +411,7 @@ describe("retries", () => {
     const before = site.hits("/blank");
     const run = await capture(["/blank"]);
     assert.match(run.stdout, /page did not render/, context(run));
-    // The left side fails first and the right is never loaded, so a retry would make this 2.
-    assert.equal(site.hits("/blank") - before, 1, context(run));
+    // Both sides load once, concurrently; a retry would make this 4.
+    assert.equal(site.hits("/blank") - before, 2, context(run));
   });
 });

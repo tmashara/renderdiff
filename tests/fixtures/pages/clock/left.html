@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layout parity</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for the frozen clock and seeded Math.random. Both sides are the same file and
+   print the current time and three random numbers, so any diff at all means the two loads
+   saw a different clock or a different random sequence. No mask is configured for it. */
+.stamp { width: var(--content); height: 128px; padding: 16px; background: var(--fill); border: 1px solid var(--line); font-size: 24px; line-height: 32px; overflow: hidden; }
+@media (max-width: 480px) { .stamp { width: 100%; height: 192px; font-size: 16px; line-height: 24px; } }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Clock and randomness guard rail</h1>
+<p class="lede">The box below prints new Date() and Math.random() at load. Parity here means both sides ran on the same frozen instant and the same seed.</p>
+
+<p class="stamp" id="stamp"></p>
+<script>
+document.getElementById("stamp").textContent =
+  new Date().toISOString() + " " + Date.now() + " " +
+  [Math.random(), Math.random(), Math.random()].map((n) => n.toFixed(12)).join(" ");
+</script>
+
+<section class="notes">
+<h2>Notes</h2>
+<p>Timestamps and random values are the commonest reason two loads of the same page disagree. Freezing the clock and seeding the generator removes them without a mask, so the region still counts.</p>
+</section>
+</div>
+</body>
+</html>

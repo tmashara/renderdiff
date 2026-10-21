@@ -30,7 +30,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = path.join(HERE, "..", "fixtures");
 const VISUAL_DIR = path.join(HERE, "..", "visual");
 
-/** `capture()` throws below this, so every page except `blank` has to clear it. */
+/** `capture()` treats a page under this with no media or form controls as blank. */
 const MIN_TEXT_CHARS = 200;
 
 describe("manifest", () => {
@@ -77,12 +77,12 @@ describe("every route", () => {
         if (gate) {
           assert.ok(
             chars < MIN_TEXT_CHARS,
-            `${dir}/${side} has ${chars} chars — it must stay under ${MIN_TEXT_CHARS} to be refused`,
+            `${dir}/${side} has ${chars} chars — it must stay under ${MIN_TEXT_CHARS} to test the gate`,
           );
         } else {
           assert.ok(
             chars >= MIN_TEXT_CHARS,
-            `${dir}/${side} has only ${chars} chars; capture() refuses anything under ${MIN_TEXT_CHARS}`,
+            `${dir}/${side} has only ${chars} chars; capture() treats anything under ${MIN_TEXT_CHARS} as possibly blank`,
           );
         }
       }

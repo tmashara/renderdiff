@@ -25,8 +25,8 @@ export const DEFAULT_OUT_DIR = "renderdiff-out";
 
 /**
  * Captures run in parallel. Two by default — if one side points at a live site we are
- * a guest there. No extra rate limiting needed: each worker captures both origins per
- * route and `capture()` spends ~1s settling, which caps this at roughly 2 req/sec.
+ * a guest there. No extra rate limiting needed: each worker holds at most one load per
+ * origin at a time, so this is also the most concurrent loads either origin sees.
  */
 export const DEFAULT_CONCURRENCY = 2;
 
@@ -82,6 +82,18 @@ const STILL_CSS = `
 *,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}
 html{scroll-behavior:auto!important}
 `;
+
+/**
+ * Browser-context settings pinned on both sides, so locale, timezone, theme and motion
+ * preferences can't differ between the two loads. Listed in the report.
+ */
+export const CONTEXT_OPTIONS = {
+  deviceScaleFactor: 1,
+  reducedMotion: "reduce",
+  timezoneId: "UTC",
+  locale: "en-US",
+  colorScheme: "light",
+} as const;
 
 /** Fill colour for masks and for height/width padding. Loud on purpose. */
 export const MASK_COLOR = "#FF00FF";

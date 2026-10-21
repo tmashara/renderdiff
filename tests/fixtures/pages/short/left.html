@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layout parity</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for the blank-page check: a real page that is short and nearly textless,
+   like a sign-in form. It has form controls, so it is compared rather than refused. */
+.login { display: flex; flex-direction: column; gap: 16px; width: 288px; }
+input, button { width: 288px; height: 40px; font: 16px/24px ui-monospace, monospace; }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Sign in</h1>
+<form class="login">
+<input type="email" placeholder="Email">
+<input type="password" placeholder="Password">
+<button type="button">Continue</button>
+</form>
+</div>
+</body>
+</html>
