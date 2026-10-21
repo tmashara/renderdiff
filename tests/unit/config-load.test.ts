@@ -156,6 +156,10 @@ describe("validation", () => {
     ],
     ['{ routes: [{ left: "/a", selector: { left: ".a" } }] }', /`routes\[0\]\.selector` must be/],
     ['{ before: "click" }', /`before` must be a function/],
+    [
+      '{ routes: ["/a", { left: "/a", before: async () => {} }] }',
+      /two routes both read as \/a; they have different before hooks — merge them into one route/,
+    ],
     ['{ routes: [{ left: "/a", before: {} }] }', /`routes\[0\]\.before` must be a function/],
     ['{ storageState: 1 }', /`storageState` must be a non-empty path/],
     ['{ storageState: { left: "a.json", center: "b.json" } }', /`storageState` must be a non-empty path/],

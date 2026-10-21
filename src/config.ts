@@ -91,8 +91,14 @@ export function parseRoutes(specs: RouteSpec[], selector?: Sides, before?: Hook)
       before: (typeof spec === "string" ? undefined : spec.before) ?? before ?? null,
     };
     const same = out.get(name(route));
-    if (same && (JSON.stringify(same) !== JSON.stringify(route) || same.before !== route.before)) {
+    // JSON drops a function but keeps a null, so `before` is compared on its own below.
+    if (same && JSON.stringify({ ...same, before: 0 }) !== JSON.stringify({ ...route, before: 0 })) {
       throw new Error(`two routes both read as ${name(route)}; change one of their selectors`);
+    }
+    if (same && same.before !== route.before) {
+      throw new Error(
+        `two routes both read as ${name(route)}; they have different before hooks — merge them into one route`,
+      );
     }
     out.set(name(route), route);
   }
@@ -541,6 +547,12 @@ function storageFile(p: string | undefined): string | null {
   }
   if (typeof json !== "object" || json === null || Array.isArray(json)) {
     throw new Error(`storage state file is not a JSON object: ${file}`);
+  }
+  const { cookies = [], origins = [] } = json as Record<string, unknown>;
+  if (!Array.isArray(cookies) || !Array.isArray(origins)) {
+    throw new Error(
+      `storage state file is not a Playwright storage state (cookies/origins must be arrays): ${file}`,
+    );
   }
   return file;
 }

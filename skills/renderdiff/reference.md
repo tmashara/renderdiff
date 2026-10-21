@@ -110,9 +110,11 @@ cookie script ran wedges the renderer).
   the report badges those cards and results.json has `hook: true`.
 - **Signed-in pages:** `npx playwright codegen --save-storage=auth.json <login url>`, then
   `--storage-state auth.json` (or `--left-storage-state` / `--right-storage-state`, or
-  config `storageState`, relative to the config file). Missing or non-JSON file: exit 2.
+  config `storageState`, relative to the config file). Missing, non-JSON or not a storage state: exit 2.
   The file holds live session tokens: never commit it, add it to `.gitignore`, and don't
-  paste it into a chat. renderdiff records only its file name.
+  paste it into a chat. renderdiff records only its file name. The out dir then holds
+  signed-in screenshots and their text in results.json: don't publish or commit it either
+  (add it to `.gitignore`).
 - **Browser:** if the bundled Chromium won't launch, renderdiff uses the system Chrome on
   both sides and says so; else it prints the `npx playwright install chromium` hint.
 - **Analytics, consent and A/B tooling are blocked at the network layer** on both sides,

@@ -29,14 +29,18 @@ export default {
   // For every route without its own `before`, CLI routes included. Gets
   // `{ side, route, width }`; use `side` only for markup that legitimately differs per
   // side, never to make the two sides look alike. A throw is a route error, not retried.
+  // Actions use Playwright's 30s default timeout, so check first for what may not be
+  // there. hideSelectors and extraCss apply after the hook.
   before: async (page) => {
-    await page.getByRole("button", { name: "Accept" }).click();
+    const accept = page.getByRole("button", { name: "Accept" });
+    if (await accept.isVisible()) await accept.click();
   },
 
   // Playwright storage state (cookies, localStorage) each side starts with, e.g. signed
   // in: `npx playwright codegen --save-storage=auth.json <url>`. One file, or
   // `{ left, right }`. Relative to this file. It holds live session tokens: never commit
-  // it, and add it to .gitignore. `--storage-state` replaces it.
+  // it, and add it to .gitignore. The out dir then holds signed-in screenshots and text,
+  // so keep it out of git and don't publish it either. `--storage-state` replaces it.
   storageState: "auth.json",
 
   // Replaces the default set (1440, 1152, 896, 704, 375).

@@ -175,7 +175,8 @@ export default {
   ],
   // For every route without its own `before` (which replaces it), CLI routes included.
   before: async (page, { side, route, width }) => {
-    await page.getByRole("button", { name: "Accept" }).click();
+    const accept = page.getByRole("button", { name: "Accept" });
+    if (await accept.isVisible()) await accept.click();
   },
 };
 ```
@@ -185,6 +186,8 @@ viewport width. Use `side` only where the markup legitimately differs (the butto
 different selector on each side), never to make the sides look alike. A hook that throws
 is a route error, `before hook failed on left: …`, and isn't retried. A route that ran one
 has `"hook": true` in `results.json` and a `before hook` badge on its report card.
+Actions in a hook use Playwright's 30s default timeout, so check before clicking what may
+not be there (as above); `hideSelectors` and `extraCss` apply after the hook.
 
 For pages behind a login, save a Playwright storage state once and pass it:
 
@@ -195,9 +198,11 @@ renderdiff http://localhost:3000 https://example.com /account --storage-state au
 
 `--left-storage-state` / `--right-storage-state` give each side its own file, and the
 config takes `storageState: "auth.json"` or `{ left, right }`, relative to the config file.
-A missing or non-JSON file exits 2 before the browser starts. The file's contents are never
+A missing or non-JSON file, or one that isn't a storage state, exits 2 before the browser starts. The file's contents are never
 printed; `meta.storageState` and the report name only each side's file. It holds live
-session tokens: **never commit it**, and add it to `.gitignore`.
+session tokens: **never commit it**, and add it to `.gitignore`. The out dir then holds
+signed-in screenshots, and their text in `results.json`, so don't publish or commit that
+either; add the out dir to `.gitignore` too.
 
 ## Config file
 
@@ -387,7 +392,9 @@ Paths are relative to the out dir. Results are in route-then-width order.
   the same time.
 - **Retries once** per shot; a live site can time out on a cold edge.
 - **Stitches tall pages.** A single screenshot past 16,384px can come out truncated or
-  wrapped (Chrome repeats the top of the page; recent headless Chromium does not), so taller pages are captured as tiles through CDP and stitched back together. Masks are
+  wrapped (Chrome repeats the top of the page; recent headless Chromium does not), so taller
+  pages, and element shots taller than that, are captured as tiles through CDP and stitched
+  back together. Masks are
   painted onto the final image from each element's bounding box, so they apply the same
   way on both paths. Past 40,000px it errors — that's a broken layout, not a page.
 

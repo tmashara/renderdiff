@@ -314,6 +314,17 @@ describe("storage state", () => {
     assert.ok(!(r.stdout + r.stderr).includes("s3cret"), r.stderr);
   });
 
+  test("JSON that isn't a storage state exits 2; an empty object is one", async () => {
+    const cwd = tempDir("renderdiff-cwd-");
+    fs.writeFileSync(path.join(cwd, "bad.json"), '{"cookies": {"session": "x"}}');
+    fs.writeFileSync(path.join(cwd, "empty.json"), "{}");
+    const r = await runCli(["/", DEAD, DEAD, "--storage-state", "bad.json"], { cwd });
+    assert.equal(r.code, 2, r.stderr);
+    assert.match(r.stderr, /storage state file is not a Playwright storage state \(cookies\/origins must be arrays\): .*bad\.json/);
+    const ok = await runCli(["--dry-run", "/", L, R, "--storage-state", "empty.json"], { cwd, noOut: true });
+    assert.equal(ok.code, 0, ok.stderr);
+  });
+
   test("a per-side file overrides --storage-state on its side", async () => {
     const cwd = tempDir("renderdiff-cwd-");
     fs.writeFileSync(path.join(cwd, "a.json"), "{}");
