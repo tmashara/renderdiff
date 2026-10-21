@@ -133,10 +133,16 @@ describe("validation", () => {
   // Inline rather than fixture files: each is one line, and the needle sits next to it.
   const inline: Array<[config: string, needle: RegExp]> = [
     ['{ routes: "/a" }', /`routes` must be an array/],
-    ['{ routes: [{ right: "/b" }] }', /`routes\[0\]\.left` must be a string/],
-    ['{ routes: ["/a", { left: "/a", right: 2 }] }', /`routes\[1\]\.right` must be a string/],
+    ['{ routes: [{ right: "/b" }] }', /`routes\[0\]\.left` must be a non-empty string/],
+    ['{ routes: ["/a", { left: "/a", right: 2 }] }', /`routes\[1\]\.right` must be a non-empty string/],
     ['{ routes: [{ left: "/a", path: "/b" }] }', /`routes\[0\]\.path` is not a route key/],
-    ['{ routes: [{ left: "" }] }', /has an empty side/],
+    ['{ routes: [{ left: "" }] }', /`routes\[0\]\.left` must be a non-empty string/],
+    ['{ routes: [{ left: "/a", right: "" }] }', /`routes\[0\]\.right` must be a non-empty string/],
+    ['{ routes: [{ left: "/a::/b" }] }', /a side containing "::\/" reads as a pair/],
+    [
+      '{ masks: [{ reason: "x", selector: undefined, locate: (p) => p.locator("a") }] }',
+      /`masks\[0\]` needs exactly one of `selector` or `locate`/,
+    ],
     [
       '{ masks: [{ reason: "x", selector: "a", locate: (p) => p.locator("a") }] }',
       /`masks\[0\]` needs exactly one of `selector` or `locate`/,

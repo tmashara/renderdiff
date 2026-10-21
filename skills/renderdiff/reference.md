@@ -61,9 +61,8 @@ export default {
 ```
 
 A mask takes exactly one of `selector` or `locate: (page) => Locator`; without `urlPath` it
-applies to every route, and on a pair it matches either side's path and paints both. Use a
-plain `export default {}`: `import { defineConfig } from "renderdiff"` only resolves when
-renderdiff is also installed in that project. [`renderdiff.config.example.ts`](https://github.com/tmashara/renderdiff/blob/main/renderdiff.config.example.ts)
+applies to every route, and on a pair it matches either side's path and paints both. A plain
+`export default {}` needs no import; a type import from "renderdiff" is for editor types only. [`renderdiff.config.example.ts`](https://github.com/tmashara/renderdiff/blob/main/renderdiff.config.example.ts)
 annotates every field.
 
 Two rules for `hideSelectors`: match the element **exactly** (consent scripts also stamp

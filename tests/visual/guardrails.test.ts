@@ -345,11 +345,14 @@ describe("route pairs", () => {
     assert.ok(cardFor(run, PAIR), context(run));
   });
 
-  test("a mask whose urlPath is only the left path paints both sides", async () => {
+  test("a mask whose urlPath is only the left path, unnormalized, paints both sides", async () => {
     // The fixture server ignores the query, so the right side is /drifting under another path.
-    const run = await capture(["/drifting::/drifting?pair"], {
-      config: path.join(CONFIGS, "mask-drifting.mjs"),
-    });
+    const config = path.join(tempDir(), "mask.mjs");
+    fs.writeFileSync(
+      config,
+      'export default { masks: [{ urlPath: "drifting/", reason: "drifts", selector: "[data-drift]" }] };\n',
+    );
+    const run = await capture(["/drifting::/drifting?pair"], { config });
     assert.equal(run.code, 0, context(run));
     const r = result(results(run.outDir), "/drifting::/drifting?pair", 1440);
     assert.equal(r.diffPixels, 0, `the mask missed a side${context(run)}`);

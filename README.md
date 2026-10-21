@@ -78,7 +78,7 @@ renderdiff <left-origin> <right-origin> <route…> [options]
 
 | Argument or flag | |
 | --- | --- |
-| `<origin>` | Any argument containing `://`. The first is left, the second right; a third is an error. |
+| `<origin>` | An argument starting with `http://` or `https://`. The first is left, the second right; a third is an error. |
 | `<route>` | A literal path, e.g. `/about`, or a pair `/pricing::/plans` (see below). |
 | `--left <url>` | Left origin, instead of the first positional one. Giving both is an error. |
 | `--right <url>` | Right origin, instead of the second positional one. |
@@ -153,9 +153,9 @@ See [`renderdiff.config.example.ts`](./renderdiff.config.example.ts) for every f
 
 **Precedence: CLI flag > config file > built-in default.**
 
-`export default { … }` needs no import. `import { defineConfig } from "renderdiff"` adds
-editor types, but only resolves if `renderdiff` is *also* installed in that project — a
-globally-installed CLI is not importable from an arbitrary directory.
+`export default { … }` needs no import. `import type { RenderdiffConfig } from "renderdiff"`
+with `satisfies RenderdiffConfig` is for editor types only; Node erases it, so the file loads
+without renderdiff installed in that project.
 
 ## How it reads
 

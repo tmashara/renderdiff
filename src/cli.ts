@@ -92,7 +92,7 @@ function parseArgs(argv: string[]): Args {
       if (t < 0 || t > 1) throw new Error(`--threshold expects 0..1, got ${t}`);
       a.threshold = t;
     } else if (v.startsWith("-")) throw new Error(`unknown flag: ${v}`);
-    else if (v.includes("://")) origins.push(v);
+    else if (/^https?:\/\//i.test(v)) origins.push(v);
     else a.routes.push(v);
   }
   if (origins.length > 2) {
@@ -117,8 +117,8 @@ const HELP = `
     renderdiff http://localhost:3000 https://example.com / /about
     renderdiff http://localhost:3000 https://example.com /pricing::/plans
 
-  Any argument containing :// is an origin: the first is left, the second right (or
-  pass --left / --right). A route is a literal path, loaded on both sides; /a::/b loads
+  An argument starting with http:// or https:// is an origin: the first is left, the
+  second right (or pass --left / --right). A route is a literal path, loaded on both sides; /a::/b loads
   /a on the left and /b on the right. No globs, no discovery.
 
   Writes report.html, results.json and crops of each change to --out. Exits 1 if a

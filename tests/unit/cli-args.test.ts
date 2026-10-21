@@ -90,13 +90,13 @@ describe("required arguments", () => {
     rejects(["--left", L, "--right", R, "--dry-run"], "no routes given."));
 
   test("a missing --left is named, in the singular", () =>
-    rejects(["/a", "--right", R, "--dry-run"], "--left is required"));
+    rejects(["/a", "--right", R, "--dry-run"], "left origin is required (first positional URL"));
 
   test("a missing --right is named", () =>
-    rejects(["/a", "--left", L, "--dry-run"], "--right is required"));
+    rejects(["/a", "--left", L, "--dry-run"], "right origin is required (second positional URL"));
 
   test("both missing reads as plural", () =>
-    rejects(["/a", "--dry-run"], "--left and --right are required"));
+    rejects(["/a", "--dry-run"], "left and right origins are required"));
 });
 
 describe("flag validation", () => {
@@ -213,6 +213,13 @@ describe("positional origins", () => {
     const r = await runCli(["--dry-run", L, "/a", "--right", R], { noOut: true });
     assert.equal(r.code, 0, r.stderr);
     assert.match(r.stdout, /http:\/\/left\.test\/a\s+\|\s+http:\/\/right\.test\/a/);
+  });
+
+  test("a URL inside a route's query is not an origin", async () => {
+    const r = await dry(["/go?to=http://x"]);
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(r.stdout, /^Routes: 1$/m);
+    assert.ok(r.stdout.includes(`${L}/go?to=http://x`), r.stdout);
   });
 
   test("a third origin exits 2", () =>

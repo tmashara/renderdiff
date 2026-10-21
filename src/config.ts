@@ -48,6 +48,10 @@ export function parseRoutes(specs: RouteSpec[]): Route[] {
     }
     const shown = typeof spec === "string" ? spec : JSON.stringify(spec);
     if (!sides[0] || !sides[1]) throw new Error(`route ${shown} has an empty side`);
+    // Its label would collide with the pair's, and dedupe would silently drop one of them.
+    if (typeof spec !== "string" && sides.some((s) => /::(?=\/|$)/.test(s))) {
+      throw new Error(`route ${shown}: a side containing "::/" reads as a pair`);
+    }
     const glob = sides.find((s) => s.includes("*"));
     if (glob) throw new Error(`globs are not supported (${glob}) — pass literal paths.`);
     const route = { left: normalize(sides[0]), right: normalize(sides[1]) };
@@ -315,8 +319,10 @@ function validate(c: Record<string, unknown>, file: string) {
           throw new Error(`${file}: \`routes[${i}].${key}\` is not a route key (left, right)`);
         }
       }
-      if (typeof o.left !== "string") bad(`routes[${i}].left`, "a string");
-      if (o.right !== undefined && typeof o.right !== "string") bad(`routes[${i}].right`, "a string");
+      if (typeof o.left !== "string" || !o.left) bad(`routes[${i}].left`, "a non-empty string");
+      if (o.right !== undefined && (typeof o.right !== "string" || !o.right)) {
+        bad(`routes[${i}].right`, "a non-empty string");
+      }
     });
   }
   if (c.widths !== undefined) {
@@ -351,7 +357,7 @@ function validate(c: Record<string, unknown>, file: string) {
         bad(`masks[${i}].urlPath`, "a string");
       }
       if (typeof o.reason !== "string") bad(`masks[${i}].reason`, "a string");
-      if ((o.selector === undefined) === (o.locate === undefined)) {
+      if (("selector" in o) === ("locate" in o)) {
         throw new Error(`${file}: \`masks[${i}]\` needs exactly one of \`selector\` or \`locate\``);
       }
       if (o.selector !== undefined && typeof o.selector !== "string") {
@@ -382,13 +388,14 @@ export function resolveConfig(
   const left = cli.left ?? file.left;
   const right = cli.right ?? file.right;
 
-  const missing = [!left && "--left", !right && "--right"].filter(
-    Boolean,
-  ) as string[];
-  if (missing.length) {
+  if (!left || !right) {
     throw new Error(
-      `${missing.join(" and ")} ${missing.length > 1 ? "are" : "is"} required ` +
-        `(pass on the command line, or set left/right in renderdiff.config.*)`,
+      !left && !right
+        ? "left and right origins are required (two positional URLs, --left and --right, " +
+            "or left and right in renderdiff.config.*)"
+        : !left
+          ? "left origin is required (first positional URL, --left, or left in renderdiff.config.*)"
+          : "right origin is required (second positional URL, --right, or right in renderdiff.config.*)",
     );
   }
 
@@ -398,8 +405,8 @@ export function resolveConfig(
   ];
 
   return {
-    left: left!.replace(/\/+$/, ""),
-    right: right!.replace(/\/+$/, ""),
+    left: left.replace(/\/+$/, ""),
+    right: right.replace(/\/+$/, ""),
     widths: cli.widths ?? file.widths ?? [...DEFAULT_WIDTHS],
     threshold: cli.threshold ?? file.threshold ?? null,
     outDir: path.resolve(

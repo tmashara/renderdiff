@@ -1,8 +1,10 @@
 // Copy to `renderdiff.config.ts` in the directory you run `renderdiff` from.
 //
-// Everything here is optional, and CLI flags always win over it. A plain object needs no
-// import; for editor types, wrap it in `defineConfig` from "renderdiff", which only
-// resolves if renderdiff is also a devDependency of this project.
+// Everything here is optional, and CLI flags always win over it. The type import and
+// `satisfies` are for editor types only: Node erases both, so this loads without
+// renderdiff installed in the project.
+import type { RenderdiffConfig } from "renderdiff";
+
 export default {
   // The two origins. The tool has no notion of which is "prod" — it just diffs them.
   left: "http://localhost:3000",
@@ -72,4 +74,4 @@ export default {
       locate: (page) => page.getByText(/^\d{1,2}:\d{2}(AM|PM)$/),
     },
   ],
-};
+} satisfies RenderdiffConfig;
