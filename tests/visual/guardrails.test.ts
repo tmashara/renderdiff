@@ -114,6 +114,14 @@ describe("the render gate", () => {
     assert.match(report.errors[0]!.message, /HTTP 404/);
   });
 
+  test("a hidden SVG sprite does not count as rendered media", async () => {
+    const run = await capture(["/sprite"]);
+    assert.equal(run.code, 1, context(run));
+    const report = parseReport(run.report()!);
+    assert.equal(report.errors.length, 1, context(run));
+    assert.match(report.errors[0]!.message, /page did not render/);
+  });
+
   test("a short, nearly textless page with form controls is compared, not refused", async () => {
     // A sign-in form: under 200 chars of text, which the gate used to refuse on its own.
     const run = await capture(["/short"], { widths: [1440, 375] });
@@ -143,6 +151,14 @@ describe("the stability check", () => {
     // Exactly the 928x160 box: every pixel of it changes between any two shots, nothing else does.
     assert.equal(c.unstablePixels, 928 * 160, context(run));
     assert.equal(parseProgress(run.stdout)[0]!.unstablePixels, 928 * 160, context(run));
+  });
+
+  test("a page that is mostly unstable is an error, not a score", async () => {
+    const run = await capture(["/unsettled"]);
+    assert.equal(run.code, 1, context(run));
+    const report = parseReport(run.report()!);
+    assert.equal(report.errors.length, 1, context(run));
+    assert.match(report.errors[0]!.message, /page did not settle: \d+px unstable at \/unsettled/);
   });
 
   test("a static page reports nothing unstable", async () => {
@@ -413,5 +429,12 @@ describe("retries", () => {
     assert.match(run.stdout, /page did not render/, context(run));
     // Both sides load once, concurrently; a retry would make this 4.
     assert.equal(site.hits("/blank") - before, 2, context(run));
+  });
+
+  test("an HTTP error status is not retried", async () => {
+    const before = site.hits("/no-such-route");
+    const run = await capture(["/no-such-route"]);
+    assert.match(run.stdout, /HTTP 404/, context(run));
+    assert.equal(site.hits("/no-such-route") - before, 2, context(run));
   });
 });

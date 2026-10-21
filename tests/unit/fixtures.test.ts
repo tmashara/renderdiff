@@ -30,7 +30,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = path.join(HERE, "..", "fixtures");
 const VISUAL_DIR = path.join(HERE, "..", "visual");
 
-/** `capture()` treats a page under this with no media or form controls as blank. */
+/** `capture()` treats a page under this with no visible media or form controls as blank. */
 const MIN_TEXT_CHARS = 200;
 
 describe("manifest", () => {

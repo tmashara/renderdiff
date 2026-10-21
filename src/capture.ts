@@ -30,7 +30,7 @@ const TILE_HEIGHT = 16_000;
 const MAX_PAGE_HEIGHT = 40_000;
 
 /**
- * Install network blocking, the frozen clock and seeded randomness. Once per page,
+ * Install network blocking, the fake clock and seeded randomness. Once per page,
  * before any navigation.
  */
 export async function prepare(
@@ -41,7 +41,8 @@ export async function prepare(
   for (const pattern of cfg.blockUrlPatterns) {
     await page.route(pattern, (route) => route.abort());
   }
-  await page.clock.setFixedTime(now);
+  // Time flows, so Date-based debounce and busy-waits work; `capture` rewinds it per load.
+  await page.clock.install({ time: now });
   // mulberry32 with a fixed seed, re-seeded on every navigation.
   await page.addInitScript(() => {
     let s = 0x9e3779b9;
@@ -60,8 +61,10 @@ export async function capture(
   urlPath: string,
   width: number,
   cfg: ResolvedConfig,
+  now: number,
 ): Promise<Shot> {
   await page.setViewportSize({ width, height: 900 });
+  await page.clock.setSystemTime(now);
   const res = await page.goto(url, {
     waitUntil: "domcontentloaded",
     timeout: 45_000,
@@ -74,7 +77,9 @@ export async function capture(
   // Native lazy images go eager; JS lazy loaders see every viewport-height slice, one
   // frame each, since a scroll inside one synchronous loop never paints.
   await page.evaluate(async (maxHeight) => {
-    const frame = () => new Promise((r) => requestAnimationFrame(r));
+    // The fake clock drives rAF too, so add wall time for a real paint per slice.
+    const frame = () =>
+      new Promise((r) => requestAnimationFrame(() => setTimeout(r, 32)));
     Array.from(document.images).forEach((img) => (img.loading = "eager"));
     document.querySelectorAll("video").forEach((v) => {
       v.pause();
@@ -102,9 +107,14 @@ export async function capture(
   const { scrollHeight, textLength, media } = await page.evaluate(() => ({
     scrollHeight: document.documentElement.scrollHeight,
     textLength: (document.body.innerText || "").length,
-    media: !!document.querySelector(
-      "img, svg, canvas, video, iframe, input, textarea, select",
-    ),
+    media: Array.from(
+      document.querySelectorAll(
+        "img, svg, canvas, video, iframe, input, textarea, select",
+      ),
+    ).some((e) => {
+      const r = e.getBoundingClientRect();
+      return r.width * r.height >= 1024;
+    }),
   }));
   const blank =
     textLength < 200 && !media
@@ -119,6 +129,7 @@ export async function capture(
 
   const tiled = scrollHeight > MAX_CAPTURE_HEIGHT;
   // At scroll 0 viewport coordinates are page coordinates, which both paths shoot in.
+  await page.evaluate(() => window.scrollTo(0, 0));
   const boxes = (
     await Promise.all(
       (await Promise.all(masksFor(cfg, page, urlPath).map((l) => l.all())))
@@ -157,15 +168,11 @@ async function differing(a: Buffer, b: Buffer): Promise<Uint8Array | null> {
     return null;
   }
   const mask = new Uint8Array(ra.info.width * ra.info.height);
+  const pa = new Uint32Array(ra.data.buffer, ra.data.byteOffset, mask.length);
+  const pb = new Uint32Array(rb.data.buffer, rb.data.byteOffset, mask.length);
   let any = false;
   for (let i = 0; i < mask.length; i++) {
-    const o = i * 4;
-    if (
-      ra.data[o] !== rb.data[o] ||
-      ra.data[o + 1] !== rb.data[o + 1] ||
-      ra.data[o + 2] !== rb.data[o + 2] ||
-      ra.data[o + 3] !== rb.data[o + 3]
-    ) {
+    if (pa[i] !== pb[i]) {
       mask[i] = 1;
       any = true;
     }
@@ -174,8 +181,8 @@ async function differing(a: Buffer, b: Buffer): Promise<Uint8Array | null> {
 }
 
 /**
- * Paint every pixel either side found unstable onto both sides, so that noise neither
- * passes nor fails. Rewrites `left.png` / `right.png`; returns the painted pixel count.
+ * Paint every pixel either side found unstable onto both sides, so that noise is left
+ * out of the measurement. Rewrites `left.png` / `right.png`; returns the painted pixel count.
  */
 export async function cancelUnstable(left: Shot, right: Shot): Promise<number> {
   if (!left.unstable && !right.unstable) return 0;
@@ -183,11 +190,19 @@ export async function cancelUnstable(left: Shot, right: Shot): Promise<number> {
   const w = Math.max(raws[0].info.width, raws[1].info.width);
   const h = Math.max(raws[0].info.height, raws[1].info.height);
   const union = new Uint8Array(w * h);
+  let count = 0;
   [left, right].forEach((shot, s) => {
+    const u = shot.unstable;
+    if (!u) return;
     const sw = raws[s]!.info.width;
-    shot.unstable?.forEach((u, i) => {
-      if (u) union[Math.floor(i / sw) * w + (i % sw)] = 1;
-    });
+    for (let i = 0; i < u.length; i++) {
+      if (!u[i]) continue;
+      const j = Math.floor(i / sw) * w + (i % sw);
+      if (!union[j]) {
+        union[j] = 1;
+        count++;
+      }
+    }
   });
 
   await Promise.all(
@@ -210,7 +225,7 @@ export async function cancelUnstable(left: Shot, right: Shot): Promise<number> {
         .toBuffer();
     }),
   );
-  return union.reduce((n, u) => n + u, 0);
+  return count;
 }
 
 type Box = { x: number; y: number; width: number; height: number };

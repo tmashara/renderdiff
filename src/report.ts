@@ -33,7 +33,7 @@ export interface RunMeta {
   left: string;
   right: string;
   generatedAt: string;
-  /** The instant both sides' clocks were frozen at, ISO. */
+  /** The instant both sides' clocks start at on every load, ISO. */
   clock: string;
 }
 
@@ -163,12 +163,13 @@ ${
       ? `<ul>${cfg.masks.map((m) => `<li>${esc(m.reason)}</li>`).join("")}</ul>`
       : `<p><em>None configured.</em></p>`
   }
-  <p>Pinned on both sides: clock frozen at <code>${esc(meta.clock)}</code>, a seeded
+  <p>Pinned on both sides: clock starts at <code>${esc(meta.clock)}</code> on every load, a seeded
      <code>Math.random</code>, timezone <code>${CONTEXT_OPTIONS.timezoneId}</code>, locale
      <code>${CONTEXT_OPTIONS.locale}</code>, <code>${CONTEXT_OPTIONS.colorScheme}</code> colour
      scheme, reduced motion, CSS animations and transitions off, videos paused at frame 0.</p>
   <p>Unstable pixels — ones that changed between two shots of the same load — are painted
-     magenta on both sides and counted on each card, so that noise neither passes nor fails.</p>
+     magenta on both sides, counted on each card, and excluded from the measurement. A route
+     more than 25% unstable is an error.</p>
   <p>Magenta is also padding where one page is taller or wider than the other. It counts
      against the score on purpose — see the height delta on the row.</p>
 </details>

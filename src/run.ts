@@ -14,6 +14,9 @@ import {
   type RouteResult,
 } from "./report.ts";
 
+/** Past this share of a page unstable, too little was measured for a score to mean anything. */
+const MAX_UNSTABLE_SHARE = 0.25;
+
 interface Job {
   route: Route;
   width: number;
@@ -78,7 +81,8 @@ export async function run({ routes, cfg, open }: RunOpts): Promise<number> {
   const browser = await launch();
   const queue = [...jobs];
   let done = 0;
-  const now = Date.now();
+  // Whole minute, so an HH:MM display reads the same on both sides.
+  const now = Math.floor(Date.now() / 60_000) * 60_000;
 
   const worker = async () => {
     // One context per origin so cookies/localStorage never cross between them.
@@ -95,8 +99,8 @@ export async function run({ routes, cfg, open }: RunOpts): Promise<number> {
       try {
         // allSettled, not all: a page must not start the next job while still loading this one.
         const settled = await Promise.allSettled([
-          shoot(leftPage, cfg.left + route, route, width, cfg),
-          shoot(rightPage, cfg.right + route, route, width, cfg),
+          shoot(leftPage, cfg.left + route, route, width, cfg, now),
+          shoot(rightPage, cfg.right + route, route, width, cfg, now),
         ]);
         const failed = settled.find((r) => r.status === "rejected");
         if (failed) throw failed.reason;
@@ -114,6 +118,13 @@ export async function run({ routes, cfg, open }: RunOpts): Promise<number> {
         const unstablePixels = await cancelUnstable(leftShot, rightShot);
 
         const { diffPng, ...metrics } = await compare(leftShot, rightShot);
+        if (unstablePixels > MAX_UNSTABLE_SHARE * metrics.totalPixels) {
+          throw new Error(
+            `page did not settle: ${unstablePixels}px unstable at ${route}`,
+          );
+        }
+        const measured = metrics.totalPixels - unstablePixels;
+        metrics.score = measured > 0 ? 1 - metrics.diffPixels / measured : 0;
         const base = `${stems.get(route)}.${width}`;
         const images = {
           left: `${base}.left.png`,
@@ -224,13 +235,14 @@ async function shoot(
   urlPath: string,
   width: number,
   cfg: ResolvedConfig,
+  now: number,
 ): Promise<Shot> {
   try {
-    return await capture(page, url, urlPath, width, cfg);
+    return await capture(page, url, urlPath, width, cfg, now);
   } catch (e) {
     if (!transient(e)) throw e;
     await page.waitForTimeout(1000);
-    return await capture(page, url, urlPath, width, cfg);
+    return await capture(page, url, urlPath, width, cfg, now);
   }
 }
 

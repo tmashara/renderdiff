@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layout parity</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for the unstable-pixel cap. A timer recolours the whole page background every
+   10ms, so nearly every pixel is unstable and the route must error rather than score. */
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Unsettled page guard rail</h1>
+<p class="lede">The page background changes colour every ten milliseconds. Almost nothing on it can be captured the same way twice, so there is too little left to measure.</p>
+
+<section class="notes">
+<h2>Notes</h2>
+<p>Unstable pixels are left out of the measurement. When they cover most of the page, a score over what remains would describe a sliver of it, so the route is refused instead.</p>
+</section>
+</div>
+<script>
+let n = 0;
+setInterval(() => {
+  n++;
+  document.body.style.background = `rgb(${(n * 53) % 256}, ${(n * 97) % 256}, ${(n * 29) % 256})`;
+}, 10);
+</script>
+</body>
+</html>
