@@ -31,10 +31,10 @@ import { card, parseReport, parseSummary, result, results, type Report } from ".
 import { startFixtureSite, type FixtureSite } from "../helpers/server.ts";
 
 /**
- * Every default width. Both sides switch layout at 480px, and three 288px cards stop fitting
- * below 960, so the mid widths are cases of their own, not repeats of desktop.
+ * Every default width, plus 600: three 288px cards stop fitting below 960 and both sides switch
+ * layout at 480, and a breakpoint hard-coded for 704 and 896 would still break at 600.
  */
-const WIDTHS = [1440, 1152, 896, 704, 375];
+const WIDTHS = [1440, 1152, 896, 704, 600, 375];
 
 let site: FixtureSite;
 let run: CliResult;
