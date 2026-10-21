@@ -10,6 +10,8 @@ export interface Shot {
   unstable: Uint8Array | null;
   /** Why this side looks blank, or null. Only an error when both sides do. */
   blank: string | null;
+  /** `document.body.innerText`, whitespace collapsed per line, empty lines dropped. */
+  text: string[];
 }
 
 /**
@@ -104,9 +106,23 @@ export async function capture(
     .catch(() => {});
   await page.addStyleTag({ content: cfg.neutralizeCss }); // anything injected late
 
-  const { scrollHeight, textLength, media } = await page.evaluate(() => ({
+  // Masks only paint the PNG, so hide them for the text read too; visibility keeps layout.
+  const masks = masksFor(cfg, page, urlPath);
+  const hidden: string[][] = [];
+  for (const l of masks) {
+    hidden.push(
+      await l.evaluateAll((els) =>
+        els.map((e) => {
+          const prev = (e as HTMLElement).style.visibility;
+          (e as HTMLElement).style.visibility = "hidden";
+          return prev;
+        }),
+      ),
+    );
+  }
+  const { scrollHeight, innerText, media } = await page.evaluate(() => ({
     scrollHeight: document.documentElement.scrollHeight,
-    textLength: (document.body.innerText || "").length,
+    innerText: document.body.innerText || "",
     media: Array.from(
       document.querySelectorAll(
         "img, svg, canvas, video, iframe, input, textarea, select",
@@ -116,9 +132,20 @@ export async function capture(
       return r.width * r.height >= 1024;
     }),
   }));
+  // Reverse order, so an element two masks share gets its original value back.
+  for (let i = masks.length - 1; i >= 0; i--) {
+    await masks[i]!.evaluateAll(
+      (els, prev) => els.forEach((e, j) => ((e as HTMLElement).style.visibility = prev[j] ?? "")),
+      hidden[i]!,
+    );
+  }
+  const text = innerText
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
   const blank =
-    textLength < 200 && !media
-      ? `height=${scrollHeight}, text=${textLength} chars`
+    innerText.length < 200 && !media
+      ? `height=${scrollHeight}, text=${innerText.length} chars`
       : null;
   if (scrollHeight > MAX_PAGE_HEIGHT) {
     throw new Error(
@@ -132,7 +159,7 @@ export async function capture(
   await page.evaluate(() => window.scrollTo(0, 0));
   const boxes = (
     await Promise.all(
-      (await Promise.all(masksFor(cfg, page, urlPath).map((l) => l.all())))
+      (await Promise.all(masks.map((l) => l.all())))
         .flat()
         .map((el) => el.boundingBox()),
     )
@@ -151,8 +178,8 @@ export async function capture(
   for (let n = 2; ; n++) {
     await page.waitForTimeout(100);
     const png = await shoot();
-    if (png.equals(prev)) return { png, unstable: null, blank };
-    if (n === tries) return { png, unstable: await differing(prev, png), blank };
+    if (png.equals(prev)) return { png, unstable: null, blank, text };
+    if (n === tries) return { png, unstable: await differing(prev, png), blank, text };
     prev = png;
   }
 }

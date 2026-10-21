@@ -115,6 +115,35 @@ The score is the share of pixels that match, per route per width. Green above 99
 amber to 97%, red below. It is a triage signal, not a verdict — open the report and
 look at the diff column.
 
+Under each score, stdout and the report card say where to look:
+
+```
+  [3/8] 97.14%  /pricing @1440  (height -24px)
+        3 regions, largest 1440×33 at (0,1104)
+        band -24px at y=196 (right)
+        aligned 100.00%
+        text: 0 added, 1 removed
+```
+
+- **Regions** are connected patches of differing pixels, on a 16px grid, largest first. On
+  a long page a missing link barely moves the score; it is still a region. Only the area
+  both sides cover is searched: padding is reported by the height delta and the bands. The
+  card lists the top five with their pixel counts.
+- **Bands** are rows only one side has, found by aligning the two images row by row. `-24px
+  at y=196 (right)` means the right side has 24 rows there that the left lacks — signed like
+  the height delta. When rows of identical content repeat, the band's `y` can slide along
+  them, so treat it as approximate. `aligned` is the score over the rows the alignment pairs,
+  i.e. what the page would score if the bands were cut out; it only shows when there are
+  bands. Pages of different heights that share too few identical rows say `rows too
+  different to align`. A horizontal shift is never a band. Alignment works on exact row
+  matches, so it gives up when the edits total more than 2,000 rows (a single inserted or
+  removed block aligns at any height), or when sub-threshold shade noise touches every row.
+- **Text** is a line diff of each side's `document.body.innerText`. Left is the changed
+  version: *added* lines are on the left only, *removed* lines on the right only. The card
+  lists the first 20. Masked elements are left out. Unmasked text that changes per load
+  (a ticker, a clock) shows up here whenever the two sides differed at capture time, even
+  when its pixels were painted out as unstable.
+
 **Magenta means padding.** When one side is taller or wider, the shorter image is padded
 with magenta, and that padding counts against the score on purpose: a page 400px shorter
 than the one it's compared against has not reached parity. The `height ±Npx` badge on the

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layout parity</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* CONTROL for the text diff. Five nav links here; the left side drops Pricing, so its nav
+   is one 24px line shorter and everything below moves up by exactly that. */
+.nav a { display: block; height: 24px; color: var(--accent); }
+.nav { margin: 0 0 32px; }
+.hero { height: 640px; }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Nav control</h1>
+<p class="lede">This pair is deliberately different. The left side is missing one nav link.</p>
+
+<nav class="nav">
+  <a href="#home">Home</a>
+  <a href="#docs">Docs</a>
+  <a href="#pricing">Pricing</a>
+  <a href="#blog">Blog</a>
+  <a href="#contact">Contact</a>
+</nav>
+
+<div class="hero"></div>
+
+<section class="notes">
+<h2>Notes</h2>
+<p>A missing link is a small share of the page, so the pixel score barely moves. The text diff names the line that went missing, and the row alignment names the 24px it took with it.</p>
+</section>
+</div>
+</body>
+</html>

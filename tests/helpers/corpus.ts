@@ -21,7 +21,7 @@ export const EQUIVALENCE = [
 ] as const;
 
 /** Deliberately different. Must score low — otherwise the suite proves nothing. */
-export const CONTROLS = ["shifted", "taller", "color"] as const;
+export const CONTROLS = ["shifted", "taller", "color", "nav"] as const;
 
 /** One per defence in src/capture.ts and src/config.ts. */
 export const GUARDRAILS = [

@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
+import type { Band, Region, TextDiff } from "./compare.ts";
 import { CONTEXT_OPTIONS, type ResolvedConfig } from "./config.ts";
-import { pct, signed } from "./format.ts";
+import { fmtBand, fmtRegion, pct, signed } from "./format.ts";
 
 interface BaseResult {
   url: string;
@@ -18,6 +19,14 @@ export interface ComparedResult extends BaseResult {
   widthDelta: number;
   /** Pixels that changed between shots of the same load, painted out on both sides. */
   unstablePixels: number;
+  /** Connected diff patches, largest first. */
+  regions: Region[];
+  /** Rows only one side has; null when the rows were too different to align. */
+  bands: Band[] | null;
+  /** Score over the rows the alignment pairs; null unless there are bands. */
+  alignedScore: number | null;
+  /** innerText line diff; `added` is on left only, `removed` on right only. */
+  text: TextDiff;
   images: { left: string; right: string; diff: string };
 }
 
@@ -69,6 +78,39 @@ function section(rows: ComparedResult[]): string {
 </section>`;
 }
 
+/** Cap on regions and text lines listed per card; the counts are always full. */
+const LIST_CAP = 5;
+const TEXT_CAP = 20;
+
+function findings(r: ComparedResult): string {
+  const items: string[] = [];
+  if (r.regions.length) {
+    items.push(
+      `<p>${r.regions.length} region(s)</p><ul class="regions">${r.regions
+        .slice(0, LIST_CAP)
+        .map((g) => `<li>${fmtRegion(g)} — ${g.pixels.toLocaleString("en-US")} px</li>`)
+        .join("")}</ul>`,
+    );
+  }
+  if (r.bands?.length) {
+    items.push(
+      `<ul class="bands">${r.bands.map((b) => `<li>band ${fmtBand(b)}</li>`).join("")}</ul>`,
+    );
+  }
+  const { added, removed } = r.text;
+  if (added.length || removed.length) {
+    const lines = [
+      ...added.map((t) => `<li class="add">+ ${esc(t)}</li>`),
+      ...removed.map((t) => `<li class="del">- ${esc(t)}</li>`),
+    ];
+    items.push(
+      `<p>text: ${added.length} added, ${removed.length} removed</p>` +
+        `<ul class="text">${lines.slice(0, TEXT_CAP).join("")}</ul>`,
+    );
+  }
+  return items.length ? `<div class="findings">${items.join("")}</div>` : "";
+}
+
 function card(r: ComparedResult): string {
   const imgs = r.images;
   return `
@@ -80,8 +122,10 @@ function card(r: ComparedResult): string {
     ${r.heightDelta ? `<span class="delta">height ${signed(r.heightDelta)}px</span>` : ""}
     ${r.widthDelta ? `<span class="delta">width ${signed(r.widthDelta)}px</span>` : ""}
     ${r.unstablePixels ? `<span class="unstable">${r.unstablePixels.toLocaleString("en-US")} px unstable</span>` : ""}
+    ${r.alignedScore !== null ? `<span class="aligned">aligned ${pct(r.alignedScore)}</span>` : ""}
     <span class="px">${r.diffPixels.toLocaleString()} / ${r.totalPixels.toLocaleString()} px differ</span>
   </header>
+  ${findings(r)}
   <div class="grid">
     <figure><figcaption>left</figcaption><a href="${imgs.left}" target="_blank"><img loading="lazy" src="${imgs.left}"></a></figure>
     <figure><figcaption>right</figcaption><a href="${imgs.right}" target="_blank"><img loading="lazy" src="${imgs.right}"></a></figure>
@@ -120,7 +164,11 @@ export async function writeReport(
           margin:0 0 1rem; padding:.75rem 1rem 1rem; }
   .card header { display:flex; align-items:center; gap:.75rem; flex-wrap:wrap; margin-bottom:.75rem }
   .score { font-weight:700; font-variant-numeric:tabular-nums; min-width:4.5rem }
-  .w, .px, .delta, .unstable { color:var(--mut); font-size:12px }
+  .w, .px, .delta, .unstable, .aligned { color:var(--mut); font-size:12px }
+  .findings { font-size:12px; color:var(--mut); margin:0 0 .75rem }
+  .findings p { margin:.25rem 0 0 }
+  .findings ul { margin:.25rem 0; font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace }
+  .findings .add { color:#2e7d32 } .findings .del { color:#c62828 }
   .unstable { background:rgba(255,0,255,.12); padding:.1rem .4rem; border-radius:4px }
   .delta { background:rgba(181,137,0,.15); padding:.1rem .4rem; border-radius:4px }
   .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:.75rem }

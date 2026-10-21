@@ -22,7 +22,8 @@ Check it's there: `renderdiff --version`. If not:
 
 A finished check has these four parts, in this order:
 
-1. **Scores** — the mean and worst lines from stdout.
+1. **Scores** — the mean and worst lines from stdout, with each route's regions, bands
+   and text-diff counts.
 2. **What you saw in the diff PNGs you opened** — named per route and width, e.g.
    "/pricing @1440: footer block sits 40px lower on the left; nav identical."
 3. **What you did not verify** — errored routes, widths you skipped, regions under a
@@ -53,7 +54,29 @@ appended, so the two sides must share URL structure.
 renderdiff /about --left http://localhost:4000 --right https://example.com --width 1440
 ```
 
-**4. Open the diff.** Output lands in `./renderdiff-out/` as
+**4. Read the detail lines, then open the diff.** Under each score stdout prints what
+changed and where:
+
+```
+  [1/1] 97.14%  /about @1440  (height -24px)
+        3 regions, largest 1440×33 at (0,1104)
+        band -24px at y=196 (right)
+        aligned 100.00%
+        text: 0 added, 1 removed
+```
+
+- **text** — read it first. `removed` lines are on the right (reference) only, `added` on
+  the left (your change) only; the report card lists them. A removed line is missing
+  content whatever the score says. Masked elements are left out, but unmasked text that
+  changes per load (a ticker, a clock) appears whenever the sides differed at capture.
+- **band** — rows one side has that the other lacks (`-` = only right has them, `+` = only
+  left). Everything below a band is pushed down, so the red below it is one cause, not
+  many. `aligned` near 100% means the band *is* the whole difference. `y` is approximate
+  where identical rows repeat.
+- **regions** — where the differing pixels are, largest first, as `w×h at (x,y)`. Go to
+  each one in the diff PNG. Many regions plus a band: look at the band first.
+
+Output lands in `./renderdiff-out/` as
 `{slug}.{width}.{left,right,diff}.png` — `/` slugs to `index`, `/blog/foo` to
 `blog-foo`, other characters to `_`, and a clash gets a `-2` suffix:
 
@@ -64,7 +87,7 @@ Read renderdiff-out/about.1440.diff.png
 Read `left.png` and `right.png` too when the diff alone doesn't explain itself.
 Working with a human present? Add `--open` so they see the report as well.
 
-**5. Explain every red region before widening.** Each one is a real regression, content
+**5. Explain every region, band and text line before widening.** Each one is a real regression, content
 that legitimately drifts, or a height difference. Don't move on with an unexplained band.
 
 **6. Widen.** All routes, default widths, and `--threshold` once you know what clean
@@ -80,7 +103,9 @@ site — you're a guest there.
 | `HTTP 404 at …` (or any status ≥ 400) | That side answered with an error status. Usually a route that doesn't exist on one origin, or a dev server not ready. |
 | `page did not render on either side (…)` | Both sides had under 200 chars of text and no visible images, SVG, canvas, video, iframes or form controls, so renderdiff refused to score two blanks as a match. Usually a failed asset or an app that never mounted. One blank side isn't refused — it shows up as a low score. |
 | `ERROR` rows | Unmeasured, not failed. They exit 1 because an unmeasured route isn't a verified one. Report them as unverified. |
-| Uniform low score, whole page shifted | Almost always a height or font-loading difference near the top pushing everything down. Compare the top of left vs right. |
+| Uniform low score, whole page shifted | Almost always a height or font-loading difference near the top pushing everything down. A `band` line names where; compare left and right at that `y`. No band means the shift is horizontal or the content itself changed. |
+| `text: N added, M removed` | Content differs. Read the lines on the report card: a removed line is something the reference shows and your change doesn't. |
+| `rows too different to align` | The pages differ in height but share too few identical rows to align, so no bands. Either they are very different, or the edits total more than 2,000 rows, or sub-threshold noise touches every row. Use the height badge and regions. |
 | `unstable Npx` badge | Pixels that kept changing between shots of the same load on one origin (a ticker, a carousel, a video). Painted out on both sides and excluded from the measurement, so the score covers only the rest. A large number means a big region went unmeasured — look at the magenta on the images. |
 | `page did not settle: Npx unstable at …` | More than 25% of the page kept changing between shots, so too little was measured to score. Mask or stop the moving part (a carousel, a background video). |
 
@@ -91,6 +116,7 @@ Report colouring: green above 99.5%, amber to 97%, red below.
 | Thought | Reality |
 | --- | --- |
 | "Mean 99.1%, no regressions." | You reported a number, not a check. Open the worst diff. |
+| "99.6%, it's noise." | Check the text diff and region count first. A missing nav link is 99.6% and one `removed` line. |
 | "It's probably just fonts / antialiasing." | "Probably" is exactly what the diff PNG resolves. Look. |
 | "Masking the header gets this to 100%." | Every mask is coverage surrendered. Mask only content *proven* to vary per load — clocks, star counts, rotating quotes — with a `reason`, which the report prints verbatim. |
 | "I'll lower `--threshold` until it passes." | Threshold is a CI gate, not a dial for reaching green. |
