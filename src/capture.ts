@@ -1,4 +1,4 @@
-import type { Page } from "playwright";
+import type { Locator, Page } from "playwright";
 import sharp from "sharp";
 import { MASK_COLOR, masksFor, type ResolvedConfig, type Route } from "./config.ts";
 
@@ -10,7 +10,10 @@ export interface Shot {
   unstable: Uint8Array | null;
   /** Why this side looks blank, or null. Only an error when both sides do. */
   blank: string | null;
-  /** `document.body.innerText`, whitespace collapsed per line, empty lines dropped. */
+  /**
+   * `document.body.innerText` (the element's, with a selector), whitespace collapsed per
+   * line, empty lines dropped.
+   */
   text: string[];
 }
 
@@ -61,6 +64,7 @@ export async function capture(
   page: Page,
   url: string,
   route: Route,
+  side: "left" | "right",
   width: number,
   cfg: ResolvedConfig,
   now: number,
@@ -106,6 +110,15 @@ export async function capture(
     .catch(() => {});
   await page.addStyleTag({ content: cfg.neutralizeCss }); // anything injected late
 
+  const selector = route.selector?.[side];
+  const where = `on ${side} (${route[side]})`;
+  // count() doesn't wait, so a wrong selector fails now rather than after a 30s timeout.
+  const el = selector ? page.locator(selector) : null;
+  const n = await el?.count();
+  if (n !== undefined && n !== 1) {
+    throw new Error(`selector "${selector}" matched ${n} elements ${where}, expected 1`);
+  }
+
   // Masks only paint the PNG, so hide them for the text read too; visibility keeps layout.
   const masks = masksFor(cfg, page, route);
   const hidden: string[][] = [];
@@ -120,18 +133,20 @@ export async function capture(
       ),
     );
   }
-  const { scrollHeight, innerText, media } = await page.evaluate(() => ({
-    scrollHeight: document.documentElement.scrollHeight,
-    innerText: document.body.innerText || "",
-    media: Array.from(
-      document.querySelectorAll(
-        "img, svg, canvas, video, iframe, input, textarea, select",
-      ),
-    ).some((e) => {
-      const r = e.getBoundingClientRect();
-      return r.width * r.height >= 1024;
-    }),
-  }));
+  const { scrollHeight, innerText, pageText, media } = await (el ?? page.locator(":root")).evaluate((root) => {
+    const body = document.body ?? document.documentElement;
+    return {
+      scrollHeight: document.documentElement.scrollHeight,
+      innerText: ((root === document.documentElement ? body : root) as HTMLElement).innerText || "",
+      pageText: body.innerText?.length ?? 0,
+      media: Array.from(
+        document.querySelectorAll("img, svg, canvas, video, iframe, input, textarea, select"),
+      ).some((e) => {
+        const r = e.getBoundingClientRect();
+        return r.width * r.height >= 1024;
+      }),
+    };
+  });
   // Reverse order, so an element two masks share gets its original value back.
   for (let i = masks.length - 1; i >= 0; i--) {
     await masks[i]!.evaluateAll(
@@ -143,10 +158,7 @@ export async function capture(
     .split("\n")
     .map((line) => line.replace(/\s+/g, " ").trim())
     .filter(Boolean);
-  const blank =
-    innerText.length < 200 && !media
-      ? `height=${scrollHeight}, text=${innerText.length} chars`
-      : null;
+  const blank = pageText < 200 && !media ? `height=${scrollHeight}, text=${pageText} chars` : null;
   if (scrollHeight > MAX_PAGE_HEIGHT) {
     throw new Error(
       `page is ${scrollHeight}px tall, past the ${MAX_PAGE_HEIGHT}px sanity ceiling ` +
@@ -154,21 +166,44 @@ export async function capture(
     );
   }
 
-  const tiled = scrollHeight > MAX_CAPTURE_HEIGHT;
-  // At scroll 0 viewport coordinates are page coordinates, which both paths shoot in.
+  // A clip of any height comes out whole, so only a page shot needs tiles.
+  const tiled = !el && scrollHeight > MAX_CAPTURE_HEIGHT;
+  const measure = async (l: Locator) => {
+    const b = await l.boundingBox();
+    if (!b?.width || !b.height) throw new Error(`selector "${selector}" has no box ${where}`);
+    return b;
+  };
+  let clip: Box | undefined;
+  // Brings in what lazy-loads near it; then scroll 0, so sticky chrome is as in a page shot.
+  if (el) {
+    await measure(el);
+    await el.scrollIntoViewIfNeeded();
+  }
+  // At scroll 0 viewport coordinates are page coordinates, which every path shoots in.
   await page.evaluate(() => window.scrollTo(0, 0));
+  if (el) {
+    const b = await measure(el);
+    const x = Math.max(0, Math.floor(b.x));
+    const y = Math.max(0, Math.floor(b.y));
+    clip = { x, y, width: Math.ceil(b.x + b.width) - x, height: Math.ceil(b.y + b.height) - y };
+    if (clip.width <= 0 || clip.height <= 0) {
+      throw new Error(`selector "${selector}" is off the page ${where}`);
+    }
+  }
   const boxes = (
     await Promise.all(
       (await Promise.all(masks.map((l) => l.all())))
         .flat()
-        .map((el) => el.boundingBox()),
+        .map((m) => m.boundingBox()),
     )
-  ).filter((b) => b !== null);
+  )
+    .filter((b) => b !== null)
+    .map((b) => (clip ? { ...b, x: b.x - clip.x, y: b.y - clip.y } : b));
   const shoot = async () =>
     paintBoxes(
       tiled
         ? await captureTiled(page, width, scrollHeight)
-        : await page.screenshot({ fullPage: true, animations: "disabled" }),
+        : await page.screenshot({ fullPage: true, clip, animations: "disabled" }),
       boxes,
     );
 

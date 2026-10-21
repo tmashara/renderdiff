@@ -27,8 +27,8 @@ import {
   tempDir,
   type CliResult,
 } from "../helpers/cli.ts";
-import { card, parseReport, parseSummary, result, results } from "../helpers/parse.ts";
-import { startFixtureSite, type FixtureSite } from "../helpers/server.ts";
+import { card, parseProgress, parseReport, parseSummary, result, results, row } from "../helpers/parse.ts";
+import { PAGES_DIR, startFixtureSite, type FixtureSite } from "../helpers/server.ts";
 import { EXPECT_HEIGHT } from "../fixtures/pages/tall/page.ts";
 
 const CONFIGS = path.resolve(
@@ -121,6 +121,13 @@ describe("the render gate", () => {
     const report = parseReport(run.report()!);
     assert.equal(report.errors.length, 1, context(run));
     assert.match(report.errors[0]!.message, /HTTP 404/);
+  });
+
+  test("a document with no <body> is refused at once, not after a wait for one", async () => {
+    const start = Date.now();
+    const run = await capture(["/frameset"]);
+    assert.match(run.stdout, /page did not render on either side/, context(run));
+    assert.ok(Date.now() - start < 5_000, `took ${Date.now() - start}ms${context(run)}`);
   });
 
   test("a hidden SVG sprite does not count as rendered media", async () => {
@@ -356,6 +363,112 @@ describe("route pairs", () => {
     assert.equal(run.code, 0, context(run));
     const r = result(results(run.outDir), "/drifting::/drifting?pair", 1440);
     assert.equal(r.diffPixels, 0, `the mask missed a side${context(run)}`);
+  });
+});
+
+describe("component scope", () => {
+  const SWATCH = 'xpath=//h3[text()="Three"]/ancestor::div[1]';
+  const scoped = (routes: string[], flags: string[], config?: string) =>
+    runCli([...renderdiffArgs({ left: site.left, right: site.right, routes, widths: [1440], config }), ...flags]);
+
+  test("a selector matching several elements, or none, errors at once with the count and side", async () => {
+    assert.equal(
+      (fs.readFileSync(path.join(PAGES_DIR, "flex-vs-grid", "left.html"), "utf8").match(/<article\b/g) ?? []).length,
+      6,
+    );
+    const config = path.join(tempDir(), "counts.mjs");
+    fs.writeFileSync(
+      config,
+      'export default { routes: [{ left: "/flex-vs-grid", selector: "article" }, { left: "/flex-vs-grid", selector: ".nope" }] };\n',
+    );
+    const start = Date.now();
+    const run = await scoped([], [], config);
+    // Not after Playwright's 30s wait.
+    assert.ok(Date.now() - start < 5_000, `took ${Date.now() - start}ms${context(run)}`);
+    assert.equal(run.code, 1, context(run));
+    assert.match(run.stdout, /selector "article" matched 6 elements on left \(\/flex-vs-grid\), expected 1/, context(run));
+    assert.match(run.stdout, /selector "\.nope" matched 0 elements on left/, context(run));
+  });
+
+  test("an element with no text that differs only in colour is scored, not refused as blank", async () => {
+    const run = await scoped(["/stripe"], ["--selector", ".plain"]);
+    assert.equal(run.code, 0, context(run));
+    const r = result(results(run.outDir), "/stripe", 1440);
+    assert.ok(r.score < 1 && r.diffPixels > 0, context(run));
+  });
+
+  test("an element whose only text is masked compares clean", async () => {
+    const run = await scoped(["/drifting"], ["--selector", "[data-drift]"], path.join(CONFIGS, "mask-selector.mjs"));
+    assert.equal(run.code, 0, context(run));
+    assert.deepEqual(parseSummary(run.stdout).clean, ["/drifting [[data-drift]]"], context(run));
+  });
+
+  test("an element identical on both sides scores 100%, and its route reads as clean", async () => {
+    const run = await scoped(["/flex-vs-grid"], ["--selector", "h1"]);
+    assert.equal(run.code, 0, context(run));
+    const r = result(results(run.outDir), "/flex-vs-grid", 1440);
+    assert.equal(r.diffPixels, 0, context(run));
+    assert.deepEqual(r.selector, { left: "h1", right: "h1" });
+    assert.ok(r.totalPixels < 1440 * 100, `shot the page, not the h1${context(run)}`);
+    assert.deepEqual(parseSummary(run.stdout).clean, ["/flex-vs-grid [h1]"], context(run));
+  });
+
+  test("the recoloured swatch alone scores low, with its region in the element's own pixels", async () => {
+    const run = await scoped(["/color"], ["--selector", SWATCH, "--progress"]);
+    assert.equal(run.code, 0, context(run));
+    const r = result(results(run.outDir), "/color", 1440);
+    assert.deepEqual(r.selector, { left: SWATCH, right: SWATCH });
+    assert.equal(r.totalPixels, 208 * 160, context(run));
+    assert.ok(r.score < 0.1, context(run));
+    assert.deepEqual(r.regions.map(({ x, y, w, h }) => [x, y, w, h]), [[0, 0, 208, 160]], context(run));
+    assert.equal(row(parseProgress(run.stdout), "/color", 1440).selector, SWATCH, context(run));
+    assert.ok(cardFor(run, `/color [${SWATCH}]`), context(run));
+    assert.ok(r.images.left.startsWith("color@xpath_"), r.images.left);
+    // A rerun into the same out dir, so ours() accepts the `@` stems.
+    const again = await runCli(
+      [...renderdiffArgs({ left: site.left, right: site.right, routes: ["/color"], widths: [1440] }), "--selector", SWATCH, "--out", run.outDir],
+      { noOut: true },
+    );
+    assert.equal(again.code, 0, context(again));
+  });
+
+  test("a mask is painted in the element's coordinates", async () => {
+    const config = path.join(tempDir(), "mask.mjs");
+    fs.writeFileSync(
+      config,
+      'export default { masks: [{ reason: "swatch", selector: ".strip:first-of-type > .swatch:nth-child(3)" }] };\n',
+    );
+    // The first strip sits below the page's top, so an untranslated mask would miss it.
+    const run = await scoped(["/color"], ["--selector", ".strip >> nth=0"], config);
+    assert.equal(run.code, 0, context(run));
+    assert.equal(result(results(run.outDir), "/color", 1440).diffPixels, 0, context(run));
+  });
+
+  test("each side compares its own selector", async () => {
+    const PAIR = "/color::/color?pair";
+    const run = await scoped([PAIR], ["--left-selector", ".swatch >> nth=0", "--right-selector", ".swatch >> nth=1"]);
+    assert.equal(run.code, 0, context(run));
+    const r = result(results(run.outDir), PAIR, 1440);
+    assert.deepEqual(r.selector, { left: ".swatch >> nth=0", right: ".swatch >> nth=1" });
+    assert.deepEqual([r.text.added, r.text.removed], [["One"], ["Two"]], context(run));
+    assert.match(r.images.left, /^color~color_pair@_swatch____nth_0~_swatch____nth_1\./);
+  });
+
+  test("a route listed once per selector compares each, into its own files", async () => {
+    const config = path.join(tempDir(), "two.mjs");
+    fs.writeFileSync(
+      config,
+      'export default { routes: [{ left: "/color", selector: ".swatch >> nth=2" }, { left: "/color", selector: "h1" }] };\n',
+    );
+    const run = await runCli([...renderdiffArgs({ left: site.left, right: site.right, routes: [], widths: [1440], config })]);
+    const res = results(run.outDir);
+    const [swatch, h1] = [result(res, "/color", 1440, ".swatch >> nth=2"), result(res, "/color", 1440, "h1")];
+    assert.ok(swatch.diffPixels > 0 && h1.diffPixels === 0, context(run));
+    assert.notEqual(swatch.images.left, h1.images.left);
+    const summary = parseSummary(run.stdout);
+    assert.deepEqual(summary.clean, ["/color [h1]"], context(run));
+    assert.ok(summary.routes.has("/color [.swatch >> nth=2]"), context(run));
+    assert.equal(summary.verdict.worst?.route, "/color [.swatch >> nth=2]", context(run));
   });
 });
 

@@ -4,7 +4,15 @@ import path from "node:path";
 import { chromium, errors, type Page } from "playwright";
 import { cancelUnstable, capture, prepare, type Shot } from "./capture.ts";
 import { compare, crops, type Band } from "./compare.ts";
-import { CONTEXT_OPTIONS, label, version, type ResolvedConfig, type Route } from "./config.ts";
+import {
+  CONTEXT_OPTIONS,
+  label,
+  name,
+  selectorText,
+  version,
+  type ResolvedConfig,
+  type Route,
+} from "./config.ts";
 import { fmtBand, fmtRegion, pct, signed } from "./format.ts";
 import {
   stats,
@@ -40,10 +48,15 @@ const slug = (url: string) =>
         .replace(/\//g, "-")
         .replace(/[^a-z0-9-]/g, "_");
 
-const stem = (r: Route) =>
-  (r.left === r.right ? slug(r.left) : `${slug(r.left)}~${slug(r.right)}`).slice(0, 200);
+const slugSelector = (s: string) => s.toLowerCase().replace(/[^a-z0-9-]/g, "_");
 
-/** Route label -> file stem, unique across the run. Suffixes follow route order, so reruns agree. */
+const stem = (r: Route) =>
+  (
+    (r.left === r.right ? slug(r.left) : `${slug(r.left)}~${slug(r.right)}`) +
+    (r.selector ? `@${[...new Set([r.selector.left, r.selector.right])].map(slugSelector).join("~")}` : "")
+  ).slice(0, 200);
+
+/** Route name -> file stem, unique across the run. Suffixes follow route order, so reruns agree. */
 function slugs(routes: Route[]): Map<string, string> {
   const out = new Map<string, string>();
   const used = new Set<string>();
@@ -51,7 +64,7 @@ function slugs(routes: Route[]): Map<string, string> {
     let s = stem(route);
     for (let n = 2; used.has(s); n++) s = `${stem(route)}-${n}`;
     used.add(s);
-    out.set(label(route), s);
+    out.set(name(route), s);
   }
   return out;
 }
@@ -101,13 +114,15 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
 
     for (let job = queue.shift(); job; job = queue.shift()) {
       const { route, width } = job;
-      const name = label(route);
-      const tag = `${name} @${width}`;
+      const key = name(route);
+      const tag = `${label(route)} @${width}`;
+      // Its own line: parse.ts reads the route on the row as one \S+ token.
+      const sel = route.selector ? `selector ${selectorText(route.selector)}` : "";
       try {
         // allSettled, not all: a page must not start the next job while still loading this one.
         const settled = await Promise.allSettled([
-          shoot(leftPage, cfg.left + route.left, route, width, cfg, now),
-          shoot(rightPage, cfg.right + route.right, route, width, cfg, now),
+          shoot(leftPage, cfg.left + route.left, route, "left", width, cfg, now),
+          shoot(rightPage, cfg.right + route.right, route, "right", width, cfg, now),
         ]);
         const failed = settled.find((r) => r.status === "rejected");
         if (failed) throw failed.reason;
@@ -119,7 +134,7 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
         if (leftShot.blank && rightShot.blank) {
           throw new Error(
             `page did not render on either side ` +
-              `(left: ${leftShot.blank}; right: ${rightShot.blank}) at ${name}`,
+              `(left: ${leftShot.blank}; right: ${rightShot.blank}) at ${key}`,
           );
         }
         const unstablePixels = await cancelUnstable(leftShot, rightShot);
@@ -127,12 +142,12 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
         const { diffPng, spots, ...metrics } = await compare(leftShot, rightShot);
         if (unstablePixels > MAX_UNSTABLE_SHARE * metrics.totalPixels) {
           throw new Error(
-            `page did not settle: ${unstablePixels}px unstable at ${name}`,
+            `page did not settle: ${unstablePixels}px unstable at ${key}`,
           );
         }
         const measured = metrics.totalPixels - unstablePixels;
         metrics.score = measured > 0 ? 1 - metrics.diffPixels / measured : 0;
-        const base = `${stems.get(name)}.${width}`;
+        const base = `${stems.get(key)}.${width}`;
         const images = {
           left: `${base}.left.png`,
           right: `${base}.right.png`,
@@ -150,7 +165,7 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
         ]);
 
         results.push({
-          url: name,
+          url: label(route),
           ...route,
           width,
           status: "compared",
@@ -161,6 +176,7 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
         });
         const { regions, bands, alignedScore, text } = metrics;
         const details = [
+          sel,
           regions.length
             ? `${regions.length} region${regions.length > 1 ? "s" : ""}, largest ${fmtRegion(regions[0]!)}`
             : "",
@@ -185,14 +201,16 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
         );
       } catch (e) {
         results.push({
-          url: name,
+          url: label(route),
           ...route,
           width,
           status: "error",
           error: e instanceof Error ? e.message : String(e),
         });
         ++done;
-        if (progress) console.log(`  [${done}/${jobs.length}] ERROR  ${tag}`);
+        if (progress) {
+          console.log(`  [${done}/${jobs.length}] ERROR  ${tag}` + (sel && `\n        ${sel}`));
+        }
       }
     }
     await leftCtx.close();
@@ -208,9 +226,9 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
   await browser.close();
 
   // Workers finish out of order; job order keeps results.json stable across runs.
-  const names = routes.map(label);
+  const names = routes.map(name);
   const order = (r: RouteResult) =>
-    names.indexOf(r.url) * cfg.widths.length + cfg.widths.indexOf(r.width);
+    names.indexOf(name(r)) * cfg.widths.length + cfg.widths.indexOf(r.width);
   results.sort((a, b) => order(a) - order(b));
 
   const meta = {
@@ -270,16 +288,17 @@ async function shoot(
   page: Page,
   url: string,
   route: Route,
+  side: "left" | "right",
   width: number,
   cfg: ResolvedConfig,
   now: number,
 ): Promise<Shot> {
   try {
-    return await capture(page, url, route, width, cfg, now);
+    return await capture(page, url, route, side, width, cfg, now);
   } catch (e) {
     if (!transient(e)) throw e;
     await page.waitForTimeout(1000);
-    return await capture(page, url, route, width, cfg, now);
+    return await capture(page, url, route, side, width, cfg, now);
   }
 }
 
@@ -291,11 +310,11 @@ function summarize(results: RouteResult[], reportPath: string, resultsPath: stri
   if (compared.length) {
     const { sorted, mean, worst } = stats(compared);
     console.log(
-      `\nmean ${pct(mean)}   worst ${pct(worst.score)} (${worst.url} @${worst.width})`,
+      `\nmean ${pct(mean)}   worst ${pct(worst.score)} (${name(worst)} @${worst.width})`,
     );
     for (const r of sorted.slice(0, 10)) {
       console.log(
-        `    ${pct(r.score).padStart(7)}  ${r.url}@${r.width}` +
+        `    ${pct(r.score).padStart(7)}  ${name(r)}@${r.width}` +
           (r.heightDelta ? `  height ${signed(r.heightDelta)}px` : ""),
       );
     }
@@ -304,7 +323,7 @@ function summarize(results: RouteResult[], reportPath: string, resultsPath: stri
   const errors = results.filter((r): r is ErrorResult => r.status === "error");
   if (errors.length) {
     console.log(`\nErrors (${errors.length}):`);
-    for (const e of errors) console.log(`  ${e.url}@${e.width}: ${e.error}`);
+    for (const e of errors) console.log(`  ${name(e)}@${e.width}: ${e.error}`);
   }
 
   console.log(`\nReport: ${reportPath}`);
@@ -329,7 +348,7 @@ export function compact(
   const clean: string[] = [];
   let differ = 0;
   for (const route of routes) {
-    const rows = results.filter((r) => r.url === route);
+    const rows = results.filter((r) => name(r) === route);
     const ok = rows.filter((r): r is ComparedResult => r.status === "compared");
     // Unstable pixels went unmeasured, so a shot with any is not clean, only unchanged.
     const same = ok.filter((r) => r.diffPixels === 0 && r.unstablePixels === 0);
@@ -364,7 +383,7 @@ export function compact(
   out.push(
     `renderdiff: ${differ} of ${routes.length} routes differ (${shots} of ${results.length} shots), ` +
       `${errors} error${errors === 1 ? "" : "s"}` +
-      (worst ? `, worst ${pct(worst.score)} ${worst.url}@${worst.width}` : "") +
+      (worst ? `, worst ${pct(worst.score)} ${name(worst)}@${worst.width}` : "") +
       (threshold === null ? "" : `, ${compared.filter((r) => r.score < threshold).length} below ${pct(threshold)}`) +
       ` — ${resultsPath}`,
   );

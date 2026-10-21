@@ -87,6 +87,8 @@ renderdiff <left-origin> <right-origin> <route…> [options]
 | `--out <dir>` | Output directory, wiped at the start of a run. Default `./renderdiff-out`. A directory holding files renderdiff didn't write is refused. |
 | `--concurrency <n>` | Parallel workers. Default 2. |
 | `--config <path>` | Config file. Default: `renderdiff.config.{ts,mts,js,mjs}` in cwd. |
+| `--selector <sel>` | Compare the one element this Playwright selector matches, on both sides, instead of the whole page. Applies to every route, over the config's per-route `selector`. |
+| `--left-selector <sel>`, `--right-selector <sel>` | That side's selector, over `--selector`. One without the other side (or `--selector`) is an error. |
 | `--dry-run` | Print the URL pairs and exit. No browser. |
 | `--open` | Open the report when the run finishes. |
 | `--progress` | A line per shot as it finishes, then the worst scores. The default on a terminal; piped, renderdiff prints one compact summary at the end. |
@@ -102,7 +104,7 @@ rather than on a breakpoint boundary, so a layout switch never flaps between cap
 Exit codes: `0` all good · `1` a route errored or scored below `--threshold` ·
 `2` bad arguments, bad config, or an origin that isn't responding.
 
-## Comparing different routes
+## Comparing different routes or components
 
 When a migration moved a page, give the route as a pair: `left::right`.
 
@@ -122,6 +124,39 @@ A pair is named `/pricing::/plans` in stdout, `results.json` (`url`, plus `left`
 also be an object, `{ left: "/pricing", right: "/plans" }`, where `right` defaults to
 `left`.
 
+To compare one component instead of the whole page, give a selector:
+
+```
+renderdiff http://localhost:3000 https://example.com /pricing --selector "[data-test=plans]"
+renderdiff http://localhost:3000 https://example.com /pricing --left-selector .plans-v2 --right-selector .plans
+```
+
+Any Playwright selector works, `xpath=` and `>>` chains included, and it's never split on
+`::`. It must match **exactly one** element on each side; otherwise the route errors at once
+with the count (`selector ".card" matched 6 elements on left (/pricing), expected 1`). The
+shot, the score, the regions and the text diff are that element's, in its own pixels; a
+mask is painted where it overlaps the element.
+
+A CLI selector applies to every route and replaces the config's. In a config file a route
+object takes `selector: ".plans"` or `selector: { left: ".plans-v2", right: ".plans" }`;
+to compare several components of one page, list the route once per selector. Such a route
+is `/pricing [.plans]` in the summary and the report, keeps `/pricing @1440` on a
+`--progress` row with the selector on the line under it, has `selector` in `results.json`
+(`{ left, right }`, or `null` for a whole page), and its images are
+`pricing@_plans.{width}.*.png`.
+
+Things to know:
+
+- The whole page still loads and settles first, so a component costs about what its page does.
+- It's shot at scroll 0 with the rest of the page, so a fixed or sticky header over it is
+  in the shot. Hide it with `hideSelectors`.
+- An element inside a shorter scroll container includes whatever paints below the container.
+- A transformed element is shot at its axis-aligned bounding box.
+- Pseudo-elements (`::before`) are rejected by Playwright; elements inside iframes can't be
+  reached. Open shadow roots are pierced.
+- A selector that matches an element with no box (`display: none`) or one off the page is
+  an error. The render gate stays page-level: a textless element on a rendered page is fine.
+
 ## Config file
 
 Flags cover a one-off run. A `renderdiff.config.ts` (or `.mjs`) in the working directory
@@ -132,7 +167,13 @@ content that legitimately drifts, extra selectors to hide, extra URLs to block.
 export default {
   left: "http://localhost:3000",
   right: "https://example.com",
-  routes: ["/", "/about", "/pricing::/plans", { left: "/blog", right: "/posts" }],
+  routes: [
+    "/",
+    "/about",
+    "/pricing::/plans",
+    { left: "/blog", right: "/posts" },
+    { left: "/pricing", selector: "[data-test=plans]" },
+  ],
   widths: [1440, 896, 375],
   threshold: 0.97,
 
@@ -188,8 +229,8 @@ Under each score, `--progress` output and the report card say where to look:
   different to align`. A horizontal shift is never a band. Alignment works on exact row
   matches, so it gives up when the edits total more than 2,000 rows (a single inserted or
   removed block aligns at any height), or when sub-threshold shade noise touches every row.
-- **Text** is a line diff of each side's `document.body.innerText`. Left is the changed
-  version: *added* lines are on the left only, *removed* lines on the right only. The card
+- **Text** is a line diff of each side's `document.body.innerText` (the element's, with a
+  selector). Left is the changed version: *added* lines are on the left only, *removed* lines on the right only. The card
   lists the first 20. Masked elements are left out. Unmasked text that changes per load
   (a ticker, a clock) shows up here whenever the two sides differed at capture time, even
   when its pixels were painted out as unstable.

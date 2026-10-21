@@ -10,17 +10,25 @@ import type { Locator, Page } from "playwright";
  * Precedence is always: CLI flag > config file > built-in default.
  */
 
+/** A Playwright selector per side. */
+export type Sides = { left: string; right: string };
+
 /**
  * A route to diff: the path loaded on each side, normalized (no trailing slash, `/` for the
- * index). Both are the same path unless the route is a pair.
+ * index). Both are the same path unless the route is a pair. With a selector, each side
+ * compares that one element instead of the whole page.
  */
 export interface Route {
   left: string;
   right: string;
+  selector: Sides | null;
 }
 
-/** A route as written: `/a`, the pair `/a::/b`, or `{ left, right? }` (right defaults to left). */
-export type RouteSpec = string | { left: string; right?: string };
+/**
+ * A route as written: `/a`, the pair `/a::/b`, or `{ left, right?, selector? }` (right
+ * defaults to left).
+ */
+export type RouteSpec = string | { left: string; right?: string; selector?: string | Sides };
 
 /** `pricing` / `/pricing/` -> `/pricing`; `/` stays `/`. */
 export const normalize = (url: string) => {
@@ -29,14 +37,23 @@ export const normalize = (url: string) => {
 };
 
 /** `/a` for a plain route, `/a::/b` for a pair — the route's name in stdout and results.json. */
-export const label = (r: Route) => (r.left === r.right ? r.left : `${r.left}::${r.right}`);
+export const label = (r: Omit<Route, "selector">) =>
+  r.left === r.right ? r.left : `${r.left}::${r.right}`;
+
+/** `.card`, or `.new | .old` when the sides differ. */
+export const selectorText = (s: Sides) => (s.left === s.right ? s.left : `${s.left} | ${s.right}`);
+
+/** The label plus ` [selector]`: unique per route in a run, so the compact summary's group key. */
+export const name = (r: Route) =>
+  label(r) + (r.selector ? ` [${selectorText(r.selector)}]` : "");
 
 /**
  * Specs -> normalized, deduplicated routes; throws on an empty side or a glob. A string is a
  * pair when it has a `::` followed by `/` (or ending it, so `/a::` is an empty side, not a
- * literal), which keeps `?q=std::vector` and `/wiki/Talk:Foo` single routes.
+ * literal), which keeps `?q=std::vector` and `/wiki/Talk:Foo` single routes. A CLI
+ * `selector` replaces every route's own.
  */
-export function parseRoutes(specs: RouteSpec[]): Route[] {
+export function parseRoutes(specs: RouteSpec[], selector?: Sides): Route[] {
   const out = new Map<string, Route>();
   for (const spec of specs) {
     let sides: [string, string];
@@ -54,8 +71,17 @@ export function parseRoutes(specs: RouteSpec[]): Route[] {
     }
     const glob = sides.find((s) => s.includes("*"));
     if (glob) throw new Error(`globs are not supported (${glob}) — pass literal paths.`);
-    const route = { left: normalize(sides[0]), right: normalize(sides[1]) };
-    out.set(label(route), route);
+    const own = typeof spec === "string" ? undefined : spec.selector;
+    const route = {
+      left: normalize(sides[0]),
+      right: normalize(sides[1]),
+      selector: selector ?? (typeof own === "string" ? { left: own, right: own } : (own ?? null)),
+    };
+    const same = out.get(name(route));
+    if (same && JSON.stringify(same) !== JSON.stringify(route)) {
+      throw new Error(`two routes both read as ${name(route)}; change one of their selectors`);
+    }
+    out.set(name(route), route);
   }
   return [...out.values()];
 }
@@ -178,7 +204,7 @@ export interface RenderdiffConfig {
   left?: string;
   /** Right origin, e.g. `https://example.com`. A trailing slash is stripped. */
   right?: string;
-  /** Routes to diff when none are passed on the command line. */
+  /** Routes to diff when none are passed on the command line. A route object may take a `selector`. */
   routes?: RouteSpec[];
   /** Viewport widths. Replaces {@link DEFAULT_WIDTHS} outright. */
   widths?: number[];
@@ -311,13 +337,27 @@ function validate(c: Record<string, unknown>, file: string) {
     (c.routes as unknown[]).forEach((r, i) => {
       if (typeof r === "string") return;
       if (typeof r !== "object" || r === null || Array.isArray(r)) {
-        bad(`routes[${i}]`, "a string or an object { left, right? }");
+        bad(`routes[${i}]`, "a string or an object { left, right?, selector? }");
       }
       const o = r as Record<string, unknown>;
       for (const key of Object.keys(o)) {
-        if (key !== "left" && key !== "right") {
-          throw new Error(`${file}: \`routes[${i}].${key}\` is not a route key (left, right)`);
+        if (!["left", "right", "selector"].includes(key)) {
+          throw new Error(
+            `${file}: \`routes[${i}].${key}\` is not a route key (left, right, selector)`,
+          );
         }
+      }
+      const sel = o.selector as Record<string, unknown> | undefined;
+      if (
+        sel !== undefined &&
+        !(typeof sel === "string" && sel) &&
+        !(
+          typeof sel === "object" && sel !== null &&
+          Object.keys(sel).sort().join() === "left,right" &&
+          [sel.left, sel.right].every((v) => typeof v === "string" && v)
+        )
+      ) {
+        bad(`routes[${i}].selector`, "a non-empty string or { left, right } of non-empty strings");
       }
       if (typeof o.left !== "string" || !o.left) bad(`routes[${i}].left`, "a non-empty string");
       if (o.right !== undefined && (typeof o.right !== "string" || !o.right)) {

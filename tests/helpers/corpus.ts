@@ -42,6 +42,7 @@ export const GUARDRAILS = [
   "tall-region",
   "reorder",
   "stripe",
+  "frameset",
 ] as const;
 
 export const ALL: string[] = [...EQUIVALENCE, ...CONTROLS, ...GUARDRAILS];
@@ -50,10 +51,10 @@ export const ALL: string[] = [...EQUIVALENCE, ...CONTROLS, ...GUARDRAILS];
 export const GENERATED = ["tall", "drifting"];
 
 /** Routes that deliberately do not link `shared/base.css`. */
-export const SELF_CONTAINED = ["blank", "sprite", "tall"];
+export const SELF_CONTAINED = ["blank", "sprite", "tall", "frameset"];
 
-/** Routes under the 200-char text gate: `blank` and `sprite` must be refused, `short` passes on its form controls. */
-export const BELOW_RENDER_GATE = ["blank", "sprite", "short"];
+/** Routes under the 200-char text gate: `blank`, `sprite` and `frameset` must be refused, `short` passes on its form controls. */
+export const BELOW_RENDER_GATE = ["blank", "sprite", "short", "frameset"];
 
 /** `/` for the index, `/name` otherwise — the path to hand to the CLI. */
 export const toPath = (dir: string) => (dir === "home" ? "/" : `/${dir}`);

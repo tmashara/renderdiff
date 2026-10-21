@@ -22,9 +22,14 @@ export function results(outDir: string): Results {
   return JSON.parse(fs.readFileSync(path.join(outDir, "results.json"), "utf8"));
 }
 
-/** The compared entry for one comparison in `results.json`. Throws with context when absent. */
-export function result(res: Results, route: string, width: number): ComparedResult {
-  const found = res.results.find((r) => r.url === route && r.width === width);
+/**
+ * The compared entry for one comparison in `results.json`; `selector` picks among routes listed
+ * once per selector, by its left side. Throws with context when absent.
+ */
+export function result(res: Results, route: string, width: number, selector?: string): ComparedResult {
+  const found = res.results.find(
+    (r) => r.url === route && r.width === width && (!selector || r.selector?.left === selector),
+  );
   if (found?.status !== "compared") {
     const seen = res.results.map((r) => `${r.url}@${r.width}:${r.status}`).join(", ") || "(none)";
     throw new Error(`no compared result for ${route}@${width}; saw: ${seen}`);
@@ -33,7 +38,7 @@ export function result(res: Results, route: string, width: number): ComparedResu
 }
 
 export interface Summary {
-  /** Routes on the `clean:` line. */
+  /** Routes on the `clean:` line; a selector route is `/a [sel]`, as is its key in `routes`. */
   clean: string[];
   /** Each differing route: widths that were clean, then one row per collapsed width group. */
   routes: Map<string, { clean: number[]; rows: { widths: number[]; text: string }[]; errors: { widths: number[]; message: string }[] }>;
@@ -52,19 +57,20 @@ export interface Summary {
 }
 
 const VERDICT =
-  /^renderdiff: (\d+) of (\d+) routes differ \((\d+) of (\d+) shots\), (\d+) errors?(?:, worst ([\d.]+)% (\S+)@(\d+))?(?:, (\d+) below ([\d.]+)%)? — (.+)$/;
+  /^renderdiff: (\d+) of (\d+) routes differ \((\d+) of (\d+) shots\), (\d+) errors?(?:, worst ([\d.]+)% (.+?)@(\d+))?(?:, (\d+) below ([\d.]+)%)? — (.+)$/;
 
 /** The compact summary printed when stdout is not a TTY. Throws when there is no verdict line. */
 export function parseSummary(stdout: string): Summary {
   const lines = stdout.split("\n");
   const v = lines.map((l) => VERDICT.exec(l)).find(Boolean);
   if (!v) throw new Error(`no verdict line in:\n${stdout}`);
-  const clean = /^clean: (.*)$/m.exec(stdout)?.[1]!.split(" ") ?? [];
+  // A selector can hold spaces, so a route ends where the next `/` starts or the line ends.
+  const clean = /^clean: (.*)$/m.exec(stdout)?.[1]!.match(/\/\S*(?: \[.*?\])?(?= \/|$)/g) ?? [];
   const routes: Summary["routes"] = new Map();
   let at: ReturnType<Summary["routes"]["get"]>;
   for (const line of lines) {
     let m;
-    if ((m = /^(\/\S*)(?:  clean @([\d,]+))?$/.exec(line))) {
+    if ((m = /^(\/\S*(?: \[.*\])?)(?:  clean @([\d,]+))?$/.exec(line))) {
       at = { clean: m[2] ? m[2].split(",").map(Number) : [], rows: [], errors: [] };
       routes.set(m[1]!, at);
     } else if (at && (m = /^  @([\d,]+)  ERROR (.*)$/.exec(line))) {
@@ -92,6 +98,8 @@ export function parseSummary(stdout: string): Summary {
 export interface ProgressRow {
   route: string;
   width: number;
+  /** The detail line's `.card`, or `.a | .b`; null for a whole-page route. */
+  selector: string | null;
   /** 0..1, or null for a route that errored. */
   score: number | null;
   /** left − right, in px. 0 when the badge was absent. */
@@ -127,6 +135,7 @@ const REGIONS = /^\s+(\d+) regions?, largest (\d+)×(\d+) at \((\d+),(\d+)\)$/;
 const BAND = /^\s+band ([+-]\d+)px at y=(\d+) \((left|right)\)$/;
 const ALIGNED = /^\s+aligned ([\d.]+)%$/;
 const TEXT = /^\s+text: (\d+) added, (\d+) removed$/;
+const SELECTOR = /^\s+selector (.+)$/;
 
 export function parseProgress(stdout: string): ProgressRow[] {
   const rows: ProgressRow[] = [];
@@ -136,6 +145,7 @@ export function parseProgress(stdout: string): ProgressRow[] {
       rows.push({
         route: m[2]!,
         width: Number(m[3]),
+        selector: null,
         score: m[1] === "ERROR" ? null : Number(m[1]!.slice(0, -1)) / 100,
         heightDelta: m[4] ? Number(m[4]) : 0,
         unstablePixels: m[5] ? num(m[5]) : 0,
@@ -152,7 +162,9 @@ export function parseProgress(stdout: string): ProgressRow[] {
     const last = rows.at(-1);
     if (!last) continue;
     let d;
-    if ((d = REGIONS.exec(line))) {
+    if ((d = SELECTOR.exec(line))) {
+      last.selector = d[1]!;
+    } else if ((d = REGIONS.exec(line))) {
       last.regions = Number(d[1]);
       last.largest = { w: Number(d[2]), h: Number(d[3]), x: Number(d[4]), y: Number(d[5]) };
     } else if ((d = BAND.exec(line))) {
@@ -181,6 +193,7 @@ export function row(rows: ProgressRow[], route: string, width: number): Progress
 }
 
 export interface ReportCard {
+  /** `/a`, or `/a [sel]` for a selector route. */
   route: string;
   width: number;
   score: number;
@@ -248,7 +261,7 @@ export function parseReport(html: string): Report {
     const unstable = /<span class="unstable">([\d,]+) px unstable<\/span>/.exec(card);
     const aligned = /<span class="aligned">aligned ([\d.]+)%<\/span>/.exec(card);
     cards.push({
-      route: route[1]!,
+      route: unesc(route[1]!),
       width: Number(width[1]),
       score: Number(score[2]) / 100,
       band: score[1] as ReportCard["band"],
@@ -279,7 +292,7 @@ export function parseReport(html: string): Report {
   for (const m of errorSection.matchAll(
     /<li><code>([^<]*)<\/code> @(\d+)px — ([\s\S]*?)<\/li>/g,
   )) {
-    errors.push({ route: m[1]!, width: Number(m[2]), message: m[3]! });
+    errors.push({ route: unesc(m[1]!), width: Number(m[2]), message: m[3]! });
   }
 
   const neutralized = between(html, "<details>", "</details>");

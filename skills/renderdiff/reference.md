@@ -14,6 +14,8 @@
 | `unaligned` | The pages differ in height but share too few identical rows to align, so no bands. Either they are very different, the edits total more than 2,000 rows, or sub-threshold noise touches every row. Use the height delta and regions. |
 | `band …@y~N` | Widths collapsed into one row put the band at different `y`; `N` is the first width's. |
 | `unstable Npx` | Pixels that kept changing between shots of the same load on one origin (a ticker, a carousel, a video). Painted out on both sides and excluded from the score. A large number means a big area went unmeasured: look at the magenta on the full shots. Such a route is never on the `clean:` line. |
+| `ERROR selector "…" matched N elements on left (/a), expected 1` | A selector must match exactly one element per side. Make it more specific (`>> nth=0`, an id, `data-test`), or list the route once per element. |
+| `ERROR selector "…" has no box on …` | It matched an element that isn't rendered (`display: none`, zero size). |
 | `ERROR page did not settle: Npx unstable at …` | More than 25% of the page kept changing between shots, so too little was measured to score. Mask or stop the moving part. |
 
 Report colouring (`--open`, for a human): green above 99.5%, amber to 97%, red below.
@@ -36,7 +38,7 @@ Report colouring (`--open`, for a human): green above 99.5%, amber to 97%, red b
 Scripts, and drilling into one route: every score, region (`x,y,w,h,pixels`, left-page
 px), band, full text diff, image path and crop (`kind`, each side's box with `h` 0 at an
 insertion point, `layout` `stacked` = left on top or `side` = left on the left, `scale`,
-`clipped`), one result per line, so `grep '"url":"/about"'` pulls a route.
+`clipped`), `selector` (`{ left, right }` or null), one result per line, so `grep '"url":"/about"'` pulls a route.
 Paths are relative to the out dir. `summary` has `compared`, `errors`, `mean`, `worst` and
 `belowThreshold`; `meta` records origins, widths, threshold, the pinned clock, block
 patterns, hidden selectors and mask reasons. The normal loop doesn't need it.
@@ -52,7 +54,8 @@ to hide, extra URLs to block. **CLI flag > config file > default.**
 export default {
   left: "http://localhost:4000",
   right: "https://example.com",
-  routes: ["/", "/about", "/pricing::/plans", { left: "/blog", right: "/posts" }],
+  routes: ["/", "/about", "/pricing::/plans", { left: "/blog", right: "/posts" },
+           { left: "/pricing", selector: "[data-test=plans]" }],
   widths: [1440, 896, 375],
   threshold: 0.97,
   hideSelectors: [".site-cookie-banner"],
@@ -82,6 +85,17 @@ cookie script ran wedges the renderer).
   `/q?x=std::vector` and `pricing::plans` are single routes. `--dry-run` shows how each was
   read. A pair is `/a::/b` in stdout and `url`; results.json also has `left` and `right`,
   and its files are `{slug(a)}~{slug(b)}.{width}.*.png`.
+- **Component scope** (`--selector`, `--left-selector`, `--right-selector`, or a route
+  object's `selector: ".x" | { left, right }`): use it when the question is one component
+  (a migrated widget, a design-system swap), so page noise elsewhere can't hide or fake a
+  change. Exactly one match per side, or the route errors. A CLI selector applies to every
+  route and replaces the config's. A route is `/a [.x]` in the summary (`/a @1440` with a
+  `selector` line under it in `--progress`), files are `{slug}@{sel}.{width}.*.png` (`@{l}~{r}` when the sides' selectors differ), and
+  regions are in the element's own pixels. The whole page still loads and settles. It's
+  shot at scroll 0, so fixed or sticky overlays over it are included (`hideSelectors`); inside
+  a shorter scroll container, whatever paints below the container is too; a transformed
+  element is shot at its axis-aligned box. `xpath=` and `>>` work and `::` is never split;
+  pseudo-elements are rejected by Playwright; iframes can't be reached.
 - **Analytics, consent and A/B tooling are blocked at the network layer** on both sides,
   and animations are stilled. If something still flickers between runs, it's a candidate
   for `blockUrlPatterns`, not for a mask.

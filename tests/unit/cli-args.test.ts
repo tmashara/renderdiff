@@ -48,6 +48,9 @@ describe("help and version", () => {
       "--open",
       "--progress",
       "--no-progress",
+      "--selector",
+      "--left-selector",
+      "--right-selector",
     ]) {
       assert.ok(r.stdout.includes(flag), `--help does not mention ${flag}`);
     }
@@ -257,6 +260,35 @@ describe("route pairs", () => {
 
   test("a glob on the right side is refused", () =>
     rejects(["--dry-run", L, R, "/a::/blog/*"], "globs are not supported (/blog/*)"));
+});
+
+describe("selectors", () => {
+  test("--selector applies to every route and shows in --dry-run", async () => {
+    const r = await dry(["/a", "/b::/c", "--selector", ".card"]);
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(r.stdout, /^  \/a +\S+  \|  \S+  \[\.card\]$/m);
+    assert.match(r.stdout, /^  \/b::\/c +\S+  \|  \S+  \[\.card\]$/m);
+  });
+
+  test("a per-side selector overrides --selector on its side", async () => {
+    const r = await dry(["/a", "--selector=.card", "--right-selector", ".tile"]);
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(r.stdout, /\[\.card \| \.tile\]$/m);
+  });
+
+  test("a selector holding :: and >> is passed through whole", async () => {
+    const sel = "xpath=//h3/ancestor::div[1] >> nth=0";
+    const r = await dry(["/a", "--selector", sel]);
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(r.stdout, /^Routes: 1$/m);
+    assert.ok(r.stdout.includes(`[${sel}]`), r.stdout);
+  });
+
+  test("one side's selector alone exits 2", () =>
+    rejects(["--dry-run", L, R, "/a", "--left-selector", ".a"], "--left-selector needs --right-selector or --selector"));
+
+  test("an empty selector exits 2", () =>
+    rejects(["--dry-run", L, R, "/a", "--selector="], "--selector needs a value"));
 });
 
 describe("preflight", () => {
