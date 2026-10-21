@@ -130,16 +130,18 @@ because an unmeasured route is not a verified one.
   against each other score ~100%, which is the likeliest way a tool like this lies to you.
 - **Refuses a shot** it can't trust: an HTTP status of 400 or above on either side is an
   error naming the status. A route where *both* sides look blank — under 200 characters of
-  text and no images, canvas, video or form controls — errors instead of quietly scoring as
-  a match. If only one side is blank, the diff shows it.
+  text and no visible images, SVG, canvas, video, iframes or form controls — errors instead
+  of quietly scoring as a match. If only one side is blank, the diff shows it.
 - **Blocks analytics, consent and A/B tooling** at the network layer on both sides —
   GTM, GA, Segment, Intercom, Hotjar, LinkedIn, Meta, OneTrust, CookieLaw, VWO. Blocked
   rather than hidden, because A/B tools rewrite arbitrary DOM and CSS can't pre-empt an
   experiment you haven't seen. Blocking must stay symmetric: doing it on one side only
   is itself a diff.
-- **Pins what varies between loads**, identically on both sides: the clock is frozen at one
-  instant per run, `Math.random` is seeded, timezone (UTC), locale (en-US), colour scheme
-  (light) and `prefers-reduced-motion` are fixed, and videos are paused at frame 0.
+- **Pins what varies between loads**, identically on both sides: the clock starts at one
+  instant per run (floored to the minute) on every load and then runs, `Math.random` is
+  seeded, timezone (UTC), locale (en-US), colour scheme
+  (light) and `prefers-reduced-motion` are fixed, and videos are paused at frame 0. A clock
+  that shows seconds can still tick between the two sides and may need a mask.
 - **Kills animation, transitions and caret blink**, and hides common consent banners and
   dev toolbars.
 - **Settles the page** — makes native lazy images eager, scrolls every viewport-height
@@ -148,8 +150,9 @@ because an unmeasured route is not a verified one.
   catch late-injected chrome.
 - **Shoots until stable** — repeats the screenshot until two in a row match (at most 3; 2
   for tiled pages). Pixels still changing between the last two shots of the same load are
-  noise from that origin: they're painted magenta on both sides and reported per comparison
-  as `unstable`, so they neither pass nor fail.
+  noise from that origin: they're painted magenta on both sides, reported per comparison
+  as `unstable`, and excluded from the measurement — the score is over the remaining
+  pixels. A route more than 25% unstable errors as `page did not settle`.
 - **Isolates state** — one browser context per origin, so cookies and localStorage never
   cross. Both sides of a route load at the same time.
 - **Retries once** per shot; a live site can time out on a cold edge.
@@ -206,7 +209,7 @@ ephemeral ports. Three groups:
   Without them a tool that returned 100% unconditionally would pass the suite.
 - *Guard rails* — one per defence above: the blank-page refusal (and a short sign-in page
   that must not be refused), the 18,000px tiled capture with masks in both tiles, animation
-  stilling, the frozen clock and seeded randomness, the unstable-pixel check, lazy-image
+  stilling, the shared clock start and seeded randomness, the unstable-pixel check, lazy-image
   settling (native and script-driven, 4,800px below the fold), consent hiding, masks, and
   network blocking. Masks
   and blocking each run twice, with and without their config, so the mechanism is shown doing

@@ -78,10 +78,11 @@ site — you're a guest there.
 | Magenta bands | One side is taller/wider; the shorter image is padded, and the padding counts against the score on purpose. The `height ±Npx` badge names it. |
 | Score ~100% on every route | Suspect before you celebrate. Confirm both sides actually rendered — two identical error pages diff at ~100%. |
 | `HTTP 404 at …` (or any status ≥ 400) | That side answered with an error status. Usually a route that doesn't exist on one origin, or a dev server not ready. |
-| `page did not render on either side (…)` | Both sides had under 200 chars of text and no images, canvas, video or form controls, so renderdiff refused to score two blanks as a match. Usually a failed asset or an app that never mounted. One blank side isn't refused — it shows up as a low score. |
+| `page did not render on either side (…)` | Both sides had under 200 chars of text and no visible images, SVG, canvas, video, iframes or form controls, so renderdiff refused to score two blanks as a match. Usually a failed asset or an app that never mounted. One blank side isn't refused — it shows up as a low score. |
 | `ERROR` rows | Unmeasured, not failed. They exit 1 because an unmeasured route isn't a verified one. Report them as unverified. |
 | Uniform low score, whole page shifted | Almost always a height or font-loading difference near the top pushing everything down. Compare the top of left vs right. |
-| `unstable Npx` badge | Pixels that kept changing between shots of the same load on one origin (a ticker, a carousel, a video). Painted out on both sides, so they don't count. A large number means a big region went unmeasured — look at the magenta on the images. |
+| `unstable Npx` badge | Pixels that kept changing between shots of the same load on one origin (a ticker, a carousel, a video). Painted out on both sides and excluded from the measurement, so the score covers only the rest. A large number means a big region went unmeasured — look at the magenta on the images. |
+| `page did not settle: Npx unstable at …` | More than 25% of the page kept changing between shots, so too little was measured to score. Mask or stop the moving part (a carousel, a background video). |
 
 Report colouring: green above 99.5%, amber to 97%, red below.
 
