@@ -321,6 +321,16 @@ describe("masks", () => {
   });
 });
 
+describe("selector masks", () => {
+  test("a selector mask with no urlPath works like a locate mask", async () => {
+    const run = await capture(["/drifting"], { config: path.join(CONFIGS, "mask-selector.mjs") });
+    assert.equal(run.code, 0, context(run));
+    const r = result(results(run.outDir), "/drifting", 1440);
+    assert.equal(r.diffPixels, 0, `the selector mask did not cover the value${context(run)}`);
+    assert.deepEqual([r.text.added, r.text.removed], [[], []], context(run));
+  });
+});
+
 describe("route pairs", () => {
   const PAIR = "/flex-vs-grid::/float-vs-flex";
 

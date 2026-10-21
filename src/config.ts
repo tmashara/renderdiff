@@ -155,16 +155,18 @@ export const MASK_COLOR = "#FF00FF";
  * Keep the list short. Every mask is coverage given up, so add only what is proven to
  * drift.
  */
-export interface Mask {
+export type Mask = {
   /**
-   * The route path this applies to, e.g. `/pricing`. On a pair it matches either side's
-   * path and paints both, so the noise still cancels.
+   * The route path this applies to, e.g. `/pricing`; every route when omitted. On a pair
+   * it matches either side's path and paints both, so the noise still cancels.
    */
-  urlPath: string;
+  urlPath?: string;
   /** Why it drifts — surfaced verbatim in the report. */
   reason: string;
-  locate: (page: Page) => Locator;
-}
+} & (
+  | { /** A Playwright selector, e.g. `[data-star-count]`. */ selector: string }
+  | { /** The escape hatch for what a selector can't say. */ locate: (page: Page) => Locator }
+);
 
 /** The shape a `renderdiff.config.*` file default-exports. Every field is optional. */
 export interface RenderdiffConfig {
@@ -225,8 +227,8 @@ export function defineConfig(config: RenderdiffConfig): RenderdiffConfig {
 
 export function masksFor(cfg: ResolvedConfig, page: Page, route: Route): Locator[] {
   return cfg.masks
-    .filter((m) => m.urlPath === route.left || m.urlPath === route.right)
-    .map((m) => m.locate(page));
+    .filter((m) => m.urlPath === undefined || m.urlPath === route.left || m.urlPath === route.right)
+    .map((m) => ("selector" in m ? page.locator(m.selector) : m.locate(page)));
 }
 
 /** Config filenames probed in cwd, in order. */
@@ -345,9 +347,17 @@ function validate(c: Record<string, unknown>, file: string) {
         bad(`masks[${i}]`, "an object");
         return;
       }
-      if (typeof o.urlPath !== "string") bad(`masks[${i}].urlPath`, "a string");
+      if (o.urlPath !== undefined && typeof o.urlPath !== "string") {
+        bad(`masks[${i}].urlPath`, "a string");
+      }
       if (typeof o.reason !== "string") bad(`masks[${i}].reason`, "a string");
-      if (typeof o.locate !== "function") {
+      if ((o.selector === undefined) === (o.locate === undefined)) {
+        throw new Error(`${file}: \`masks[${i}]\` needs exactly one of \`selector\` or \`locate\``);
+      }
+      if (o.selector !== undefined && typeof o.selector !== "string") {
+        bad(`masks[${i}].selector`, "a string");
+      }
+      if (o.locate !== undefined && typeof o.locate !== "function") {
         bad(`masks[${i}].locate`, "a function (page) => Locator");
       }
     });
@@ -406,6 +416,8 @@ export function resolveConfig(
       STILL_CSS +
       `${hideSelectors.join(",")}{display:none!important}\n` +
       (file.extraCss ?? ""),
-    masks: (file.masks ?? []).map((m) => ({ ...m, urlPath: normalize(m.urlPath) })),
+    masks: (file.masks ?? []).map((m) =>
+      m.urlPath === undefined ? m : { ...m, urlPath: normalize(m.urlPath) },
+    ),
   };
 }

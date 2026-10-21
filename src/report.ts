@@ -73,7 +73,8 @@ export interface RunMeta {
   clock: string;
   blockUrlPatterns: string[];
   hideSelectors: string[];
-  masks: { urlPath: string; reason: string }[];
+  /** `urlPath` is absent for a mask that applies to every route. */
+  masks: { urlPath?: string; reason: string }[];
 }
 
 export interface Summary {

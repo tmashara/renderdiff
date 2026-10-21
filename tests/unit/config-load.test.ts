@@ -113,7 +113,7 @@ describe("validation", () => {
     ["bad-threshold.mjs", /`threshold` must be a number between 0 and 1/],
     ["bad-concurrency.mjs", /`concurrency` must be a positive integer/],
     ["bad-mask-shape.mjs", /`masks` must be an array/],
-    ["bad-mask-locate.mjs", /`masks\[0\]\.locate` must be a function/],
+    ["bad-mask-locate.mjs", /`masks\[0\]` needs exactly one of `selector` or `locate`/],
     ["no-default.mjs", /has no default export/],
     ["array-default.mjs", /must default-export an object/],
     ["throws.mjs", /could not load .*throws\.mjs/],
@@ -137,6 +137,11 @@ describe("validation", () => {
     ['{ routes: ["/a", { left: "/a", right: 2 }] }', /`routes\[1\]\.right` must be a string/],
     ['{ routes: [{ left: "/a", path: "/b" }] }', /`routes\[0\]\.path` is not a route key/],
     ['{ routes: [{ left: "" }] }', /has an empty side/],
+    [
+      '{ masks: [{ reason: "x", selector: "a", locate: (p) => p.locator("a") }] }',
+      /`masks\[0\]` needs exactly one of `selector` or `locate`/,
+    ],
+    ['{ masks: [{ reason: "x", selector: 1 }] }', /`masks\[0\]\.selector` must be a string/],
   ];
   for (const [config, needle] of inline) {
     test(`${config} exits 2 and names the problem`, async () => {
@@ -160,6 +165,16 @@ describe("validation", () => {
     assert.match(r.stdout, /^  \/a::\/plans +http:\/\/left\.test\/a  \|  http:\/\/right\.test\/plans$/m);
     assert.match(r.stdout, /^  \/c +http:\/\/left\.test\/c  \|  http:\/\/right\.test\/c$/m);
     assert.match(r.stdout, /^  \/d::\/e +http:\/\/left\.test\/d  \|  http:\/\/right\.test\/e$/m);
+  });
+
+  test("a plain object with a selector mask and no functions loads", async () => {
+    const cwd = tempDir("renderdiff-cfg-");
+    fs.writeFileSync(
+      path.join(cwd, "renderdiff.config.mjs"),
+      'export default { masks: [{ selector: "[data-star-count]", reason: "stars" }] };\n',
+    );
+    const r = await runCli(["--dry-run", "/a", "--left", L, "--right", R], { cwd, noOut: true });
+    assert.equal(r.code, 0, r.stderr);
   });
 
   test("the failing file is named in the message", async () => {
