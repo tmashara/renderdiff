@@ -5,7 +5,7 @@ import { chromium, errors, type Page } from "playwright";
 import { cancelUnstable, capture, prepare, type Shot } from "./capture.ts";
 import { compare } from "./compare.ts";
 import { CONTEXT_OPTIONS, type ResolvedConfig, type Route } from "./config.ts";
-import { pct, signed } from "./format.ts";
+import { fmtBand, fmtRegion, pct, signed } from "./format.ts";
 import {
   stats,
   writeReport,
@@ -147,6 +147,18 @@ export async function run({ routes, cfg, open }: RunOpts): Promise<number> {
           unstablePixels,
           images,
         });
+        const { regions, bands, alignedScore, text } = metrics;
+        const details = [
+          regions.length
+            ? `${regions.length} region${regions.length > 1 ? "s" : ""}, largest ${fmtRegion(regions[0]!)}`
+            : "",
+          ...(bands ?? []).map((b) => `band ${fmtBand(b)}`),
+          alignedScore !== null ? `aligned ${pct(alignedScore)}` : "",
+          bands === null ? "rows too different to align" : "",
+          text.added.length || text.removed.length
+            ? `text: ${text.added.length} added, ${text.removed.length} removed`
+            : "",
+        ].filter(Boolean);
         console.log(
           `  [${++done}/${jobs.length}] ${pct(metrics.score)}  ${label}` +
             (metrics.heightDelta
@@ -154,7 +166,8 @@ export async function run({ routes, cfg, open }: RunOpts): Promise<number> {
               : "") +
             (unstablePixels
               ? `  (unstable ${unstablePixels.toLocaleString("en-US")}px)`
-              : ""),
+              : "") +
+            details.map((d) => `\n        ${d}`).join(""),
         );
       } catch (e) {
         results.push({

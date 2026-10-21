@@ -10,6 +10,8 @@ export interface Shot {
   unstable: Uint8Array | null;
   /** Why this side looks blank, or null. Only an error when both sides do. */
   blank: string | null;
+  /** `document.body.innerText`, whitespace collapsed per line, empty lines dropped. */
+  text: string[];
 }
 
 /**
@@ -104,9 +106,9 @@ export async function capture(
     .catch(() => {});
   await page.addStyleTag({ content: cfg.neutralizeCss }); // anything injected late
 
-  const { scrollHeight, textLength, media } = await page.evaluate(() => ({
+  const { scrollHeight, innerText, media } = await page.evaluate(() => ({
     scrollHeight: document.documentElement.scrollHeight,
-    textLength: (document.body.innerText || "").length,
+    innerText: document.body.innerText || "",
     media: Array.from(
       document.querySelectorAll(
         "img, svg, canvas, video, iframe, input, textarea, select",
@@ -116,9 +118,13 @@ export async function capture(
       return r.width * r.height >= 1024;
     }),
   }));
+  const text = innerText
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
   const blank =
-    textLength < 200 && !media
-      ? `height=${scrollHeight}, text=${textLength} chars`
+    innerText.length < 200 && !media
+      ? `height=${scrollHeight}, text=${innerText.length} chars`
       : null;
   if (scrollHeight > MAX_PAGE_HEIGHT) {
     throw new Error(
@@ -151,8 +157,8 @@ export async function capture(
   for (let n = 2; ; n++) {
     await page.waitForTimeout(100);
     const png = await shoot();
-    if (png.equals(prev)) return { png, unstable: null, blank };
-    if (n === tries) return { png, unstable: await differing(prev, png), blank };
+    if (png.equals(prev)) return { png, unstable: null, blank, text };
+    if (n === tries) return { png, unstable: await differing(prev, png), blank, text };
     prev = png;
   }
 }

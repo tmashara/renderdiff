@@ -15,6 +15,29 @@ import { MASK_COLOR } from "./config.ts";
  * the score from being noise.
  */
 
+/** A connected patch of differing pixels, in page px, snapped outward to the 16px grid. */
+export interface Region {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** Differing pixels inside it. */
+  pixels: number;
+}
+
+/** Rows one side has that the other lacks, at `y` in that side's own coordinates. */
+export interface Band {
+  side: "left" | "right";
+  y: number;
+  h: number;
+}
+
+/** Left is the changed version, right the reference: `added` is on left only, `removed` on right only. */
+export interface TextDiff {
+  added: string[];
+  removed: string[];
+}
+
 export interface Diff {
   /** 0..1, share of pixels that match. */
   score: number;
@@ -23,8 +46,22 @@ export interface Diff {
   /** Painted-height and -width deltas (left − right), straight from the PNGs. */
   heightDelta: number;
   widthDelta: number;
+  /** Largest first. */
+  regions: Region[];
+  /** Null when the rows were too different to align. */
+  bands: Band[] | null;
+  /** Share of matching pixels over the rows the alignment pairs. Null unless there are bands. */
+  alignedScore: number | null;
+  text: TextDiff;
   diffPng: Buffer;
 }
+
+const PIXELMATCH = { threshold: 0.1, includeAA: false, alpha: 0.25 };
+
+/** Edit-distance cap for `myers`: past it, memory is O(D²) and the answer is "unrelated" anyway. */
+const MAX_EDIT = 2000;
+
+const CELL = 16;
 
 /**
  * Pad a shot onto a common (w, h) canvas so both frames are the same size for
@@ -63,13 +100,12 @@ export async function compare(left: Shot, right: Shot): Promise<Diff> {
     toRaw(right.png, w, h),
   ]);
 
+  const text = textDiff(left.text, right.text);
   const out = Buffer.alloc(w * h * 4);
+  // Identical shots skip pixelmatch and leave the diff PNG fully transparent.
+  const same = l.equals(r);
   // `l`/`r`/`out` are Buffers, i.e. Uint8Arrays — pixelmatch takes them directly.
-  const diffPixels = pixelmatch(l, r, out, w, h, {
-    threshold: 0.1,
-    includeAA: false,
-    alpha: 0.25,
-  });
+  const diffPixels = same ? 0 : pixelmatch(l, r, out, w, h, PIXELMATCH);
 
   // Default zlib level: the diff PNG is a local intermediate (mostly transparent with
   // sparse red), so max compression buys little size for noticeably more CPU per job.
@@ -88,6 +124,223 @@ export async function compare(left: Shot, right: Shot): Promise<Diff> {
     totalPixels: w * h,
     heightDelta: lh - rh,
     widthDelta: lw - rw,
+    regions: diffPixels ? regions(out, w, h) : [],
+    ...(same ? { bands: [], alignedScore: null } : align(l, r, w, lh, rh)),
+    text,
     diffPng,
   };
+}
+
+/**
+ * Myers' O((N+M)·D) diff: the matched index pairs of a shortest edit script, in order.
+ * Null once the edit distance passes `maxD`.
+ */
+function myers<T>(
+  a: ArrayLike<T>,
+  b: ArrayLike<T>,
+  maxD = MAX_EDIT,
+): [number, number][] | null {
+  const n = a.length,
+    m = b.length,
+    max = Math.min(n + m, maxD),
+    off = max + 1;
+  const v = new Int32Array(2 * max + 3);
+  // trace[d][k + d] is v[k] after round d.
+  const trace: Int32Array[] = [];
+  for (let d = 0; d <= max; d++) {
+    for (let k = -d; k <= d; k += 2) {
+      let x =
+        k === -d || (k !== d && v[off + k - 1]! < v[off + k + 1]!)
+          ? v[off + k + 1]!
+          : v[off + k - 1]! + 1;
+      let y = x - k;
+      while (x < n && y < m && a[x] === b[y]) x++, y++;
+      v[off + k] = x;
+      if (x >= n && y >= m) return backtrack(trace, n, m, d);
+    }
+    trace.push(v.slice(off - d, off + d + 1));
+  }
+  return null;
+}
+
+function backtrack(trace: Int32Array[], n: number, m: number, D: number) {
+  const pairs: [number, number][] = [];
+  let x = n,
+    y = m;
+  for (let d = D; d > 0; d--) {
+    const p = trace[d - 1]!;
+    const at = (k: number) => p[k + d - 1]!;
+    const k = x - y;
+    const pk = k === -d || (k !== d && at(k - 1) < at(k + 1)) ? k + 1 : k - 1;
+    const px = at(pk),
+      py = px - pk;
+    while (x > px && y > py) pairs.push([--x, --y]);
+    x = px;
+    y = py;
+  }
+  while (x > 0 && y > 0) pairs.push([--x, --y]);
+  return pairs.reverse();
+}
+
+function textDiff(a: string[], b: string[]): TextDiff {
+  const pairs = myers(a, b);
+  if (!pairs) {
+    // Too different to align: fall back to plain membership.
+    const inA = new Set(a),
+      inB = new Set(b);
+    return {
+      added: a.filter((s) => !inB.has(s)),
+      removed: b.filter((s) => !inA.has(s)),
+    };
+  }
+  const ka = new Set(pairs.map((p) => p[0])),
+    kb = new Set(pairs.map((p) => p[1]));
+  return {
+    added: a.filter((_, i) => !ka.has(i)),
+    removed: b.filter((_, i) => !kb.has(i)),
+  };
+}
+
+/** Connected components (8-way) over 16px cells holding any pixel pixelmatch painted as a diff. */
+function regions(out: Buffer, w: number, h: number): Region[] {
+  const cw = Math.ceil(w / CELL),
+    ch = Math.ceil(h / CELL);
+  const cells = new Uint32Array(cw * ch);
+  for (let y = 0, o = 0; y < h; y++) {
+    const row = ((y / CELL) | 0) * cw;
+    for (let x = 0; x < w; x++, o += 4) {
+      // diffColor red; unchanged pixels are grey and AA ones yellow, so neither matches.
+      if (out[o] === 255 && out[o + 1] === 0 && out[o + 2] === 0) {
+        cells[row + ((x / CELL) | 0)]!++;
+      }
+    }
+  }
+  const seen = new Uint8Array(cells.length);
+  const found: Region[] = [];
+  for (let s = 0; s < cells.length; s++) {
+    if (!cells[s] || seen[s]) continue;
+    let x0 = cw,
+      y0 = ch,
+      x1 = 0,
+      y1 = 0,
+      pixels = 0;
+    const stack = [s];
+    seen[s] = 1;
+    while (stack.length) {
+      const c = stack.pop()!,
+        cx = c % cw,
+        cy = (c / cw) | 0;
+      pixels += cells[c]!;
+      x0 = Math.min(x0, cx);
+      x1 = Math.max(x1, cx);
+      y0 = Math.min(y0, cy);
+      y1 = Math.max(y1, cy);
+      for (let ny = Math.max(0, cy - 1); ny <= Math.min(ch - 1, cy + 1); ny++) {
+        for (let nx = Math.max(0, cx - 1); nx <= Math.min(cw - 1, cx + 1); nx++) {
+          const nc = ny * cw + nx;
+          if (cells[nc] && !seen[nc]) {
+            seen[nc] = 1;
+            stack.push(nc);
+          }
+        }
+      }
+    }
+    found.push({
+      x: x0 * CELL,
+      y: y0 * CELL,
+      w: Math.min(w, (x1 + 1) * CELL) - x0 * CELL,
+      h: Math.min(h, (y1 + 1) * CELL) - y0 * CELL,
+      pixels,
+    });
+  }
+  return found.sort((a, b) => b.pixels - a.pixels);
+}
+
+/** FNV-1a over each row's RGBA words. */
+function rowHashes(raw: Buffer, w: number, rows: number): Uint32Array {
+  const px = new Uint32Array(raw.buffer, raw.byteOffset, w * rows);
+  const out = new Uint32Array(rows);
+  for (let y = 0; y < rows; y++) {
+    let hash = 0x811c9dc5;
+    for (let i = y * w, end = i + w; i < end; i++) {
+      hash = Math.imul(hash ^ px[i]!, 16777619);
+    }
+    out[y] = hash;
+  }
+  return out;
+}
+
+/**
+ * Myers can place an insertion anywhere along a stretch of identical rows (whitespace, a
+ * repeated border) and split one insertion in two. As git does, slide each run of unmatched
+ * rows up as far as it goes, then down, merging runs that meet, so it settles in one piece at
+ * the bottom of that stretch. The matched rows still read the same values in the same order.
+ */
+function compact(hash: Uint32Array, changed: Uint8Array) {
+  const n = changed.length;
+  for (let s = 0; s < n; s++) {
+    if (!changed[s]) continue;
+    let e = s;
+    while (e < n && changed[e]) e++;
+    for (;;) {
+      while (s > 0 && !changed[s - 1] && hash[s - 1] === hash[e - 1]) {
+        changed[--s] = 1;
+        changed[--e] = 0;
+      }
+      if (!(s > 0 && changed[s - 1])) break;
+      while (s > 0 && changed[s - 1]) s--;
+    }
+    for (;;) {
+      while (e < n && !changed[e] && hash[s] === hash[e]) {
+        changed[s++] = 0;
+        changed[e++] = 1;
+      }
+      if (!(e < n && changed[e])) break;
+      while (e < n && changed[e]) e++;
+    }
+    s = e;
+  }
+}
+
+/**
+ * Pair rows across the two shots by Myers over row hashes. Each gap between matched rows
+ * pairs its rows top-down; whatever one side has left over is a band. Paired rows are
+ * restacked and pixelmatched for the aligned score.
+ */
+function align(l: Buffer, r: Buffer, w: number, lh: number, rh: number) {
+  const ha = rowHashes(l, w, lh),
+    hb = rowHashes(r, w, rh);
+  const matched = myers(ha, hb);
+  if (!matched) return { bands: null, alignedScore: null };
+  const ca = new Uint8Array(lh).fill(1),
+    cb = new Uint8Array(rh).fill(1);
+  for (const [i, j] of matched) ca[i] = cb[j] = 0;
+  compact(ha, ca);
+  compact(hb, cb);
+  const ka = [...ca.keys()].filter((i) => !ca[i]),
+    kb = [...cb.keys()].filter((j) => !cb[j]);
+  const pairs = ka.map((i, n) => [i, kb[n]!] as const);
+  const bands: Band[] = [];
+  const rows: [number, number][] = [];
+  let x = 0,
+    y = 0;
+  for (const [px, py] of [...pairs, [lh, rh] as const]) {
+    const k = Math.min(px - x, py - y);
+    for (let j = 0; j < k; j++) rows.push([x + j, y + j]);
+    if (px - x > k) bands.push({ side: "left", y: x + k, h: px - x - k });
+    if (py - y > k) bands.push({ side: "right", y: y + k, h: py - y - k });
+    if (px < lh) rows.push([px, py]);
+    x = px + 1;
+    y = py + 1;
+  }
+  if (!bands.length || !rows.length) return { bands, alignedScore: null };
+  const stride = w * 4;
+  const a = Buffer.alloc(rows.length * stride),
+    b = Buffer.alloc(rows.length * stride);
+  rows.forEach(([ly, ry], j) => {
+    l.copy(a, j * stride, ly * stride, (ly + 1) * stride);
+    r.copy(b, j * stride, ry * stride, (ry + 1) * stride);
+  });
+  const diff = pixelmatch(a, b, undefined, w, rows.length, PIXELMATCH);
+  return { bands, alignedScore: 1 - diff / (rows.length * w) };
 }
