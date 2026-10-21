@@ -300,6 +300,16 @@ describe("the tiled capture path", () => {
       assert.deepEqual(await bottomRow(run.file(`tall.1440.${side}.png`)), [0xc9, 0xd4, 0xe2], `${side}${context(run)}`);
     }
   });
+
+  test("an element taller than the cap is tiled too, down to its own last row", async () => {
+    const el = await runCli([...renderdiffArgs({ left: site.left, right: site.right, routes: ["/tall"], widths: [1440] }), "--selector", ".stack"]);
+    assert.equal(el.code, 0, context(el));
+    for (const side of ["left", "right"]) {
+      const file = el.file(`tall@_stack.1440.${side}.png`);
+      assert.equal((await sharp(file).metadata()).height, EXPECT_HEIGHT, context(el));
+      assert.deepEqual(await bottomRow(file), [0xc9, 0xd4, 0xe2], `${side}${context(el)}`);
+    }
+  });
 });
 
 /** The RGB of the last row's middle pixel. */
@@ -616,6 +626,12 @@ describe("the browser", () => {
     assert.equal(results(run.outDir).meta.browser.name, "chrome");
     // Chrome wraps a one-shot capture past 16,384px, so this pins the tiled path there too.
     assert.deepEqual(await bottomRow(run.file("tall.1440.left.png")), [0xc9, 0xd4, 0xe2], context(run));
+    const el = await runCli(
+      [...renderdiffArgs({ left: site.left, right: site.right, routes: ["/tall"], widths: [1440] }), "--selector", ".stack"],
+      { env: { PLAYWRIGHT_BROWSERS_PATH: tempDir() } },
+    );
+    assert.equal(el.code, 0, context(el));
+    assert.deepEqual(await bottomRow(el.file("tall@_stack.1440.left.png")), [0xc9, 0xd4, 0xe2], context(el));
   });
 });
 
