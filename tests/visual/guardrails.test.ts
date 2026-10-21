@@ -27,7 +27,7 @@ import {
   tempDir,
   type CliResult,
 } from "../helpers/cli.ts";
-import { card, parseProgress, parseReport } from "../helpers/parse.ts";
+import { card, parseProgress, parseReport, results } from "../helpers/parse.ts";
 import { startFixtureSite, type FixtureSite } from "../helpers/server.ts";
 import { EXPECT_HEIGHT } from "../fixtures/pages/tall/page.ts";
 
@@ -91,6 +91,15 @@ describe("the render gate", () => {
     assert.match(report.errors[0]!.message, /page did not render/);
     // The message carries the numbers that explain the refusal. Measured: text=17 chars.
     assert.match(report.errors[0]!.message, /text=\d+ chars/);
+  });
+
+  test("results.json lists the refused route as an error, beside the compared one", () => {
+    const res = results(run.outDir);
+    const blank = res.results.find((r) => r.url === "/blank");
+    assert.equal(blank?.status, "error", context(run));
+    assert.match(blank.status === "error" ? blank.error : "", /page did not render/);
+    assert.equal(res.results.find((r) => r.url === "/animated")?.status, "compared");
+    assert.deepEqual([res.summary.compared, res.summary.errors], [1, 1]);
   });
 
   test("an unmeasured route is neither a pass nor a fail, but still exits 1", () => {
@@ -366,13 +375,13 @@ describe("the run summary", () => {
 });
 
 describe("the output directory", () => {
-  const into = (outDir: string) =>
+  const into = (outDir: string, routes = ["/animated"]) =>
     runCli(
       [
         ...renderdiffArgs({
           left: site.left,
           right: site.right,
-          routes: ["/animated"],
+          routes,
           widths: [1440],
         }),
         "--out",
@@ -398,6 +407,16 @@ describe("the output directory", () => {
     const second = await into(dir);
     assert.equal(second.code, 0, context(second));
     assert.ok(!fs.existsSync(path.join(dir, "stale.375.diff.png")), "the old run was not wiped");
+  });
+
+  test("a previous run with region crops and results.json is wiped and reused", async () => {
+    const dir = path.join(tempDir(), "out");
+    const first = await into(dir, ["/color"]);
+    assert.equal(first.code, 0, context(first));
+    assert.ok(fs.existsSync(path.join(dir, "color.1440.r1.png")), context(first));
+    assert.ok(fs.existsSync(path.join(dir, "results.json")));
+    const second = await into(dir, ["/color"]);
+    assert.equal(second.code, 0, context(second));
   });
 
   test("an interrupted run's directory, with images but no report, is reused", async () => {

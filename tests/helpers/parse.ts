@@ -1,16 +1,35 @@
 /**
  * The only module that knows renderdiff's output formats.
  *
- * A black-box suite has to read results back out of the two things the tool produces: the
- * progress lines on stdout and `report.html`. That coupling is real, so it lives in exactly
- * one file — if `run.ts`'s log line or `report.ts`'s markup changes, this is the only place
- * that needs fixing.
+ * A black-box suite has to read results back out of what the tool produces: the progress
+ * lines on stdout, `report.html` and `results.json`. That coupling is real, so it lives in
+ * exactly one file — if `run.ts`'s log line or `report.ts`'s markup changes, this is the only
+ * place that needs fixing.
  *
  * Scores come from stdout (one line per comparison, plus indented detail lines for regions,
  * bands and text-diff counts). The report is parsed only for claims that are specific to
  * the report: pixel counts, image filenames, the listed regions and text lines, the Errors
- * section, and the "What was neutralized" disclosure.
+ * section, and the "What was neutralized" disclosure. `results.json` is read as-is, typed by
+ * the contract `src/index.ts` exports (a type-only import, erased at runtime).
  */
+import fs from "node:fs";
+import path from "node:path";
+import type { ComparedResult, Results } from "../../src/index.ts";
+
+/** `results.json` from a run's out dir. */
+export function results(outDir: string): Results {
+  return JSON.parse(fs.readFileSync(path.join(outDir, "results.json"), "utf8"));
+}
+
+/** The compared entry for one comparison in `results.json`. Throws with context when absent. */
+export function result(res: Results, route: string, width: number): ComparedResult {
+  const found = res.results.find((r) => r.url === route && r.width === width);
+  if (found?.status !== "compared") {
+    const seen = res.results.map((r) => `${r.url}@${r.width}:${r.status}`).join(", ") || "(none)";
+    throw new Error(`no compared result for ${route}@${width}; saw: ${seen}`);
+  }
+  return found;
+}
 
 export interface ProgressRow {
   route: string;
@@ -121,6 +140,8 @@ export interface ReportCard {
   added: string[];
   removed: string[];
   images: string[];
+  /** Region crop links in the findings block. */
+  crops: string[];
 }
 
 export interface ReportErrorRow {
@@ -191,6 +212,7 @@ export function parseReport(html: string): Report {
       added: [...card.matchAll(/<li class="add">\+ ([^<]*)<\/li>/g)].map((m) => unesc(m[1]!)),
       removed: [...card.matchAll(/<li class="del">- ([^<]*)<\/li>/g)].map((m) => unesc(m[1]!)),
       images: [...card.matchAll(/<a href="([^"]+)"/g)].map((m) => m[1]!),
+      crops: [...card.matchAll(/<a class="crop" href="([^"]+)"/g)].map((m) => m[1]!),
     });
   }
 

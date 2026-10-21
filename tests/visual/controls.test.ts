@@ -17,6 +17,7 @@
  * a threshold asked for one.
  */
 import assert from "node:assert/strict";
+import sharp from "sharp";
 import { after, before, test } from "node:test";
 import { CONTROLS, toPath } from "../helpers/corpus.ts";
 import {
@@ -26,7 +27,15 @@ import {
   renderdiffArgs,
   type CliResult,
 } from "../helpers/cli.ts";
-import { card, parseProgress, parseReport, row, type Report } from "../helpers/parse.ts";
+import {
+  card,
+  parseProgress,
+  parseReport,
+  result,
+  results,
+  row,
+  type Report,
+} from "../helpers/parse.ts";
 import { startFixtureSite, type FixtureSite } from "../helpers/server.ts";
 
 const WIDTHS = [1440, 375];
@@ -175,6 +184,70 @@ for (const width of WIDTHS) {
     assert.equal(r.removed, 1);
   });
 }
+
+for (const route of ["/color", "/nav"]) {
+  for (const width of WIDTHS) {
+    test(`results.json agrees with the report card for ${route} @${width}`, () => {
+      const r = result(results(run.outDir), route, width);
+      const c = card(report, route, width);
+      // The card rounds percentages to two places; the JSON has the full value.
+      assert.equal(Number((r.score * 100).toFixed(2)) / 100, c.score, context(run));
+      assert.equal(r.diffPixels, c.diffPixels);
+      assert.equal(r.totalPixels, c.totalPixels);
+      assert.equal(r.heightDelta, c.heightDelta);
+      assert.equal(r.widthDelta, c.widthDelta);
+      assert.equal(r.unstablePixels, c.unstablePixels);
+      assert.deepEqual(r.regions.slice(0, 5), c.regions);
+      assert.deepEqual(r.text, { added: c.added, removed: c.removed });
+      assert.deepEqual(Object.values(r.images), c.images);
+      assert.deepEqual(r.crops, c.crops);
+    });
+  }
+}
+
+test("results.json carries the run meta and a summary that matches the report", () => {
+  const { meta, summary, results: rows } = results(run.outDir);
+  assert.equal(meta.tool, "renderdiff");
+  assert.match(meta.version, /^\d+\.\d+\.\d+/);
+  assert.deepEqual([meta.left, meta.right, meta.widths], [site.left, site.right, WIDTHS]);
+  assert.equal(meta.threshold, null);
+  assert.ok(meta.blockUrlPatterns.length && meta.hideSelectors.length);
+  assert.equal(rows.length, CONTROLS.length * WIDTHS.length);
+  assert.equal(summary.compared, report.cards.length);
+  assert.equal(summary.errors, 0);
+  assert.equal(summary.belowThreshold, 0);
+  assert.equal(Number((summary.worst!.score * 100).toFixed(2)) / 100, Math.min(...report.cards.map((c) => c.score)));
+  assert.match(run.stdout, /^Results: .*results\.json$/m);
+});
+
+test("each region gets a crop: left | right | diff, padded, at most 1200px", async () => {
+  const res = results(run.outDir);
+  let seen = 0;
+  for (const r of res.results) {
+    assert.equal(r.status, "compared");
+    if (r.status !== "compared") continue;
+    assert.equal(r.crops.length, Math.min(5, r.regions.length), `${r.url}@${r.width}`);
+    const left = await sharp(run.file(r.images.left)).metadata();
+    const right = await sharp(run.file(r.images.right)).metadata();
+    const cw = Math.min(left.width!, right.width!);
+    const ch = Math.min(left.height!, right.height!);
+    for (const [i, name] of r.crops.entries()) {
+      assert.equal(name, `${r.url.slice(1)}.${r.width}.r${i + 1}.png`);
+      const g = r.regions[i]!;
+      // Three panels of the region padded by 48px and clipped, with 8px gaps, then scaled.
+      const pw = Math.min(cw, g.x + g.w + 48) - Math.max(0, g.x - 48);
+      const ph = Math.min(ch, g.y + g.h + 48) - Math.max(0, g.y - 48);
+      const [w, h] = [3 * pw + 16, ph];
+      const scale = Math.min(1, 1200 / Math.max(w, h));
+      const m = await sharp(run.file(name)).metadata();
+      assert.ok(Math.max(m.width!, m.height!) <= 1200, `${name} is ${m.width}×${m.height}`);
+      assert.ok(Math.abs(m.width! - w * scale) <= 1 && Math.abs(m.height! - h * scale) <= 1,
+        `${name} is ${m.width}×${m.height}, expected ${w}×${h} × ${scale}`);
+      seen++;
+    }
+  }
+  assert.ok(seen >= CONTROLS.length * WIDTHS.length, context(run));
+});
 
 test("the height badge is rendered on the taller and nav rows and nowhere else", () => {
   const moved = ["/taller", "/nav"];
