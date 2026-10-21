@@ -15,10 +15,12 @@ import {
   loadConfig,
   parseRoutes,
   resolveConfig,
+  selectorText,
   version,
   type CliOverrides,
   type ResolvedConfig,
   type Route,
+  type Sides,
 } from "./config.ts";
 
 interface Args extends CliOverrides {
@@ -30,6 +32,8 @@ interface Args extends CliOverrides {
   version: boolean;
   config?: string;
   routes: string[];
+  /** From --selector / --left-selector / --right-selector; replaces every route's own. */
+  selector?: Sides;
 }
 
 /** `Number(raw)`, but reject anything that isn't a finite number with a flag-named error. */
@@ -50,6 +54,7 @@ function parseArgs(argv: string[]): Args {
     routes: [],
   };
   const origins: string[] = [];
+  const sel: { both?: string; left?: string; right?: string } = {};
   for (let i = 0; i < argv.length; i++) {
     const raw = argv[i]!;
     // Accept both `--flag value` and `--flag=value`.
@@ -77,6 +82,11 @@ function parseArgs(argv: string[]): Args {
     else if (v === "--right") a.right = next();
     else if (v === "--out") a.outDir = next();
     else if (v === "--config") a.config = next();
+    else if (v === "--selector" || v === "--left-selector" || v === "--right-selector") {
+      const s = next();
+      if (!s) throw new Error(`${v} needs a value`);
+      sel[v === "--selector" ? "both" : v === "--left-selector" ? "left" : "right"] = s;
+    }
     else if (v === "--width") {
       const w = num("--width", next());
       if (w <= 0) throw new Error(`--width expects a positive number, got ${w}`);
@@ -105,6 +115,13 @@ function parseArgs(argv: string[]): Args {
     }
     a[side] = origins[i];
   }
+  const left = sel.left ?? sel.both;
+  const right = sel.right ?? sel.both;
+  if (!left !== !right) {
+    const [has, lacks] = left ? ["left", "right"] : ["right", "left"];
+    throw new Error(`--${has}-selector needs --${lacks}-selector or --selector`);
+  }
+  if (left && right) a.selector = { left, right };
   return a;
 }
 
@@ -121,6 +138,9 @@ const HELP = `
   second right (or pass --left / --right). A route is a literal path, loaded on both sides; /a::/b loads
   /a on the left and /b on the right. No globs, no discovery.
 
+  With --selector, each side compares the one element it matches instead of the page;
+  it must match exactly one. It applies to every route, over the config's own selectors.
+
   Writes report.html, results.json and crops of each change to --out. Exits 1 if a
   route errors or falls below --threshold, 2 on bad arguments or an origin that is down.
 
@@ -132,6 +152,9 @@ const HELP = `
     --out <dir>         Output directory                   (default: ./renderdiff-out)
     --concurrency <n>   Parallel workers                                 (default: 2)
     --config <path>     Config file. Default: renderdiff.config.{ts,mts,js,mjs} in cwd.
+    --selector <sel>    Compare one element (a Playwright selector) on both sides.
+    --left-selector <sel>, --right-selector <sel>
+                        That side's selector, over --selector.
     --dry-run           Print the URL pairs and exit. No browser.
     --open              Open the report when the run finishes.
     --progress          A line per shot as it finishes. The default on a terminal;
@@ -233,7 +256,7 @@ if (!rawRoutes.length) {
 
 let routes: Route[];
 try {
-  routes = parseRoutes(rawRoutes);
+  routes = parseRoutes(rawRoutes, args.selector);
 } catch (e) {
   die(e instanceof Error ? e.message : String(e));
 }
@@ -243,7 +266,10 @@ console.log(`Routes: ${routes.length}`);
 
 if (args.dryRun) {
   for (const r of routes) {
-    console.log(`  ${label(r).padEnd(52)} ${cfg.left}${r.left}  |  ${cfg.right}${r.right}`);
+    console.log(
+      `  ${label(r).padEnd(52)} ${cfg.left}${r.left}  |  ${cfg.right}${r.right}` +
+        (r.selector ? `  [${selectorText(r.selector)}]` : ""),
+    );
   }
   process.exit(0);
 }

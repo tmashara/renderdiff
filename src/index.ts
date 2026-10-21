@@ -21,6 +21,7 @@ export {
   type ResolvedConfig,
   type Route,
   type RouteSpec,
+  type Sides,
   type RenderdiffConfig,
 } from "./config.ts";
 

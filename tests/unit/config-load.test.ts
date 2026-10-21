@@ -108,7 +108,7 @@ describe("validation", () => {
   // way the loader shrugs at becomes a confusing failure much later, or worse, a quiet one.
   const cases: Array<[fixture: string, needle: RegExp]> = [
     ["bad-left.mjs", /`left` must be a string/],
-    ["bad-routes.mjs", /`routes\[0\]` must be a string or an object \{ left, right\? \}/],
+    ["bad-routes.mjs", /`routes\[0\]` must be a string or an object \{ left, right\?, selector\? \}/],
     ["bad-widths.mjs", /`widths` must be an array of positive numbers/],
     ["bad-threshold.mjs", /`threshold` must be a number between 0 and 1/],
     ["bad-concurrency.mjs", /`concurrency` must be a positive integer/],
@@ -148,6 +148,9 @@ describe("validation", () => {
       /`masks\[0\]` needs exactly one of `selector` or `locate`/,
     ],
     ['{ masks: [{ reason: "x", selector: 1 }] }', /`masks\[0\]\.selector` must be a string/],
+    ['{ routes: [{ left: "/a", selector: 1 }] }', /`routes\[0\]\.selector` must be a non-empty string or \{ left, right \}/],
+    ['{ routes: [{ left: "/a", selector: "" }] }', /`routes\[0\]\.selector` must be/],
+    ['{ routes: [{ left: "/a", selector: { left: ".a" } }] }', /`routes\[0\]\.selector` must be/],
   ];
   for (const [config, needle] of inline) {
     test(`${config} exits 2 and names the problem`, async () => {
@@ -171,6 +174,24 @@ describe("validation", () => {
     assert.match(r.stdout, /^  \/a::\/plans +http:\/\/left\.test\/a  \|  http:\/\/right\.test\/plans$/m);
     assert.match(r.stdout, /^  \/c +http:\/\/left\.test\/c  \|  http:\/\/right\.test\/c$/m);
     assert.match(r.stdout, /^  \/d::\/e +http:\/\/left\.test\/d  \|  http:\/\/right\.test\/e$/m);
+  });
+
+  test("a route listed once per selector is one route each; a CLI selector replaces them", async () => {
+    const cwd = tempDir("renderdiff-cfg-");
+    fs.writeFileSync(
+      path.join(cwd, "renderdiff.config.mjs"),
+      'export default { routes: [{ left: "/a", selector: ".card" }, { left: "/a", selector: { left: ".x", right: ".y" } }, "/a"] };\n',
+    );
+    const r = await runCli(["--dry-run", "--left", L, "--right", R], { cwd, noOut: true });
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(r.stdout, /^Routes: 3$/m);
+    assert.match(r.stdout, /right\.test\/a  \[\.card\]$/m);
+    assert.match(r.stdout, /right\.test\/a  \[\.x \| \.y\]$/m);
+    assert.match(r.stdout, /right\.test\/a$/m);
+    const cli = await runCli(["--dry-run", "--left", L, "--right", R, "--selector", "h1"], { cwd, noOut: true });
+    assert.equal(cli.code, 0, cli.stderr);
+    assert.match(cli.stdout, /^Routes: 1$/m);
+    assert.match(cli.stdout, /right\.test\/a  \[h1\]$/m);
   });
 
   test("a plain object with a selector mask and no functions loads", async () => {

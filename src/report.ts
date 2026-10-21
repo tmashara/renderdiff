@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Band, Box, Region, TextDiff } from "./compare.ts";
-import { CONTEXT_OPTIONS, type ResolvedConfig } from "./config.ts";
+import { CONTEXT_OPTIONS, name, type ResolvedConfig, type Sides } from "./config.ts";
 import { floor4, fmtBand, fmtRegion, pct, signed } from "./format.ts";
 
 interface BaseResult {
@@ -10,6 +10,8 @@ interface BaseResult {
   /** The path loaded on each side; both equal `url` unless it is a pair. */
   left: string;
   right: string;
+  /** The element compared on each side; null for the whole page. */
+  selector: Sides | null;
   width: number;
 }
 
@@ -213,7 +215,7 @@ function card(r: ComparedResult): string {
 <article class="card">
   <header>
     <span class="score ${band(r.score)}">${pct(r.score)}</span>
-    <code>${esc(r.url)}</code>
+    <code>${esc(name(r))}</code>
     <span class="w">@${r.width}px</span>
     ${r.heightDelta ? `<span class="delta">height ${signed(r.heightDelta)}px</span>` : ""}
     ${r.widthDelta ? `<span class="delta">width ${signed(r.widthDelta)}px</span>` : ""}
@@ -293,7 +295,7 @@ ${
   errors.length
     ? `<section><h2 class="bad">Errors</h2>
 <p class="blurb">These produced no measurement, so they are neither a pass nor a fail.</p>
-<ul>${errors.map((r) => `<li><code>${esc(r.url)}</code> @${r.width}px — ${esc(r.error)}</li>`).join("")}</ul></section>`
+<ul>${errors.map((r) => `<li><code>${esc(name(r))}</code> @${r.width}px — ${esc(r.error)}</li>`).join("")}</ul></section>`
     : ""
 }
 
