@@ -47,6 +47,8 @@ export interface CliOptions {
   /** Skip appending `--out`. Only for runs that never reach the browser (`--dry-run`). */
   noOut?: boolean;
   timeoutMs?: number;
+  /** Extra environment variables for the subprocess. */
+  env?: Record<string, string>;
 }
 
 export interface CliResult {
@@ -75,7 +77,7 @@ export function runCli(
       cwd,
       // Type stripping emits an experimental warning on some Node versions; the suite
       // asserts on stderr, so keep it to what the CLI itself writes.
-      env: { ...process.env, NODE_OPTIONS: "--no-warnings" },
+      env: { ...process.env, NODE_OPTIONS: "--no-warnings", ...opts.env },
       stdio: ["ignore", "pipe", "pipe"],
     });
 

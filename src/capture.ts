@@ -1,6 +1,6 @@
 import type { Locator, Page } from "playwright";
 import sharp from "sharp";
-import { MASK_COLOR, masksFor, type ResolvedConfig, type Route } from "./config.ts";
+import { label, MASK_COLOR, masksFor, type ResolvedConfig, type Route } from "./config.ts";
 
 /** Loads a page, settles it, and screenshots it. */
 
@@ -19,9 +19,9 @@ export interface Shot {
 
 /**
  * Chromium's screenshot backing store caps at this in any dimension; a single
- * `fullPage` shot past it is silently truncated. Rather than refuse, a taller page is
- * captured in vertical tiles of at most this height and stitched back together
- * (`captureTiled`), so long pages still diff in full.
+ * `fullPage` or clip shot past it can come out truncated or wrapped. Rather than refuse, a
+ * taller page or element is captured in vertical tiles of at most this height and stitched
+ * back together (`captureTiled`), so it still diffs in full.
  */
 const MAX_CAPTURE_HEIGHT = 16_384;
 
@@ -33,6 +33,9 @@ const TILE_HEIGHT = 16_000;
  * one, and we would rather error than stitch a >100MB image. Named in the throw.
  */
 const MAX_PAGE_HEIGHT = 40_000;
+
+/** A `before` hook threw. Never retried: the hook may have half-run against the page. */
+export class HookError extends Error {}
 
 /**
  * Install network blocking, the fake clock and seeded randomness. Once per page,
@@ -77,6 +80,13 @@ export async function capture(
   });
   if (res && res.status() >= 400) {
     throw new Error(`HTTP ${res.status()} at ${url}`);
+  }
+  if (route.before) {
+    try {
+      await route.before(page, { side, route: label(route), width });
+    } catch (e) {
+      throw new HookError(`before hook failed on ${side}: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
   await page.addStyleTag({ content: cfg.neutralizeCss });
 
@@ -166,8 +176,6 @@ export async function capture(
     );
   }
 
-  // A clip of any height comes out whole, so only a page shot needs tiles.
-  const tiled = !el && scrollHeight > MAX_CAPTURE_HEIGHT;
   const measure = async (l: Locator) => {
     const b = await l.boundingBox();
     if (!b?.width || !b.height) throw new Error(`selector "${selector}" has no box ${where}`);
@@ -199,10 +207,12 @@ export async function capture(
   )
     .filter((b) => b !== null)
     .map((b) => (clip ? { ...b, x: b.x - clip.x, y: b.y - clip.y } : b));
+  const area = clip ?? { x: 0, y: 0, width, height: scrollHeight };
+  const tiled = area.height > MAX_CAPTURE_HEIGHT;
   const shoot = async () =>
     paintBoxes(
       tiled
-        ? await captureTiled(page, width, scrollHeight)
+        ? await captureTiled(page, area)
         : await page.screenshot({ fullPage: true, clip, animations: "disabled" }),
       boxes,
     );
@@ -315,8 +325,8 @@ async function paintBoxes(png: Buffer, boxes: Box[]): Promise<Buffer> {
 }
 
 /**
- * Capture a page taller than Chromium's one-shot limit as vertical tiles, then stitch
- * them into a single full-height PNG.
+ * Capture a page, or an element's box, taller than Chromium's one-shot limit as vertical
+ * tiles, then stitch them into a single full-height PNG.
  *
  * Playwright's `page.screenshot({ clip })` clips against the viewport, so it cannot
  * reach a band below the fold. We drop to a raw CDP `Page.captureScreenshot` with
@@ -327,28 +337,24 @@ async function paintBoxes(png: Buffer, boxes: Box[]): Promise<Buffer> {
  *
  * `deviceScaleFactor` is 1 (`CONTEXT_OPTIONS` in config.ts), so clip coords are CSS px.
  */
-async function captureTiled(
-  page: Page,
-  width: number,
-  scrollHeight: number,
-): Promise<Buffer> {
+async function captureTiled(page: Page, box: Box): Promise<Buffer> {
   const client = await page.context().newCDPSession(page);
   try {
     const tiles: Buffer[] = [];
-    for (let y = 0; y < scrollHeight; y += TILE_HEIGHT) {
-      const height = Math.min(TILE_HEIGHT, scrollHeight - y);
+    for (let y = 0; y < box.height; y += TILE_HEIGHT) {
+      const height = Math.min(TILE_HEIGHT, box.height - y);
       const { data } = await client.send("Page.captureScreenshot", {
         format: "png",
         captureBeyondViewport: true,
-        clip: { x: 0, y, width, height, scale: 1 },
+        clip: { x: box.x, y: box.y + y, width: box.width, height, scale: 1 },
       });
       tiles.push(Buffer.from(data, "base64"));
     }
 
     return sharp({
       create: {
-        width,
-        height: scrollHeight,
+        width: box.width,
+        height: box.height,
         channels: 4,
         background: MASK_COLOR,
       },

@@ -21,7 +21,27 @@ export default {
     "/pricing::/plans",
     { left: "/blog", right: "/posts" },
     { left: "/pricing", selector: { left: ".plans-v2", right: ".plans" } },
+    // `before` runs on each side after the page loads, before it settles and is shot, so
+    // the open menu is what gets measured. Replaces the top-level `before` for this route.
+    { left: "/docs", before: async (page) => { await page.click("[aria-label=Menu]"); } },
   ],
+
+  // For every route without its own `before`, CLI routes included. Gets
+  // `{ side, route, width }`; use `side` only for markup that legitimately differs per
+  // side, never to make the two sides look alike. A throw is a route error, not retried.
+  // Actions use Playwright's 30s default timeout, so check first for what may not be
+  // there. hideSelectors and extraCss apply after the hook.
+  before: async (page) => {
+    const accept = page.getByRole("button", { name: "Accept" });
+    if (await accept.isVisible()) await accept.click();
+  },
+
+  // Playwright storage state (cookies, localStorage) each side starts with, e.g. signed
+  // in: `npx playwright codegen --save-storage=auth.json <url>`. One file, or
+  // `{ left, right }`. Relative to this file. It holds live session tokens: never commit
+  // it, and add it to .gitignore. The out dir then holds signed-in screenshots and text,
+  // so keep it out of git and don't publish it either. `--storage-state` replaces it.
+  storageState: "auth.json",
 
   // Replaces the default set (1440, 1152, 896, 704, 375).
   widths: [1440, 896, 375],

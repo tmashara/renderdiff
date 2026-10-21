@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Menu</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for before hooks. The panel is hidden until the button is clicked, and its
+   content differs between the sides, so the pair differs only if a hook opened it. */
+.panel { width: var(--content); height: 160px; background: var(--accent); color: #ffffff; }
+.panel[hidden] { display: none; }
+button { width: 160px; height: 40px; font: 16px/24px ui-monospace, monospace; }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Menu</h1>
+<p class="lede">A page whose interesting state is behind a click. Without a hook both sides show the closed menu and match; with one, each side shows its own panel.</p>
+<button type="button" id="toggle" onclick="document.getElementById('panel').hidden = false">Open menu</button>
+<div class="panel" id="panel" hidden><p>Panel built by the right side, worded differently</p></div>
+<section class="notes">
+<p>The button is the only way in, so whatever the hook clicks is what gets measured on both sides.</p>
+</section>
+</div>
+</body>
+</html>

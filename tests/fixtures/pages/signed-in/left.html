@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Account</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for storageState. It reads "Signed in" only with the session cookie a storage
+   state file supplies, and the right side words that differently, so a diff shows which
+   sides were signed in. */
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Account</h1>
+<p class="lede">This page greets a visitor by whether the session cookie is set, the way a signed-in dashboard differs from its marketing shell.</p>
+<p id="who">Signed out</p>
+<script>
+if (/(^|; )session=/.test(document.cookie)) document.getElementById("who").textContent = "Signed in as tester";
+</script>
+<section class="notes">
+<p>Signed out is the default, so a run without a storage state file compares the shell on both sides and never sees the account.</p>
+</section>
+</div>
+</body>
+</html>
