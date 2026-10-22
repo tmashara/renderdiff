@@ -292,8 +292,13 @@ Under each score, `--progress` output and the report card say where to look:
   `--selector` takes it. `-sel "text"` exists only on the right, `+sel` only on the left;
   `sel margin-left 24px→16px` is on both, with the computed properties that differ, left
   first; `sel x+8` moved without a style of its own changing, so the cause is a neighbour or
-  its parent, which is listed after it when one of them changed. A band names only what one
-  side added, not what it pushed down; what fixed chrome covers isn't named. A computed
+  its parent, which is listed after it when one of them changed; a bare `sel` is on both
+  sides with nothing compared changed or moved, so its own pixels did (an image's source, a
+  canvas). An element without text is only paired when its box is the same size on both
+  sides; `rightSelector` is set when the right side was found by its text under another
+  selector. A band names only what one side added, not what it pushed down, so it can name
+  nothing; what fixed chrome covers isn't named. Probing gives up after 5s, leaving the
+  elements out. A computed
   value is a symptom: find the rule that set it. Shadow DOM and iframes aren't searched.
 - **Text** is a line diff of each side's `document.body.innerText` (the element's, with a
   selector). Left is the changed version: *added* lines are on the left only, *removed* lines on the right only. The card
@@ -358,7 +363,7 @@ Everything lands in the out dir (`./renderdiff-out` by default):
           "selector": "nav > a[href=\"/pricing\"]", "side": "right",   // or "left", "both"
           "left": null, "right": { "x": 256, "y": 192, "w": 928, "h": 24 },
           "changed": {},         // "margin-left": ["24px", "16px"], left first; "text" too
-          "text": "Pricing"
+          "text": "Pricing"      // "rightSelector" when the right one differs
         }]
       }],
       "text": { "added": [], "removed": ["Pricing"] },

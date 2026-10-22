@@ -16,6 +16,8 @@ export interface ElementDiff {
   changed: Record<string, [string, string]>;
   /** The start of its text (left's when both), "" if none. */
   text: string;
+  /** The right side's selector, when it was found by its text under a different one. */
+  rightSelector?: string;
 }
 
 const MAX_SPOTS = 5;
@@ -29,8 +31,8 @@ const PROPS = [
   "padding-right", "padding-bottom", "padding-left", "border-top-width", "border-right-width",
   "border-bottom-width", "border-left-width", "font-family", "font-size", "font-weight", "line-height",
   "letter-spacing", "text-align", "text-transform", "white-space", "color", "background-color",
-  "border-top-color", "border-top-left-radius", "box-shadow", "opacity", "transform", "visibility",
-  "z-index", "width", "height",
+  "background-image", "border-top-color", "border-top-left-radius", "box-shadow", "opacity", "transform",
+  "visibility", "z-index", "width", "height",
 ];
 
 interface Seen {
@@ -51,6 +53,10 @@ interface Find {
   tag: string;
   text: string;
   y: number;
+  w: number;
+  h: number;
+  /** This side's box for the change, or null at a band's seam. */
+  box: Box | null;
 }
 
 interface ProbeArgs {
@@ -66,7 +72,8 @@ function probe({ boxes, find, masked, props, perSpot }: ProbeArgs) {
   const MAX_SCAN = 50_000;
   const HASHED = /\d{3,}|^(css|sc|jsx|svelte)-|__[\w-]{5,}$|^_/;
   const TEST = ["data-testid", "data-test", "data-test-id", "data-cy", "data-qa"];
-  const quote = (n: string, v: string) => `[${n}=${JSON.stringify(v)}]`;
+  const quote = (n: string, v: string) =>
+    `[${n}="${v.replace(/["\\]/g, "\\$&").replace(/[\0-\x1f\x7f]/g, (c) => `\\${c.charCodeAt(0).toString(16)} `)}"]`;
   const unique = (s: string) => document.querySelectorAll(s).length === 1;
   const snippet = (e: Element) =>
     ((e as HTMLElement).innerText ?? e.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 40);
@@ -130,10 +137,12 @@ function probe({ boxes, find, masked, props, perSpot }: ProbeArgs) {
   };
 
   const all: { e: Element; r: DOMRect }[] = [];
+  const hidden = new Set<Element>();
+  for (const m of masked as Element[]) [m, ...Array.from(m.querySelectorAll("*"))].forEach((e) => hidden.add(e));
   const els = document.body?.querySelectorAll("*") ?? [];
   for (let i = 0; i < els.length && i < MAX_SCAN; i++) {
     const e = els[i]!;
-    if ((e as SVGElement).ownerSVGElement || masked.some((m) => m.contains(e))) continue;
+    if ((e as SVGElement).ownerSVGElement || hidden.has(e)) continue;
     const r = e.getBoundingClientRect();
     if (r.width && r.height) all.push({ e, r });
   }
@@ -168,12 +177,18 @@ function probe({ boxes, find, masked, props, perSpot }: ProbeArgs) {
     return chosen.map(hit);
   });
 
-  const found = find.map(({ sel, tag, text, y }) => {
+  const found = find.map(({ sel, tag, text, y, w, h, box }) => {
     let e: Element | null = null;
     try {
       e = document.querySelector(sel);
     } catch {}
     if (e && text && snippet(e) !== text) e = null;
+    // With no text to check, nth-of-type may now name a different element: require its shape and place.
+    if (e && !text) {
+      const r = e.getBoundingClientRect();
+      const near = !box || (r.right > box.x && r.left < box.x + box.w && r.bottom > box.y && r.top < box.y + box.h);
+      if (e.localName !== tag || Math.abs(r.width - w) > 4 || Math.abs(r.height - h) > 4 || !near) e = null;
+    }
     // An insertion shifts nth-of-type, so fall back to the same tag with the same text.
     if (!e && text) {
       const same = Array.from(document.querySelectorAll(tag)).filter((c) => snippet(c) === text);
@@ -203,13 +218,18 @@ function element([l, r]: Pair, origins: Shot["origin"][]): ElementDiff {
     right: at(r, origins[1]!),
     changed: Object.fromEntries(Object.entries(changed).slice(0, MAX_CHANGED)),
     text: (l ?? r)!.text,
+    ...(l && r && l.sel !== r.sel ? { rightSelector: r.sel } : {}),
   };
 }
+
+/** Without text to compare, a selector naming both is only the same element if the box agrees. */
+const same = (a: Seen, b: Seen) =>
+  !!(a.text || b.text) || (a.tag === b.tag && Math.abs(a.box.w - b.box.w) <= 4 && Math.abs(a.box.h - b.box.h) <= 4);
 
 const moved = (a: Box, b: Box) => a.x !== b.x || a.y !== b.y || a.w !== b.w || a.h !== b.h;
 
 /**
- * Sets `elements` on the first `MAX_SPOTS` spots' regions and bands. Each side picks the
+ * The elements behind each of the first `MAX_SPOTS` spots, in spot order. Each side picks the
  * elements that best fill its box, then the other side looks for each by selector.
  */
 export async function locate(
@@ -217,9 +237,9 @@ export async function locate(
   shots: [Shot, Shot],
   spots: Spot[],
   masks: [Locator[], Locator[]],
-): Promise<void> {
+): Promise<ElementDiff[][]> {
   const todo = spots.slice(0, MAX_SPOTS);
-  if (!todo.length) return;
+  if (!todo.length) return [];
   const masked = await Promise.all(
     masks.map(async (ls) => (await Promise.all(ls.map((l) => l.elementHandles()))).flat()),
   );
@@ -237,24 +257,25 @@ export async function locate(
   // Each side looks for what only the other picked.
   const asks = ([0, 1] as const).map((s) =>
     picks[1 - s]!.flatMap((hits, i) =>
-      hits.filter((h) => !picks[s]![i]!.some((o) => o.sel === h.sel)).map((h) => ({ i, h })),
+      hits.filter((h) => !picks[s]![i]!.some((o) => o.sel === h.sel && same(o, h))).map((h) => ({ i, h })),
     ),
   );
   const answers = await Promise.all(
     ([0, 1] as const).map((s) =>
       asks[s]!.length
-        ? run(s, asks[s]!.map(({ h }) => ({ sel: h.sel, tag: h.tag, text: h.text, y: h.box.y }))).then((a) => a.found as (Hit | null)[])
+        ? run(s, asks[s]!.map(({ i, h }) => ({ sel: h.sel, tag: h.tag, text: h.text, y: h.box.y, w: h.box.w, h: h.box.h, box: boxes(s)[i]! })))
+            .then((a) => a.found as (Hit | null)[])
         : [],
     ),
   );
 
-  todo.forEach((spot, i) => {
+  return todo.map((spot, i) => {
     const pairs: [Hit | null, Hit | null][] = [];
     const keys = new Set<string>();
     for (const s of [0, 1] as const) {
       for (const h of picks[s]![i]!) {
         const k = asks[1 - s]!.findIndex((a) => a.i === i && a.h === h);
-        const other = picks[1 - s]![i]!.find((o) => o.sel === h.sel) ?? (k >= 0 ? answers[1 - s]![k]! : null);
+        const other = picks[1 - s]![i]!.find((o) => o.sel === h.sel && same(o, h)) ?? (k >= 0 ? answers[1 - s]![k]! : null);
         const pair: [Hit | null, Hit | null] = s ? [other, h] : [h, other];
         const key = `${pair[0]?.sel}\n${pair[1]?.sel}`;
         if (!keys.has(key)) keys.add(key), pairs.push(pair);
@@ -278,9 +299,9 @@ export async function locate(
     }
     const unique = out.filter((e, j) => out.findIndex((o) => o.selector === e.selector) === j);
     // A band's rows are what one side added; an element on both sides there was only pushed.
-    const added = unique.filter((e) => e.side !== "both");
+    if (spot.kind === "band") return unique.filter((e) => e.side !== "both");
     // Unchanged and unmoved, e.g. covered by what changed: noise beside anything that explains.
     const telling = unique.filter((e) => e.side !== "both" || Object.keys(e.changed).length || moved(e.left!, e.right!));
-    spot.target.elements = spot.kind === "band" && added.length ? added : telling.length ? telling : unique;
+    return telling.length ? telling : unique;
   });
 }

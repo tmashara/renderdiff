@@ -15,7 +15,8 @@
 | `dom sel margin-left 24px→16px` | That element is on both sides and those computed values differ, left first. The value is a symptom: find the rule that sets it, and check it changed on purpose. |
 | `dom +sel "x"` / `dom -sel "x"` | That element exists only on the left (your change) / only on the right. |
 | `dom sel x+8` | It moved but no style of its own changed: the neighbour or parent listed after it is the cause; with none listed, look above it. |
-| No `dom` line | Nothing visible was found under the change (a canvas or image's own pixels), or it was past the first five bands and regions. Open the crop. |
+| `dom sel` (nothing after it) | On both sides, and no compared style changed and it didn't move: its own pixels did (an image's source, a canvas, an SVG). Open the crop. |
+| No `dom` line | Nothing was found under the change, a band whose rows hold nothing only one side has, past the first five bands and regions, or the probe timed out. Open the crop. |
 | `band …@y~N` | Widths collapsed into one row put the band at different `y`; `N` is the first width's. |
 | `unstable Npx` | Pixels that kept changing between shots of the same load on one origin (a ticker, a carousel, a video). Painted out on both sides and excluded from the score. A large number means a big area went unmeasured: look at the magenta on the full shots. Such a route is never on the `clean:` line. |
 | `ERROR selector "…" matched N elements on left (/a), expected 1` | A selector must match exactly one element per side. Make it more specific (`>> nth=0`, an id, `data-test`), or list the route once per element. |
@@ -42,8 +43,9 @@ Report colouring (`--open`, for a human): green above 99.5%, amber to 97%, red b
 ## results.json
 
 Scripts, and drilling into one route: every score, region (`x,y,w,h,pixels`, left-page
-px), band, their `elements` (`selector`, `side`, each side's box, `changed`, `text`; absent
-when not looked at, `[]` when nothing visible was there), full text diff, image path and crop (`kind`, each side's box with `h` 0 at an
+px), band, their `elements` (`selector`, `side`, each side's box, `changed`, `text`, and
+`rightSelector` when the right was found under another selector; absent when not looked
+at, `[]` when nothing was named), full text diff, image path and crop (`kind`, each side's box with `h` 0 at an
 insertion point, `layout` `stacked` = left on top or `side` = left on the left, `scale`,
 `clipped`), `selector` (`{ left, right }` or null), one result per line, so `grep '"url":"/about"'` pulls a route.
 Paths are relative to the out dir. `summary` has `compared`, `errors`, `mean`, `worst` and

@@ -46,6 +46,8 @@ export const GUARDRAILS = [
   "menu",
   "signed-in",
   "fixed",
+  "inserted",
+  "labelled",
 ] as const;
 
 export const ALL: string[] = [...EQUIVALENCE, ...CONTROLS, ...GUARDRAILS];

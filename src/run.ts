@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { chromium, errors, type Page } from "playwright";
 import { cancelUnstable, capture, HookError, prepare, type Shot } from "./capture.ts";
 import { compare, crops, type Band } from "./compare.ts";
@@ -24,6 +25,9 @@ import {
   type ErrorResult,
   type RouteResult,
 } from "./report.ts";
+
+/** A busy main thread can stall the probe; the elements are a hint, so give up rather than wait. */
+const LOCATE_TIMEOUT = 5_000;
 
 /** Past this share of a page unstable, too little was measured for a score to mean anything. */
 const MAX_UNSTABLE_SHARE = 0.25;
@@ -160,13 +164,17 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
         const write = (name: string, buf: Buffer) =>
           fs.promises.writeFile(path.join(cfg.outDir, name), buf);
         // Both pages still hold this job's document: the next load waits for the loop.
-        const [made] = await Promise.all([
+        const [made, named] = await Promise.all([
           crops(leftShot.png, rightShot.png, spots),
-          locate([leftPage, rightPage], [leftShot, rightShot], spots, [
-            masksFor(cfg, leftPage, route),
-            masksFor(cfg, rightPage, route),
-          ]).catch(() => {}),
+          Promise.race([
+            locate([leftPage, rightPage], [leftShot, rightShot], spots, [
+              masksFor(cfg, leftPage, route),
+              masksFor(cfg, rightPage, route),
+            ]).catch(() => null),
+            sleep(LOCATE_TIMEOUT, null, { ref: false }),
+          ]),
         ]);
+        named?.forEach((els, i) => (spots[i]!.target.elements = els));
         const cropped = made.map(({ png, ...c }, i) => ({ path: `${base}.c${i + 1}.png`, ...c }));
         await Promise.all([
           write(images.left, leftShot.png),

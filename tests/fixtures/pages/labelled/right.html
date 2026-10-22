@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Labelled block</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for selector escaping. The recoloured block is named by an aria-label holding a
+   newline, which a selector must escape as CSS, not as JSON. */
+.box { width: 208px; height: 160px; background: var(--accent); }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Labelled block</h1>
+<p class="lede">This pair is deliberately different. The block below is red on the left and blue on the right, and its label runs over two lines.</p>
+<div class="box" aria-label="Second&#10;block"></div>
+<section class="notes">
+<h2>Notes</h2>
+<p>A selector that quotes the label as JSON matches nothing, so the element it names could not be compared on its own.</p>
+</section>
+</div>
+</body>
+</html>

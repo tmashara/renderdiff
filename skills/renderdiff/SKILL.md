@@ -40,8 +40,8 @@ A score without looking is not a verdict: 99.6% can be a missing nav link.
    `aligned 100.00%` means the band is the whole difference. `unaligned`: no bands, see reference.md.
 5. Read `dom` before any crop: `sel prop l→r` names the element and the computed property
    (left first); `+sel`/`-sel` exist only on the left/right; `sel x+8` moved with no style of
-   its own changed, so look at the neighbour or parent listed after it. Find the rule, not
-   the value. `--selector <sel>` scopes a rerun to it.
+   its own changed, so look at the neighbour or parent listed after it; a bare `sel` changed
+   only its own pixels (an image, a canvas). Find the rule, not the value. `--selector <sel>` scopes a rerun to it.
 6. `Read` the crops for what `dom` doesn't explain (no `dom`, text, images): the `crops` line
    under each row names them, in the directory of the results.json on the verdict line, up to
    three per width, bands first. Left is always on top or on the left; the change is boxed in
