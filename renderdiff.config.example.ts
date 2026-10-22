@@ -32,7 +32,8 @@ export default {
   // Relative to the directory you run in. Wiped at the start of each run.
   outDir: "renderdiff-out",
 
-  // Captures run in parallel. Keep it low if the right origin is someone's live site.
+  // Captures run in parallel. Default half the CPU cores, between 2 and 8. Keep it low if
+  // the right origin is someone's live site.
   concurrency: 2,
 
   // Appended to the built-in analytics/consent/A-B blocklist. Aborted at the network

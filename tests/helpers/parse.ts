@@ -41,7 +41,7 @@ export interface Summary {
   /** Routes on the `clean:` line; a selector route is `/a [sel]`, as is its key in `routes`. */
   clean: string[];
   /** Each differing route: widths that were clean, then one row per collapsed width group. */
-  routes: Map<string, { clean: number[]; rows: { widths: number[]; text: string }[]; errors: { widths: number[]; message: string }[] }>;
+  routes: Map<string, { clean: number[]; rows: { widths: number[]; text: string; crops: string[] }[]; errors: { widths: number[]; message: string }[] }>;
   verdict: {
     differ: number;
     routes: number;
@@ -76,7 +76,9 @@ export function parseSummary(stdout: string): Summary {
     } else if (at && (m = /^  @([\d,]+)  ERROR (.*)$/.exec(line))) {
       at.errors.push({ widths: m[1]!.split(",").map(Number), message: m[2]! });
     } else if (at && (m = /^  @([\d,]+)  (.*)$/.exec(line))) {
-      at.rows.push({ widths: m[1]!.split(",").map(Number), text: m[2]! });
+      at.rows.push({ widths: m[1]!.split(",").map(Number), text: m[2]!, crops: [] });
+    } else if (at?.rows.length && (m = /^    crops (.*)$/.exec(line))) {
+      at.rows.at(-1)!.crops = m[1]!.split(" ");
     }
   }
   return {

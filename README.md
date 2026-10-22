@@ -23,15 +23,18 @@ Routes: 3
 clean: /
 /about  clean @1152,896,704,375
   @1440  97.41%  h-24  band -24@y196  aligned 100.00%  text -"Pricing"
+    crops about.1440.c1.png
 /pricing
   @1440,1152,896,704,375  99.12%–99.87%  1 reg
+    crops pricing.1440.c1.png pricing.1152.c1.png pricing.896.c1.png pricing.704.c1.png pricing.375.c1.png
 renderdiff: 2 of 3 routes differ (6 of 15 shots), 0 errors, worst 97.41% /about@1440 — /Users/you/site/renderdiff-out/results.json
 ```
 
 A row covers the widths that agree on everything but the score (shown as a range): height
 delta (`h`), bands (`+` rows only left has, `-` rows only right has, at `y`; `~` when the
 widths put it in different places), aligned score, region count, unstable pixels and up to
-three text-diff lines (`-"x"` only on the right, `+"x"` only on the left). Errors print in
+three text-diff lines (`-"x"` only on the right, `+"x"` only on the left). Under a row,
+`crops` lists that row's crop files, relative to the directory `results.json` is in. Errors print in
 full, grouped across the widths that share a message. Clean means not one pixel differs
 and none went unmeasured as unstable; a route with unstable pixels gets its own row. With
 `--threshold`, the verdict line ends `, B below 97.00%`. `--progress` gets the per-shot
@@ -85,7 +88,7 @@ renderdiff <left-origin> <right-origin> <route…> [options]
 | `--width <n>` | Viewport width; repeatable. Replaces the defaults. |
 | `--threshold <0..1>` | Exit non-zero if any comparison scores below this. |
 | `--out <dir>` | Output directory, wiped at the start of a run. Default `./renderdiff-out`. A directory holding files renderdiff didn't write is refused. |
-| `--concurrency <n>` | Parallel workers. Default 2. |
+| `--concurrency <n>` | Parallel workers. Default half the CPU cores, between 2 and 8. Lower it when one side is someone's live site. |
 | `--config <path>` | Config file. Default: `renderdiff.config.{ts,mts,js,mjs}` in cwd. |
 | `--selector <sel>` | Compare the one element this Playwright selector matches, on both sides, instead of the whole page. Applies to every route, over the config's per-route `selector`. |
 | `--left-selector <sel>`, `--right-selector <sel>` | That side's selector, over `--selector`. One without the other side (or `--selector`) is an error. |
@@ -101,8 +104,10 @@ route is loaded on both origins, unless it's a pair.
 Default widths are `1440, 1152, 896, 704, 375` — one inside each common responsive band
 rather than on a breakpoint boundary, so a layout switch never flaps between captures.
 
-Exit codes: `0` all good · `1` a route errored or scored below `--threshold` ·
-`2` bad arguments, bad config, or an origin that isn't responding.
+Exit codes: `0` no route errored and none scored below `--threshold` (without one, a diff
+still exits 0) · `1` a route scored below `--threshold` · `2` bad arguments, bad config, or an
+origin that isn't responding · `3` a route errored, so it went unmeasured, or the run
+crashed (e.g. no Chromium). `1` wins over `3` when both happen.
 
 ## Comparing different routes or components
 
@@ -241,8 +246,8 @@ than the one it's compared against has not reached parity. The `height ±Npx` ba
 row names the cause.
 
 **Errors are not failures.** A route that threw produced no measurement, so it is
-neither a pass nor a fail. It's listed separately in the report — and it still exits 1,
-because an unmeasured route is not a verified one.
+neither a pass nor a fail. It's listed separately in the report — and it still exits non-zero
+(`3`), because an unmeasured route is not a verified one.
 
 ## Output
 
@@ -328,7 +333,8 @@ Paths are relative to the out dir. Results are in route-then-width order.
   dev toolbars.
 - **Settles the page** — makes native lazy images eager, scrolls every viewport-height
   slice a frame at a time so script lazy loaders fire, waits for every image to decode,
-  `document.fonts.ready` and up to 3s of network idle, then re-injects the stylesheet to
+  `document.fonts.ready` and up to 3s for the network to go 250ms with nothing in flight
+  (server-sent events and beacons don't count), then re-injects the stylesheet to
   catch late-injected chrome.
 - **Shoots until stable** — repeats the screenshot until two in a row match (at most 3; 2
   for tiled pages). Pixels still changing between the last two shots of the same load are

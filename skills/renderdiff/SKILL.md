@@ -36,14 +36,15 @@ A score without looking is not a verdict: 99.6% can be a missing nav link.
 3. Read `text` first: `-"x"` is only on the reference (missing in your change), `+"x"` only on yours.
 4. A `band -24@y196` is 24 rows only the right has (`+` only the left) at that `y`;
    `aligned 100.00%` means the band is the whole difference. `unaligned`: no bands, see reference.md.
-5. `Read` the crops in the out dir: `{slug}.{width}.c{n}.png` (`/` is `index`, `/a/b` is `a-b`, the pair `/a::/b` is `a~b`, a selector adds `@<sel>`),
-   up to three, bands first. Left is always on top or on the left; the change is boxed in red,
-   and a red seam marks where one side lacks the other's rows. Full shots
-   `{slug}.{width}.{left,right,diff}.png` only when a crop doesn't explain itself.
+5. `Read` the crops the `crops` line under each row names, in the directory of the
+   results.json on the verdict line: up to three per width, bands first. Left is always on
+   top or on the left; the change is boxed in red, and a red seam marks where one side lacks the other's rows. Full shots (a crop's name
+   with `left`, `right` or `diff` for `c{n}`) only when a crop doesn't explain itself.
 6. Explain every band, region and text line, then widen to all routes and the default widths.
    For a row collapsed across widths, open the widest and the narrowest.
 
-Exit: 0 clean · 1 a route errored or fell below `--threshold` · 2 bad args/config/origin down.
+Exit: 0 nothing below `--threshold` and no errors — without `--threshold` a diff still exits 0,
+so read the summary · 1 below `--threshold` · 2 bad args/config/origin down · 3 a route errored or the run crashed.
 `ERROR` = unmeasured, report it as unverified. Everything clean? Confirm both sides actually rendered.
 
 **Before you mask, lower the threshold, drop a route or skip widths,** read the

@@ -255,14 +255,14 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
     spawn(opener, [reportPath], { detached: true, stdio: "ignore" }).unref();
   }
 
-  // Reported before the error exit, so an errored route can't hide a threshold failure.
+  // A measured failure outranks an unmeasured route, so an error can't hide a threshold failure.
   const below = results.filter(
     (r) => r.status === "compared" && cfg.threshold !== null && r.score < cfg.threshold,
   );
   if (below.length) {
     console.error(`\n✗ ${below.length} route(s) below ${pct(cfg.threshold!)}.`);
   }
-  return below.length || results.some((r) => r.status === "error") ? 1 : 0;
+  return below.length ? 1 : results.some((r) => r.status === "error") ? 3 : 0;
 }
 
 /** A missing browser binary is the likeliest first-run failure — name the fix. */
@@ -370,7 +370,11 @@ export function compact(
       ]);
       groups.set(key, [...(groups.get(key) ?? []), r]);
     }
-    for (const g of groups.values()) out.push(`  @${g.map((r) => r.width).join(",")}  ${row(g)}`);
+    for (const g of groups.values()) {
+      out.push(`  @${g.map((r) => r.width).join(",")}  ${row(g)}`);
+      const paths = g.flatMap((r) => r.crops.map((c) => c.path));
+      if (paths.length) out.push(`    crops ${paths.join(" ")}`);
+    }
     const failed = new Map<string, number[]>();
     for (const r of rows) if (r.status === "error") failed.set(r.error, [...(failed.get(r.error) ?? []), r.width]);
     for (const [error, widths] of failed) out.push(`  @${widths.join(",")}  ERROR ${error}`);

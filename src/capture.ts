@@ -1,4 +1,5 @@
-import type { Locator, Page } from "playwright";
+import { setTimeout as sleep } from "node:timers/promises";
+import type { Locator, Page, Request } from "playwright";
 import sharp from "sharp";
 import { MASK_COLOR, masksFor, type ResolvedConfig, type Route } from "./config.ts";
 
@@ -34,15 +35,46 @@ const TILE_HEIGHT = 16_000;
  */
 const MAX_PAGE_HEIGHT = 40_000;
 
+/** Requests still open per page, and when the last one opened or closed. */
+const network = new WeakMap<Page, { open: Set<Request>; last: number }>();
+
+/** Never finish, so they would hold network idle open until its timeout. */
+const STREAMS = new Set(["eventsource", "websocket", "ping"]);
+
+/** Playwright's `networkidle` waits a fixed 500ms; below 250ms, late request events under load slip past. */
+async function networkIdle(page: Page, quiet: number, timeout: number): Promise<void> {
+  const net = network.get(page)!;
+  const end = Date.now() + timeout;
+  while (Date.now() < end && (net.open.size || Date.now() - net.last < quiet)) await sleep(25);
+}
+
 /**
- * Install network blocking, the fake clock and seeded randomness. Once per page,
- * before any navigation.
+ * Install network blocking and tracking, the fake clock and seeded randomness. Once per
+ * page, before any navigation.
  */
 export async function prepare(
   page: Page,
   cfg: ResolvedConfig,
   now: number,
 ): Promise<void> {
+  const net = { open: new Set<Request>(), last: Date.now() };
+  network.set(page, net);
+  page.on("request", (r) => {
+    if (STREAMS.has(r.resourceType())) return;
+    net.open.add(r);
+    net.last = Date.now();
+  });
+  const done = (r: Request) => {
+    if (net.open.delete(r)) net.last = Date.now();
+  };
+  page.on("requestfinished", done);
+  page.on("requestfailed", done);
+  // A request the old document left open never finishes or fails, so it can't hold the next load.
+  page.on("framenavigated", (f) => {
+    if (f !== page.mainFrame()) return;
+    net.open.clear();
+    net.last = Date.now();
+  });
   for (const pattern of cfg.blockUrlPatterns) {
     await page.route(pattern, (route) => route.abort());
   }
@@ -105,9 +137,7 @@ export async function capture(
     await Promise.race([decoded, new Promise((r) => setTimeout(r, 5_000))]);
   }, MAX_PAGE_HEIGHT);
   await page.evaluate(() => document.fonts.ready);
-  await page
-    .waitForLoadState("networkidle", { timeout: 3_000 })
-    .catch(() => {});
+  await networkIdle(page, 250, 3_000);
   await page.addStyleTag({ content: cfg.neutralizeCss }); // anything injected late
 
   const selector = route.selector?.[side];
@@ -211,7 +241,7 @@ export async function capture(
   const tries = tiled ? 2 : 3;
   let prev = await shoot();
   for (let n = 2; ; n++) {
-    await page.waitForTimeout(100);
+    await page.waitForTimeout(50);
     const png = await shoot();
     if (png.equals(prev)) return { png, unstable: null, blank, text };
     if (n === tries) return { png, unstable: await differing(prev, png), blank, text };

@@ -142,7 +142,8 @@ const HELP = `
   it must match exactly one. It applies to every route, over the config's own selectors.
 
   Writes report.html, results.json and crops of each change to --out. Exits 1 if a
-  route errors or falls below --threshold, 2 on bad arguments or an origin that is down.
+  route falls below --threshold, 3 if one errored (unmeasured) or the run crashed, 2 on
+  bad arguments or an origin that is down. A diff without --threshold exits 0.
 
   Options
     --left <url>        Left origin, instead of the first positional one.
@@ -150,7 +151,7 @@ const HELP = `
     --width <n>         Viewport width; repeatable. Replaces the defaults.
     --threshold <0..1>  Fail if any comparison scores below this.
     --out <dir>         Output directory                   (default: ./renderdiff-out)
-    --concurrency <n>   Parallel workers                                 (default: 2)
+    --concurrency <n>   Parallel workers              (default: half the cores, 2–8)
     --config <path>     Config file. Default: renderdiff.config.{ts,mts,js,mjs} in cwd.
     --selector <sel>    Compare one element (a Playwright selector) on both sides.
     --left-selector <sel>, --right-selector <sel>
@@ -286,5 +287,5 @@ try {
     }));
 } catch (e) {
   console.error(`✗ ${e instanceof Error ? e.message : String(e)}`);
-  process.exit(1);
+  process.exit(3);
 }

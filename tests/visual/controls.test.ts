@@ -17,6 +17,8 @@
  * a threshold asked for one.
  */
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import sharp from "sharp";
 import { after, before, test } from "node:test";
 import { CONTROLS, toPath } from "../helpers/corpus.ts";
@@ -242,6 +244,14 @@ test("piped stdout is one compact summary: no clean routes, widths collapsed, a 
   assert.deepEqual(nav.rows.map((r) => r.widths), [WIDTHS], context(run));
   assert.match(nav.rows[0]!.text, /^[\d.]+%–[\d.]+%  h-24  band -24@y~\d+  aligned 100\.00%  .*text -"Pricing"$/);
   assert.doesNotMatch(run.stdout, /\[\d+\/\d+\]|^Report:/m, "no per-shot lines when piped");
+  for (const [route, { rows }] of routes) {
+    for (const r of rows) {
+      const want = r.widths.flatMap((w) => result(res, route, w).crops.map((c) => c.path));
+      assert.ok(want.length, `${route}: no crops to list${context(run)}`);
+      assert.deepEqual(r.crops, want, context(run));
+      for (const c of r.crops) assert.ok(fs.existsSync(path.join(path.dirname(verdict.results), c)), c);
+    }
+  }
 });
 
 test("--progress prints a line per shot with the score results.json has", async () => {
