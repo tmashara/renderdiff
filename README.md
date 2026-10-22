@@ -23,9 +23,11 @@ Routes: 3
 clean: /
 /about  clean @1152,896,704,375
   @1440  97.41%  h-24  band -24@y196  aligned 100.00%  text -"Pricing"
+    dom -nav > a[href="/pricing"] "Pricing"
     crops about.1440.c1.png
 /pricing
   @1440,1152,896,704,375  99.12%–99.87%  1 reg
+    dom @1440 div.plans > a.cta margin-left 24px→16px
     crops pricing.1440.c1.png pricing.1152.c1.png pricing.896.c1.png pricing.704.c1.png pricing.375.c1.png
 renderdiff: 2 of 3 routes differ (6 of 15 shots), 0 errors, worst 97.41% /about@1440 — /Users/you/site/renderdiff-out/results.json
 ```
@@ -34,7 +36,9 @@ A row covers the widths that agree on everything but the score (shown as a range
 delta (`h`), bands (`+` rows only left has, `-` rows only right has, at `y`; `~` when the
 widths put it in different places), aligned score, region count, unstable pixels and up to
 three text-diff lines (`-"x"` only on the right, `+"x"` only on the left). Under a row,
-`crops` lists that row's crop files, relative to the directory `results.json` is in. Errors print in
+`dom` names up to three elements behind the changes (see **Elements** below; `@w` when the
+row covers several widths: the first one's), and `crops` lists that row's crop files,
+relative to the directory `results.json` is in. Errors print in
 full, grouped across the widths that share a message. Clean means not one pixel differs
 and none went unmeasured as unstable; a route with unstable pixels gets its own row. With
 `--threshold`, the verdict line ends `, B below 97.00%`. `--progress` gets the per-shot
@@ -283,6 +287,19 @@ Under each score, `--progress` output and the report card say where to look:
   different to align`. A horizontal shift is never a band. Alignment works on exact row
   matches, so it gives up when the edits total more than 2,000 rows (a single inserted or
   removed block aligns at any height), or when sub-threshold shade noise touches every row.
+- **Elements** name what is under the first five bands and regions, up to three each, read
+  from the live pages right after the shot. Each is a CSS selector unique on its side, so
+  `--selector` takes it. `-sel "text"` exists only on the right, `+sel` only on the left;
+  `sel margin-left 24px→16px` is on both, with the computed properties that differ, left
+  first; `sel x+8` moved without a style of its own changing, so the cause is a neighbour or
+  its parent, which is listed after it when one of them changed; a bare `sel` is on both
+  sides with nothing compared changed or moved, so its own pixels did (an image's source, a
+  canvas). An element without text is only paired when its box is the same size on both
+  sides; `rightSelector` is set when the right side was found by its text under another
+  selector. A band names only what one side added, not what it pushed down, so it can name
+  nothing; what fixed chrome covers isn't named. Probing gives up after 5s, leaving the
+  elements out. A computed
+  value is a symptom: find the rule that set it. Shadow DOM and iframes aren't searched.
 - **Text** is a line diff of each side's `document.body.innerText` (the element's, with a
   selector). Left is the changed version: *added* lines are on the left only, *removed* lines on the right only. The card
   lists the first 20. Masked elements are left out. Unmasked text that changes per load
@@ -341,7 +358,14 @@ Everything lands in the out dir (`./renderdiff-out` by default):
       "diffPixels": 33120, "totalPixels": 1158000, "unstablePixels": 0,
       "heightDelta": -24, "widthDelta": 0,          // left − right
       "regions": [],             // left-page px; with bands, from the realigned rows
-      "bands": [{ "side": "right", "y": 196, "h": 24 }],   // null: too different to align
+      "bands": [{ "side": "right", "y": 196, "h": 24,      // null: too different to align
+        "elements": [{                                     // regions have them too; absent: not looked at
+          "selector": "nav > a[href=\"/pricing\"]", "side": "right",   // or "left", "both"
+          "left": null, "right": { "x": 256, "y": 192, "w": 928, "h": 24 },
+          "changed": {},         // "margin-left": ["24px", "16px"], left first; "text" too
+          "text": "Pricing"      // "rightSelector" when the right one differs
+        }]
+      }],
       "text": { "added": [], "removed": ["Pricing"] },
       "images": { "left": "about.1440.left.png", "right": "about.1440.right.png", "diff": "about.1440.diff.png" },
       "crops": [{
@@ -448,13 +472,15 @@ ephemeral ports. Three groups:
   `place-items`, inline-block against flex. These assert a **zero-pixel** diff, not a
   threshold. They are the corpus's central claim: the score tracks pixels, not markup, so a
   refactor that changed nothing visible reads as nothing changed.
-- *Controls* — an 8px shift, an extra section, one recoloured box. These must score low.
-  Without them a tool that returned 100% unconditionally would pass the suite.
+- *Controls* — an 8px shift, an extra section, one recoloured box, one changed margin. These
+  must score low. Without them a tool that returned 100% unconditionally would pass the
+  suite. They also pin the elements each change names.
 - *Guard rails* — one per defence above: the blank-page refusal (and a short sign-in page
   that must not be refused), the 18,000px tiled capture with masks in both tiles, animation
   stilling, the shared clock start and seeded randomness, the unstable-pixel check, lazy-image
   settling (native and script-driven, 4,800px below the fold), consent hiding, masks,
-  network blocking, `before` hooks and storage state. Masks
+  network blocking, `before` hooks, storage state, and naming fixed chrome over what it
+  covers. Masks
   and blocking each run twice, with and without their config, so the mechanism is shown doing
   something rather than a page merely happening to match.
 

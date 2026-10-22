@@ -37,3 +37,4 @@ export {
 } from "./report.ts";
 
 export { type Band, type Box, type Region, type TextDiff } from "./compare.ts";
+export { type ElementDiff } from "./locate.ts";

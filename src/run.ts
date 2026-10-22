@@ -1,19 +1,22 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { chromium, errors, type Page } from "playwright";
 import { cancelUnstable, capture, HookError, prepare, type Shot } from "./capture.ts";
 import { compare, crops, type Band } from "./compare.ts";
+import { locate, type ElementDiff } from "./locate.ts";
 import {
   CONTEXT_OPTIONS,
   label,
+  masksFor,
   name,
   selectorText,
   version,
   type ResolvedConfig,
   type Route,
 } from "./config.ts";
-import { fmtBand, fmtRegion, pct, signed } from "./format.ts";
+import { fmtBand, fmtElements, fmtRegion, pct, signed } from "./format.ts";
 import {
   stats,
   writeReport,
@@ -22,6 +25,9 @@ import {
   type ErrorResult,
   type RouteResult,
 } from "./report.ts";
+
+/** A busy main thread can stall the probe; the elements are a hint, so give up rather than wait. */
+const LOCATE_TIMEOUT = 5_000;
 
 /** Past this share of a page unstable, too little was measured for a score to mean anything. */
 const MAX_UNSTABLE_SHARE = 0.25;
@@ -162,7 +168,18 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
         };
         const write = (name: string, buf: Buffer) =>
           fs.promises.writeFile(path.join(cfg.outDir, name), buf);
-        const made = await crops(leftShot.png, rightShot.png, spots);
+        // Both pages still hold this job's document: the next load waits for the loop.
+        const [made, named] = await Promise.all([
+          crops(leftShot.png, rightShot.png, spots),
+          Promise.race([
+            locate([leftPage, rightPage], [leftShot, rightShot], spots, [
+              masksFor(cfg, leftPage, route),
+              masksFor(cfg, rightPage, route),
+            ]).catch(() => null),
+            sleep(LOCATE_TIMEOUT, null, { ref: false }),
+          ]),
+        ]);
+        named?.forEach((els, i) => (spots[i]!.target.elements = els));
         const cropped = made.map(({ png, ...c }, i) => ({ path: `${base}.c${i + 1}.png`, ...c }));
         await Promise.all([
           write(images.left, leftShot.png),
@@ -180,6 +197,7 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
           crops: cropped,
         });
         const { regions, bands, alignedScore, text } = metrics;
+        const dom = elementsOf(metrics);
         const details = [
           sel,
           regions.length
@@ -191,6 +209,7 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
           text.added.length || text.removed.length
             ? `text: ${text.added.length} added, ${text.removed.length} removed`
             : "",
+          dom.length ? `dom ${fmtElements(dom)}` : "",
         ].filter(Boolean);
         ++done;
         if (!progress) continue;
@@ -340,6 +359,22 @@ function summarize(results: RouteResult[], reportPath: string, resultsPath: stri
   console.log(`Results: ${resultsPath}`);
 }
 
+/** At most this many elements per summary line. */
+const DOM_ELEMENTS = 3;
+
+/** Located elements in crop order, bands tallest first then regions, one per selector. */
+function elementsOf(r: {
+  regions: { elements?: ElementDiff[] }[];
+  bands: (Band & { elements?: ElementDiff[] })[] | null;
+}): ElementDiff[] {
+  const all = [...[...(r.bands ?? [])].sort((a, b) => b.h - a.h), ...r.regions].flatMap(
+    (g) => g.elements ?? [],
+  );
+  return all
+    .filter((e, i) => all.findIndex((o) => o.selector === e.selector) === i)
+    .slice(0, DOM_ELEMENTS);
+}
+
 /** At most this many text-diff lines per compact row. */
 const TEXT_LINES = 3;
 
@@ -382,6 +417,9 @@ export function compact(
     }
     for (const g of groups.values()) {
       out.push(`  @${g.map((r) => r.width).join(",")}  ${row(g)}`);
+      const dom = elementsOf(g[0]!);
+      if (dom.length)
+        out.push(`    dom ${g.length > 1 ? `@${g[0]!.width} ` : ""}${fmtElements(dom)}`);
       const paths = g.flatMap((r) => r.crops.map((c) => c.path));
       if (paths.length) out.push(`    crops ${paths.join(" ")}`);
     }

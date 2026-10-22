@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fixed header</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for element attribution under fixed chrome. A fixed header is painted over a
+   block of exactly its size; only the header changes colour, so the header is what changed,
+   not the block it covers. The block comes first in the DOM, so a tie goes the wrong way. */
+.under { width: 320px; height: 64px; background: var(--fill); }
+.bar { position: fixed; top: 0; left: 0; width: 320px; height: 64px; background: var(--accent); }
+</style>
+</head>
+<body>
+<div class="under"></div>
+<header class="bar"></header>
+<div class="page">
+<h1>Fixed header</h1>
+<p class="lede">This pair is deliberately different. The fixed bar at the top changes colour, and the block underneath it, hidden by it, does not.</p>
+<section class="notes">
+<h2>Notes</h2>
+<p>An element list built from boxes alone cannot tell the bar from the block it covers. What is painted on top at that point decides it.</p>
+</section>
+</div>
+</body>
+</html>

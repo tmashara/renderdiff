@@ -16,6 +16,8 @@ export interface Shot {
    * line, empty lines dropped.
    */
   text: string[];
+  /** Page px of the shot's top-left: the element's for a selector route, else 0,0. */
+  origin: { x: number; y: number };
 }
 
 /**
@@ -247,12 +249,13 @@ export async function capture(
 
   // A tiled shot is expensive, so it gets one comparison.
   const tries = tiled ? 2 : 3;
+  const origin = { x: clip?.x ?? 0, y: clip?.y ?? 0 };
   let prev = await shoot();
   for (let n = 2; ; n++) {
     await page.waitForTimeout(50);
     const png = await shoot();
-    if (png.equals(prev)) return { png, unstable: null, blank, text };
-    if (n === tries) return { png, unstable: await differing(prev, png), blank, text };
+    if (png.equals(prev)) return { png, unstable: null, blank, text, origin };
+    if (n === tries) return { png, unstable: await differing(prev, png), blank, text, origin };
     prev = png;
   }
 }

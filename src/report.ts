@@ -2,7 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Band, Box, Region, TextDiff } from "./compare.ts";
 import { CONTEXT_OPTIONS, name, type ResolvedConfig, type Sides } from "./config.ts";
-import { floor4, fmtBand, fmtRegion, pct, signed } from "./format.ts";
+import type { ElementDiff } from "./locate.ts";
+import { floor4, fmtBand, fmtElements, fmtRegion, pct, signed } from "./format.ts";
 
 interface BaseResult {
   /** The route: `/a`, or `/a::/b` for a pair. */
@@ -164,13 +165,19 @@ function section(rows: ComparedResult[]): string {
 const LIST_CAP = 5;
 const TEXT_CAP = 20;
 
+const dom = (els: ElementDiff[] | undefined) =>
+  els?.length ? `<span class="dom"> — ${esc(fmtElements(els))}</span>` : "";
+
 function findings(r: ComparedResult): string {
   const items: string[] = [];
   if (r.regions.length) {
     items.push(
       `<p>${r.regions.length} region(s)</p><ul class="regions">${r.regions
         .slice(0, LIST_CAP)
-        .map((g) => `<li>${fmtRegion(g)} — ${g.pixels.toLocaleString("en-US")} px</li>`)
+        .map(
+          (g) =>
+            `<li>${fmtRegion(g)} — ${g.pixels.toLocaleString("en-US")} px${dom(g.elements)}</li>`,
+        )
         .join("")}</ul>`,
     );
   }
@@ -186,7 +193,7 @@ function findings(r: ComparedResult): string {
   }
   if (r.bands?.length) {
     items.push(
-      `<ul class="bands">${r.bands.map((b) => `<li>band ${fmtBand(b)}</li>`).join("")}</ul>`,
+      `<ul class="bands">${r.bands.map((b) => `<li>band ${fmtBand(b)}${dom(b.elements)}</li>`).join("")}</ul>`,
     );
   }
   const { added, removed } = r.text;

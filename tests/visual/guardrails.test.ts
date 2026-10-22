@@ -58,9 +58,12 @@ after(async () => {
 });
 
 /** One CLI run against the fixture site. */
-const capture = (routes: string[], opts: { widths?: number[]; config?: string } = {}) =>
-  runCli(
-    renderdiffArgs({
+const capture = (
+  routes: string[],
+  opts: { widths?: number[]; config?: string; selector?: string } = {},
+) =>
+  runCli([
+    ...renderdiffArgs({
       left: site.left,
       right: site.right,
       routes,
@@ -68,7 +71,8 @@ const capture = (routes: string[], opts: { widths?: number[]; config?: string } 
       concurrency: 2,
       config: opts.config,
     }),
-  );
+    ...(opts.selector ? ["--selector", opts.selector] : []),
+  ]);
 
 /** The report card for a route, with the run's context attached to any failure. */
 function cardFor(run: CliResult, route: string, width = 1440) {
@@ -502,6 +506,11 @@ describe("component scope", () => {
       [[0, 0, 208, 160]],
       context(run),
     );
+    assert.deepEqual(
+      r.regions[0]!.elements?.map((e) => [e.left, e.changed["background-color"]?.[1]]),
+      [[{ x: 0, y: 0, w: 208, h: 160 }, "rgb(198, 40, 40)"]],
+      "named in the element's own pixels",
+    );
     assert.equal(row(parseProgress(run.stdout), "/color", 1440).selector, SWATCH, context(run));
     assert.ok(cardFor(run, `/color [${SWATCH}]`), context(run));
     assert.ok(r.images.left.startsWith("color@xpath_"), r.images.left);
@@ -842,6 +851,50 @@ describe("crops", () => {
       Math.ceil(m.width! / 28) * Math.ceil(m.height! / 28) <= 1568,
       `${m.width}×${m.height}`,
     );
+  });
+});
+
+describe("element attribution", () => {
+  test("a region names the element that fills it, not the page around it", async () => {
+    const run = await capture(["/tall-region"]);
+    const [e] = result(results(run.outDir), "/tall-region", 1440).regions[0]!.elements!;
+    assert.equal(e!.selector, "div.column", context(run));
+  });
+
+  test("under fixed chrome, the element painted on top is named first", async () => {
+    const run = await capture(["/fixed"], { widths: [1440, 375] });
+    for (const width of [1440, 375]) {
+      const els = result(results(run.outDir), "/fixed", width).regions[0]!.elements!;
+      assert.equal(els[0]!.selector, "header.bar", context(run));
+      assert.ok(
+        !els.some((e) => e.selector === "div.under"),
+        "the covered block is unchanged, so not named",
+      );
+    }
+  });
+
+  test("an empty block inserted is named on its side only, not paired by nth-of-type", async () => {
+    const run = await capture(["/inserted"], { widths: [1440, 375] });
+    for (const width of [1440, 375]) {
+      const band = result(results(run.outDir), "/inserted", width).bands!.find(
+        (b) => b.side === "left",
+      )!;
+      // The right's first block sits where the inserted one does, under the same selector, but is 100px, not 80.
+      assert.deepEqual(
+        band.elements?.map((e) => [e.side, e.left?.h, e.right]),
+        [["left", 80, null]],
+        context(run),
+      );
+    }
+  });
+
+  test("a selector built from an attribute with a newline escapes it as CSS, so --selector takes it", async () => {
+    const run = await capture(["/labelled"]);
+    const [e] = result(results(run.outDir), "/labelled", 1440).regions[0]!.elements!;
+    assert.match(e!.selector, /aria-label="Second\\a block"/, context(run));
+    const again = await capture(["/labelled"], { selector: e!.selector });
+    assert.equal(again.code, 0, context(again));
+    assert.equal(result(results(again.outDir), "/labelled", 1440).selector?.left, e!.selector);
   });
 });
 

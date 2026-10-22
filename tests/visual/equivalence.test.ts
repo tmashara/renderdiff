@@ -81,6 +81,7 @@ test("stdout puts every route on the clean line and nothing else", () => {
   assert.equal(routes.size, 0);
   assert.equal(verdict.differ, 0);
   assert.equal(verdict.shots, 0);
+  assert.doesNotMatch(run.stdout, /^\s+dom /m, "nothing differs, so no element is named");
 });
 
 test("the report contains no error section", () => {

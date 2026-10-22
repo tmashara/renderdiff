@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Inserted block</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for pairing elements without text. The left side inserts an empty 80px block
+   before two empty 100px ones, so its nth-of-type selector names a different block on the right. */
+.blocks > section { height: 100px; margin: 0 0 32px; background: var(--accent); }
+.blocks > p { margin: 0 0 32px; }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Inserted block</h1>
+<p class="lede">This pair is deliberately different. The left side has one more empty block at the top, and nothing else differs.</p>
+<div class="blocks">
+  <section></section>
+  <p>Between the two blocks the right side also has.</p>
+  <section></section>
+</div>
+<section class="notes">
+<h2>Notes</h2>
+<p>None of these blocks has any text, so the block the left inserted shares its nth-of-type selector with the block the right has in that place. Only its size tells them apart.</p>
+</section>
+</div>
+</body>
+</html>
