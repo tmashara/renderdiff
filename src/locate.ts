@@ -26,13 +26,47 @@ const MAX_CHANGED = 6;
 
 /** Layout first; width and height last, since they are usually a consequence. */
 const PROPS = [
-  "display", "position", "float", "flex-direction", "flex-wrap", "justify-content", "align-items", "gap",
-  "grid-template-columns", "margin-top", "margin-right", "margin-bottom", "margin-left", "padding-top",
-  "padding-right", "padding-bottom", "padding-left", "border-top-width", "border-right-width",
-  "border-bottom-width", "border-left-width", "font-family", "font-size", "font-weight", "line-height",
-  "letter-spacing", "text-align", "text-transform", "white-space", "color", "background-color",
-  "background-image", "border-top-color", "border-top-left-radius", "box-shadow", "opacity", "transform",
-  "visibility", "z-index", "width", "height",
+  "display",
+  "position",
+  "float",
+  "flex-direction",
+  "flex-wrap",
+  "justify-content",
+  "align-items",
+  "gap",
+  "grid-template-columns",
+  "margin-top",
+  "margin-right",
+  "margin-bottom",
+  "margin-left",
+  "padding-top",
+  "padding-right",
+  "padding-bottom",
+  "padding-left",
+  "border-top-width",
+  "border-right-width",
+  "border-bottom-width",
+  "border-left-width",
+  "font-family",
+  "font-size",
+  "font-weight",
+  "line-height",
+  "letter-spacing",
+  "text-align",
+  "text-transform",
+  "white-space",
+  "color",
+  "background-color",
+  "background-image",
+  "border-top-color",
+  "border-top-left-radius",
+  "box-shadow",
+  "opacity",
+  "transform",
+  "visibility",
+  "z-index",
+  "width",
+  "height",
 ];
 
 interface Seen {
@@ -73,6 +107,7 @@ function probe({ boxes, find, masked, props, perSpot }: ProbeArgs) {
   const HASHED = /\d{3,}|^(css|sc|jsx|svelte)-|__[\w-]{5,}$|^_/;
   const TEST = ["data-testid", "data-test", "data-test-id", "data-cy", "data-qa"];
   const quote = (n: string, v: string) =>
+    // oxlint-disable-next-line no-control-regex -- CSS strings must escape control characters
     `[${n}="${v.replace(/["\\]/g, "\\$&").replace(/[\0-\x1f\x7f]/g, (c) => `\\${c.charCodeAt(0).toString(16)} `)}"]`;
   const unique = (s: string) => document.querySelectorAll(s).length === 1;
   const snippet = (e: Element) =>
@@ -82,7 +117,8 @@ function probe({ boxes, find, masked, props, perSpot }: ProbeArgs) {
     const tag = e.localName;
     let s = CSS.escape(tag);
     const href = e.getAttribute("href");
-    if (tag === "a" && href && href.length < 60 && !href.startsWith("javascript:")) s += quote("href", href);
+    if (tag === "a" && href && href.length < 60 && !href.startsWith("javascript:"))
+      s += quote("href", href);
     else {
       for (const n of ["name", "aria-label", ...(tag === "input" ? ["type"] : [])]) {
         const v = e.getAttribute(n);
@@ -93,7 +129,11 @@ function probe({ boxes, find, masked, props, perSpot }: ProbeArgs) {
       }
     }
     // ponytail: hashed-class heuristic, attributes and nth-of-type are the fallback
-    s += Array.from(e.classList).filter((c) => !HASHED.test(c)).slice(0, 2).map((c) => `.${CSS.escape(c)}`).join("");
+    s += Array.from(e.classList)
+      .filter((c) => !HASHED.test(c))
+      .slice(0, 2)
+      .map((c) => `.${CSS.escape(c)}`)
+      .join("");
     const siblings = e.parentElement ? Array.from(e.parentElement.children) : [];
     if (siblings.some((c) => c !== e && c.matches(s))) {
       s += `:nth-of-type(${siblings.filter((c) => c.localName === tag).indexOf(e) + 1})`;
@@ -109,7 +149,8 @@ function probe({ boxes, find, masked, props, perSpot }: ProbeArgs) {
     }
     let path = "";
     for (let n: Element | null = e; n && n !== document.documentElement; n = n.parentElement) {
-      if (n !== e && n.id && unique(`#${CSS.escape(n.id)}`)) return `#${CSS.escape(n.id)} > ${path}`;
+      if (n !== e && n.id && unique(`#${CSS.escape(n.id)}`))
+        return `#${CSS.escape(n.id)} > ${path}`;
       path = path ? `${part(n)} > ${path}` : part(n);
       if (unique(path)) break;
     }
@@ -123,7 +164,12 @@ function probe({ boxes, find, masked, props, perSpot }: ProbeArgs) {
       sel: selector(e),
       tag: e.localName,
       text: snippet(e),
-      box: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) },
+      box: {
+        x: Math.round(r.x),
+        y: Math.round(r.y),
+        w: Math.round(r.width),
+        h: Math.round(r.height),
+      },
       styles: props.map((p) => cs.getPropertyValue(p)),
     };
   };
@@ -138,7 +184,8 @@ function probe({ boxes, find, masked, props, perSpot }: ProbeArgs) {
 
   const all: { e: Element; r: DOMRect }[] = [];
   const hidden = new Set<Element>();
-  for (const m of masked as Element[]) [m, ...Array.from(m.querySelectorAll("*"))].forEach((e) => hidden.add(e));
+  for (const m of masked as Element[])
+    [m, ...Array.from(m.querySelectorAll("*"))].forEach((e) => hidden.add(e));
   const els = document.body?.querySelectorAll("*") ?? [];
   for (let i = 0; i < els.length && i < MAX_SCAN; i++) {
     const e = els[i]!;
@@ -153,12 +200,21 @@ function probe({ boxes, find, masked, props, perSpot }: ProbeArgs) {
       .map(({ e, r }) => {
         const ix = Math.min(r.right, b.x + b.w) - Math.max(r.left, b.x);
         const iy = Math.min(r.bottom, b.y + b.h) - Math.max(r.top, b.y);
-        return { e, r, ix, iy, area: r.width * r.height, score: ix > 0 && iy > 0 ? (ix * iy) / Math.max(r.width * r.height, b.w * b.h) : 0 };
+        return {
+          e,
+          r,
+          ix,
+          iy,
+          area: r.width * r.height,
+          score: ix > 0 && iy > 0 ? (ix * iy) / Math.max(r.width * r.height, b.w * b.h) : 0,
+        };
       })
       .filter((c) => c.score > 0)
       .sort((p, q) => q.score - p.score || p.area - q.area)
       .slice(0, 10)
-      .filter((c) => c.e.checkVisibility?.({ opacityProperty: true, visibilityProperty: true }) ?? true);
+      .filter(
+        (c) => c.e.checkVisibility?.({ opacityProperty: true, visibilityProperty: true }) ?? true,
+      );
     for (const c of ranked) {
       const cx = Math.max(c.r.left, b.x) + c.ix / 2;
       const cy = Math.max(c.r.top, b.y) + c.iy / 2;
@@ -186,13 +242,20 @@ function probe({ boxes, find, masked, props, perSpot }: ProbeArgs) {
     // With no text to check, nth-of-type may now name a different element: require its shape and place.
     if (e && !text) {
       const r = e.getBoundingClientRect();
-      const near = !box || (r.right > box.x && r.left < box.x + box.w && r.bottom > box.y && r.top < box.y + box.h);
-      if (e.localName !== tag || Math.abs(r.width - w) > 4 || Math.abs(r.height - h) > 4 || !near) e = null;
+      const near =
+        !box ||
+        (r.right > box.x && r.left < box.x + box.w && r.bottom > box.y && r.top < box.y + box.h);
+      if (e.localName !== tag || Math.abs(r.width - w) > 4 || Math.abs(r.height - h) > 4 || !near)
+        e = null;
     }
     // An insertion shifts nth-of-type, so fall back to the same tag with the same text.
     if (!e && text) {
       const same = Array.from(document.querySelectorAll(tag)).filter((c) => snippet(c) === text);
-      e = same.sort((p, q) => Math.abs(p.getBoundingClientRect().y - y) - Math.abs(q.getBoundingClientRect().y - y))[0] ?? null;
+      e =
+        same.sort(
+          (p, q) =>
+            Math.abs(p.getBoundingClientRect().y - y) - Math.abs(q.getBoundingClientRect().y - y),
+        )[0] ?? null;
     }
     return e ? hit(e) : null;
   });
@@ -210,7 +273,8 @@ function element([l, r]: Pair, origins: Shot["origin"][]): ElementDiff {
       if (l.styles[i] !== r.styles[i]) changed[p] = [l.styles[i]!, r.styles[i]!];
     });
   }
-  const at = (s: Seen | null, o: Shot["origin"]) => s && { ...s.box, x: s.box.x - o.x, y: s.box.y - o.y };
+  const at = (s: Seen | null, o: Shot["origin"]) =>
+    s && { ...s.box, x: s.box.x - o.x, y: s.box.y - o.y };
   return {
     selector: (l ?? r)!.sel,
     side: l && r ? "both" : l ? "left" : "right",
@@ -224,7 +288,8 @@ function element([l, r]: Pair, origins: Shot["origin"][]): ElementDiff {
 
 /** Without text to compare, a selector naming both is only the same element if the box agrees. */
 const same = (a: Seen, b: Seen) =>
-  !!(a.text || b.text) || (a.tag === b.tag && Math.abs(a.box.w - b.box.w) <= 4 && Math.abs(a.box.h - b.box.h) <= 4);
+  !!(a.text || b.text) ||
+  (a.tag === b.tag && Math.abs(a.box.w - b.box.w) <= 4 && Math.abs(a.box.h - b.box.h) <= 4);
 
 const moved = (a: Box, b: Box) => a.x !== b.x || a.y !== b.y || a.w !== b.w || a.h !== b.h;
 
@@ -250,21 +315,39 @@ export async function locate(
       return b.w && b.h ? { ...b, x: b.x + o.x, y: b.y + o.y } : null;
     });
   const run = (s: 0 | 1, find: Find[]) =>
-    pages[s].evaluate(probe, { boxes: find.length ? [] : boxes(s), find, masked: masked[s]!, props: PROPS, perSpot: PER_SPOT });
+    pages[s].evaluate(probe, {
+      boxes: find.length ? [] : boxes(s),
+      find,
+      masked: masked[s]!,
+      props: PROPS,
+      perSpot: PER_SPOT,
+    });
 
   const [l, r] = await Promise.all([run(0, []), run(1, [])]);
   const picks = [l.picks, r.picks] as Hit[][][];
   // Each side looks for what only the other picked.
   const asks = ([0, 1] as const).map((s) =>
     picks[1 - s]!.flatMap((hits, i) =>
-      hits.filter((h) => !picks[s]![i]!.some((o) => o.sel === h.sel && same(o, h))).map((h) => ({ i, h })),
+      hits
+        .filter((h) => !picks[s]![i]!.some((o) => o.sel === h.sel && same(o, h)))
+        .map((h) => ({ i, h })),
     ),
   );
   const answers = await Promise.all(
     ([0, 1] as const).map((s) =>
       asks[s]!.length
-        ? run(s, asks[s]!.map(({ i, h }) => ({ sel: h.sel, tag: h.tag, text: h.text, y: h.box.y, w: h.box.w, h: h.box.h, box: boxes(s)[i]! })))
-            .then((a) => a.found as (Hit | null)[])
+        ? run(
+            s,
+            asks[s]!.map(({ i, h }) => ({
+              sel: h.sel,
+              tag: h.tag,
+              text: h.text,
+              y: h.box.y,
+              w: h.box.w,
+              h: h.box.h,
+              box: boxes(s)[i]!,
+            })),
+          ).then((a) => a.found as (Hit | null)[])
         : [],
     ),
   );
@@ -275,10 +358,15 @@ export async function locate(
     for (const s of [0, 1] as const) {
       for (const h of picks[s]![i]!) {
         const k = asks[1 - s]!.findIndex((a) => a.i === i && a.h === h);
-        const other = picks[1 - s]![i]!.find((o) => o.sel === h.sel && same(o, h)) ?? (k >= 0 ? answers[1 - s]![k]! : null);
+        const other =
+          picks[1 - s]![i]!.find((o) => o.sel === h.sel && same(o, h)) ??
+          (k >= 0 ? answers[1 - s]![k]! : null);
         const pair: [Hit | null, Hit | null] = s ? [other, h] : [h, other];
         const key = `${pair[0]?.sel}\n${pair[1]?.sel}`;
-        if (!keys.has(key)) keys.add(key), pairs.push(pair);
+        if (!keys.has(key)) {
+          keys.add(key);
+          pairs.push(pair);
+        }
       }
     }
     const out: ElementDiff[] = [];
@@ -287,10 +375,16 @@ export async function locate(
       out.push(el);
       // ponytail: one level of cause; a deeper cascade search if agents ask for it
       if (el.left && el.right && !Object.keys(el.changed).length && moved(el.left, el.right)) {
-        for (const [p, q] of [[a!.prev, b!.prev], [a!.parent, b!.parent]] as Pair[]) {
+        for (const [p, q] of [
+          [a!.prev, b!.prev],
+          [a!.parent, b!.parent],
+        ] as Pair[]) {
           if (!p || !q || p.sel !== q.sel) continue;
           const cause = element([p, q], [shots[0].origin, shots[1].origin]);
-          if (Object.keys(cause.changed).length && !out.some((o) => o.selector === cause.selector)) {
+          if (
+            Object.keys(cause.changed).length &&
+            !out.some((o) => o.selector === cause.selector)
+          ) {
             out.push(cause);
             break;
           }
@@ -301,7 +395,9 @@ export async function locate(
     // A band's rows are what one side added; an element on both sides there was only pushed.
     if (spot.kind === "band") return unique.filter((e) => e.side !== "both");
     // Unchanged and unmoved, e.g. covered by what changed: noise beside anything that explains.
-    const telling = unique.filter((e) => e.side !== "both" || Object.keys(e.changed).length || moved(e.left!, e.right!));
+    const telling = unique.filter(
+      (e) => e.side !== "both" || Object.keys(e.changed).length || moved(e.left!, e.right!),
+    );
     return telling.length ? telling : unique;
   });
 }

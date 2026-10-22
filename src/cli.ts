@@ -87,12 +87,15 @@ function parseArgs(argv: string[]): Args {
       const s = next();
       if (!s) throw new Error(`${v} needs a value`);
       sel[v === "--selector" ? "both" : v === "--left-selector" ? "left" : "right"] = s;
-    } else if (v === "--storage-state" || v === "--left-storage-state" || v === "--right-storage-state") {
+    } else if (
+      v === "--storage-state" ||
+      v === "--left-storage-state" ||
+      v === "--right-storage-state"
+    ) {
       const s = next();
       if (!s) throw new Error(`${v} needs a value`);
       state[v === "--storage-state" ? "both" : v === "--left-storage-state" ? "left" : "right"] = s;
-    }
-    else if (v === "--width") {
+    } else if (v === "--width") {
       const w = num("--width", next());
       if (w <= 0) throw new Error(`--width expects a positive number, got ${w}`);
       (a.widths ??= []).push(w);
@@ -111,7 +114,9 @@ function parseArgs(argv: string[]): Args {
     else a.routes.push(v);
   }
   if (origins.length > 2) {
-    throw new Error(`at most two origins (left, right), got ${origins.length}: ${origins.join(" ")}`);
+    throw new Error(
+      `at most two origins (left, right), got ${origins.length}: ${origins.join(" ")}`,
+    );
   }
   for (const [i, side] of (["left", "right"] as const).entries()) {
     if (origins[i] === undefined) continue;
@@ -226,12 +231,8 @@ async function preflight(left: string, right: string) {
     .filter(Boolean)
     .join(" and ");
   console.error(`✗ ${down} not responding.\n`);
-  console.error(
-    "  If that is a local dev server, start it first — and make sure it serves the",
-  );
-  console.error(
-    "  same assets as the other origin (a bare preview server that 404s images will",
-  );
+  console.error("  If that is a local dev server, start it first — and make sure it serves the");
+  console.error("  same assets as the other origin (a bare preview server that 404s images will");
   console.error("  collapse every page and diff as garbage).\n");
   process.exit(2);
 }
@@ -252,12 +253,12 @@ if (args.version) {
   process.exit(0);
 }
 
-const { config: fileConfig, path: configPath } = await loadConfig(
-  args.config,
-).catch((e: unknown) => {
-  console.error(`✗ ${e instanceof Error ? e.message : String(e)}`);
-  process.exit(2);
-});
+const { config: fileConfig, path: configPath } = await loadConfig(args.config).catch(
+  (e: unknown) => {
+    console.error(`✗ ${e instanceof Error ? e.message : String(e)}`);
+    process.exit(2);
+  },
+);
 
 let cfg: ResolvedConfig;
 try {
@@ -296,12 +297,14 @@ await preflight(cfg.left, cfg.right);
 
 const { run } = await import("./run.ts");
 try {
-  process.exit(await run({
+  process.exit(
+    await run({
       routes,
       cfg,
       open: args.open,
       progress: args.progress ?? !!process.stdout.isTTY,
-    }));
+    }),
+  );
 } catch (e) {
   console.error(`✗ ${e instanceof Error ? e.message : String(e)}`);
   process.exit(3);

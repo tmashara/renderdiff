@@ -27,7 +27,15 @@ import {
   tempDir,
   type CliResult,
 } from "../helpers/cli.ts";
-import { card, parseProgress, parseReport, parseSummary, result, results, row } from "../helpers/parse.ts";
+import {
+  card,
+  parseProgress,
+  parseReport,
+  parseSummary,
+  result,
+  results,
+  row,
+} from "../helpers/parse.ts";
 import { PAGES_DIR, startFixtureSite, type FixtureSite } from "../helpers/server.ts";
 import { EXPECT_HEIGHT } from "../fixtures/pages/tall/page.ts";
 
@@ -50,7 +58,10 @@ after(async () => {
 });
 
 /** One CLI run against the fixture site. */
-const capture = (routes: string[], opts: { widths?: number[]; config?: string; selector?: string } = {}) =>
+const capture = (
+  routes: string[],
+  opts: { widths?: number[]; config?: string; selector?: string } = {},
+) =>
   runCli([
     ...renderdiffArgs({
       left: site.left,
@@ -167,7 +178,11 @@ describe("the stability check", () => {
     assert.equal(c.diffPixels, 0, `unstable pixels counted against the score${context(run)}`);
     // Exactly the 928x160 box: every pixel of it changes between any two shots, nothing else does.
     assert.equal(c.unstablePixels, 928 * 160, context(run));
-    assert.equal(result(results(run.outDir), "/ticker", 1440).unstablePixels, 928 * 160, context(run));
+    assert.equal(
+      result(results(run.outDir), "/ticker", 1440).unstablePixels,
+      928 * 160,
+      context(run),
+    );
     // Unmeasured is not clean: the summary gives it a row that names the unstable pixels.
     const { clean, routes, verdict } = parseSummary(run.stdout);
     assert.deepEqual(clean, [], context(run));
@@ -298,12 +313,20 @@ describe("the tiled capture path", () => {
     // A missing tile would be magenta padding; a wrapped one-shot repeats the top. The last
     // row is block 100's 1px #c9d4e2 border, which neither would give.
     for (const side of ["left", "right"]) {
-      assert.deepEqual(await bottomRow(run.file(`tall.1440.${side}.png`)), [0xc9, 0xd4, 0xe2], `${side}${context(run)}`);
+      assert.deepEqual(
+        await bottomRow(run.file(`tall.1440.${side}.png`)),
+        [0xc9, 0xd4, 0xe2],
+        `${side}${context(run)}`,
+      );
     }
   });
 
   test("an element taller than the cap is tiled too, down to its own last row", async () => {
-    const el = await runCli([...renderdiffArgs({ left: site.left, right: site.right, routes: ["/tall"], widths: [1440] }), "--selector", ".stack"]);
+    const el = await runCli([
+      ...renderdiffArgs({ left: site.left, right: site.right, routes: ["/tall"], widths: [1440] }),
+      "--selector",
+      ".stack",
+    ]);
     assert.equal(el.code, 0, context(el));
     for (const side of ["left", "right"]) {
       const file = el.file(`tall@_stack.1440.${side}.png`);
@@ -317,7 +340,13 @@ describe("the tiled capture path", () => {
 const bottomRow = async (file: string) => {
   const img = sharp(file);
   const { width = 0, height = 0 } = await img.metadata();
-  return [...(await img.extract({ left: width >> 1, top: height - 1, width: 1, height: 1 }).removeAlpha().raw().toBuffer())];
+  return [
+    ...(await img
+      .extract({ left: width >> 1, top: height - 1, width: 1, height: 1 })
+      .removeAlpha()
+      .raw()
+      .toBuffer()),
+  ];
 };
 
 describe("masks", () => {
@@ -330,7 +359,11 @@ describe("masks", () => {
     assert.ok(c.diffPixels > 0, `the fixture did not drift${context(run)}`);
     assert.ok(c.score < 0.999, `expected < 0.999, got ${c.score}${context(run)}`);
     assert.equal(c.heightDelta, 0, "masking should never have been about height");
-    assert.deepEqual([c.added.length, c.removed.length], [1, 1], `the counter is text${context(run)}`);
+    assert.deepEqual(
+      [c.added.length, c.removed.length],
+      [1, 1],
+      `the counter is text${context(run)}`,
+    );
   });
 
   test("masking it reaches parity, drops it from the text diff, and the report says what was masked", async () => {
@@ -344,7 +377,11 @@ describe("masks", () => {
       `the mask did not cover the drifting value${context(run)}`,
     );
     const c = cardFor(run, "/drifting");
-    assert.deepEqual([c.added, c.removed], [[], []], `masked text leaked into the text diff${context(run)}`);
+    assert.deepEqual(
+      [c.added, c.removed],
+      [[], []],
+      `masked text leaked into the text diff${context(run)}`,
+    );
 
     // The report has to list the reasons it actually masked, or it can drift from the config.
     const report = parseReport(run.report()!);
@@ -372,7 +409,10 @@ describe("route pairs", () => {
     const r = result(results(run.outDir), PAIR, 1440);
     assert.deepEqual([r.left, r.right], ["/flex-vs-grid", "/float-vs-flex"]);
     assert.ok(r.text.added.includes("Card one"), `left did not load /flex-vs-grid${context(run)}`);
-    assert.ok(r.text.removed.includes("Column one"), `right did not load /float-vs-flex${context(run)}`);
+    assert.ok(
+      r.text.removed.includes("Column one"),
+      `right did not load /float-vs-flex${context(run)}`,
+    );
     assert.ok(parseSummary(run.stdout).routes.has(PAIR), context(run));
     assert.ok(r.images.left.startsWith("flex-vs-grid~float-vs-flex."), r.images.left);
     assert.ok(cardFor(run, PAIR), context(run));
@@ -395,11 +435,18 @@ describe("route pairs", () => {
 describe("component scope", () => {
   const SWATCH = 'xpath=//h3[text()="Three"]/ancestor::div[1]';
   const scoped = (routes: string[], flags: string[], config?: string) =>
-    runCli([...renderdiffArgs({ left: site.left, right: site.right, routes, widths: [1440], config }), ...flags]);
+    runCli([
+      ...renderdiffArgs({ left: site.left, right: site.right, routes, widths: [1440], config }),
+      ...flags,
+    ]);
 
   test("a selector matching several elements, or none, errors at once with the count and side", async () => {
     assert.equal(
-      (fs.readFileSync(path.join(PAGES_DIR, "flex-vs-grid", "left.html"), "utf8").match(/<article\b/g) ?? []).length,
+      (
+        fs
+          .readFileSync(path.join(PAGES_DIR, "flex-vs-grid", "left.html"), "utf8")
+          .match(/<article\b/g) ?? []
+      ).length,
       6,
     );
     const config = path.join(tempDir(), "counts.mjs");
@@ -412,7 +459,11 @@ describe("component scope", () => {
     // Not after Playwright's 30s wait.
     assert.ok(Date.now() - start < 5_000, `took ${Date.now() - start}ms${context(run)}`);
     assert.equal(run.code, 3, context(run));
-    assert.match(run.stdout, /selector "article" matched 6 elements on left \(\/flex-vs-grid\), expected 1/, context(run));
+    assert.match(
+      run.stdout,
+      /selector "article" matched 6 elements on left \(\/flex-vs-grid\), expected 1/,
+      context(run),
+    );
     assert.match(run.stdout, /selector "\.nope" matched 0 elements on left/, context(run));
   });
 
@@ -424,7 +475,11 @@ describe("component scope", () => {
   });
 
   test("an element whose only text is masked compares clean", async () => {
-    const run = await scoped(["/drifting"], ["--selector", "[data-drift]"], path.join(CONFIGS, "mask-selector.mjs"));
+    const run = await scoped(
+      ["/drifting"],
+      ["--selector", "[data-drift]"],
+      path.join(CONFIGS, "mask-selector.mjs"),
+    );
     assert.equal(run.code, 0, context(run));
     assert.deepEqual(parseSummary(run.stdout).clean, ["/drifting [[data-drift]]"], context(run));
   });
@@ -446,14 +501,33 @@ describe("component scope", () => {
     assert.deepEqual(r.selector, { left: SWATCH, right: SWATCH });
     assert.equal(r.totalPixels, 208 * 160, context(run));
     assert.ok(r.score < 0.1, context(run));
-    assert.deepEqual(r.regions.map(({ x, y, w, h }) => [x, y, w, h]), [[0, 0, 208, 160]], context(run));
-    assert.deepEqual(r.regions[0]!.elements?.map((e) => [e.left, e.changed["background-color"]?.[1]]), [[{ x: 0, y: 0, w: 208, h: 160 }, "rgb(198, 40, 40)"]], "named in the element's own pixels");
+    assert.deepEqual(
+      r.regions.map(({ x, y, w, h }) => [x, y, w, h]),
+      [[0, 0, 208, 160]],
+      context(run),
+    );
+    assert.deepEqual(
+      r.regions[0]!.elements?.map((e) => [e.left, e.changed["background-color"]?.[1]]),
+      [[{ x: 0, y: 0, w: 208, h: 160 }, "rgb(198, 40, 40)"]],
+      "named in the element's own pixels",
+    );
     assert.equal(row(parseProgress(run.stdout), "/color", 1440).selector, SWATCH, context(run));
     assert.ok(cardFor(run, `/color [${SWATCH}]`), context(run));
     assert.ok(r.images.left.startsWith("color@xpath_"), r.images.left);
     // A rerun into the same out dir, so ours() accepts the `@` stems.
     const again = await runCli(
-      [...renderdiffArgs({ left: site.left, right: site.right, routes: ["/color"], widths: [1440] }), "--selector", SWATCH, "--out", run.outDir],
+      [
+        ...renderdiffArgs({
+          left: site.left,
+          right: site.right,
+          routes: ["/color"],
+          widths: [1440],
+        }),
+        "--selector",
+        SWATCH,
+        "--out",
+        run.outDir,
+      ],
       { noOut: true },
     );
     assert.equal(again.code, 0, context(again));
@@ -473,7 +547,10 @@ describe("component scope", () => {
 
   test("each side compares its own selector", async () => {
     const PAIR = "/color::/color?pair";
-    const run = await scoped([PAIR], ["--left-selector", ".swatch >> nth=0", "--right-selector", ".swatch >> nth=1"]);
+    const run = await scoped(
+      [PAIR],
+      ["--left-selector", ".swatch >> nth=0", "--right-selector", ".swatch >> nth=1"],
+    );
     assert.equal(run.code, 0, context(run));
     const r = result(results(run.outDir), PAIR, 1440);
     assert.deepEqual(r.selector, { left: ".swatch >> nth=0", right: ".swatch >> nth=1" });
@@ -487,9 +564,14 @@ describe("component scope", () => {
       config,
       'export default { routes: [{ left: "/color", selector: ".swatch >> nth=2" }, { left: "/color", selector: "h1" }] };\n',
     );
-    const run = await runCli([...renderdiffArgs({ left: site.left, right: site.right, routes: [], widths: [1440], config })]);
+    const run = await runCli([
+      ...renderdiffArgs({ left: site.left, right: site.right, routes: [], widths: [1440], config }),
+    ]);
     const res = results(run.outDir);
-    const [swatch, h1] = [result(res, "/color", 1440, ".swatch >> nth=2"), result(res, "/color", 1440, "h1")];
+    const [swatch, h1] = [
+      result(res, "/color", 1440, ".swatch >> nth=2"),
+      result(res, "/color", 1440, "h1"),
+    ];
     assert.ok(swatch.diffPixels > 0 && h1.diffPixels === 0, context(run));
     assert.notEqual(swatch.images.left, h1.images.left);
     const summary = parseSummary(run.stdout);
@@ -524,7 +606,11 @@ describe("before hooks", () => {
     // Each side's panel says something different, so this only differs if both opened.
     assert.ok(r.diffPixels > 0, `the hook did not run before the shot${context(run)}`);
     assert.deepEqual(r.text.added, ["Panel built by the left side"], context(run));
-    assert.deepEqual(r.text.removed, ["Panel built by the right side, worded differently"], context(run));
+    assert.deepEqual(
+      r.text.removed,
+      ["Panel built by the right side, worded differently"],
+      context(run),
+    );
     assert.equal(r.hook, true);
     assert.equal(cardFor(run, "/menu").hook, true, context(run));
   });
@@ -537,7 +623,11 @@ describe("before hooks", () => {
     );
     assert.equal(run.code, 0, context(run));
     const r = result(results(run.outDir), "/menu", 1440);
-    assert.deepEqual([r.text.added, r.text.removed], [["left /menu 1440"], ["right /menu 1440"]], context(run));
+    assert.deepEqual(
+      [r.text.added, r.text.removed],
+      [["left /menu 1440"], ["right /menu 1440"]],
+      context(run),
+    );
   });
 
   test("a route's own hook replaces the top-level one", async () => {
@@ -551,11 +641,17 @@ describe("before hooks", () => {
   test("a hook that throws is a route error naming the hook, and is not retried", async () => {
     const before = site.hits("/menu");
     // A message the transient-error retry would otherwise match.
-    const run = await hooked('{ before: async () => { throw new Error("net::ERR_FAKE from the hook"); } }', ["/menu"]);
+    const run = await hooked(
+      '{ before: async () => { throw new Error("net::ERR_FAKE from the hook"); } }',
+      ["/menu"],
+    );
     assert.equal(run.code, 3, context(run));
     const [r] = results(run.outDir).results;
     assert.equal(r?.status, "error", context(run));
-    assert.equal(r?.status === "error" && r.error, "before hook failed on left: net::ERR_FAKE from the hook");
+    assert.equal(
+      r?.status === "error" && r.error,
+      "before hook failed on left: net::ERR_FAKE from the hook",
+    );
     assert.equal(r?.hook, true);
     assert.equal(site.hits("/menu") - before, 2, `the hook was retried${context(run)}`);
   });
@@ -567,25 +663,54 @@ describe("storage state", () => {
     fs.writeFileSync(
       path.join(dir, "auth.json"),
       JSON.stringify({
-        cookies: [{ name: "session", value: SECRET, domain: "127.0.0.1", path: "/", expires: -1, httpOnly: false, secure: false, sameSite: "Lax" }],
+        cookies: [
+          {
+            name: "session",
+            value: SECRET,
+            domain: "127.0.0.1",
+            path: "/",
+            expires: -1,
+            httpOnly: false,
+            secure: false,
+            sameSite: "Lax",
+          },
+        ],
         origins: [],
       }),
     );
     return dir;
   };
   const leaks = (run: CliResult) =>
-    [run.stdout, run.stderr, run.report() ?? "", fs.readFileSync(run.file("results.json"), "utf8")].some((s) => s.includes(SECRET));
+    [
+      run.stdout,
+      run.stderr,
+      run.report() ?? "",
+      fs.readFileSync(run.file("results.json"), "utf8"),
+    ].some((s) => s.includes(SECRET));
 
   test("one side's file signs in that side only, and only its name is recorded", async () => {
     const cwd = authIn(tempDir("renderdiff-cwd-"));
     const run = await runCli(
-      [...renderdiffArgs({ left: site.left, right: site.right, routes: ["/signed-in"], widths: [1440] }), "--left-storage-state", "auth.json"],
+      [
+        ...renderdiffArgs({
+          left: site.left,
+          right: site.right,
+          routes: ["/signed-in"],
+          widths: [1440],
+        }),
+        "--left-storage-state",
+        "auth.json",
+      ],
       { cwd },
     );
     assert.equal(run.code, 0, context(run));
     const res = results(run.outDir);
     const r = result(res, "/signed-in", 1440);
-    assert.deepEqual([r.text.added, r.text.removed], [["Signed in as tester"], ["Signed out"]], context(run));
+    assert.deepEqual(
+      [r.text.added, r.text.removed],
+      [["Signed in as tester"], ["Signed out"]],
+      context(run),
+    );
     assert.deepEqual(res.meta.storageState, { left: "auth.json", right: null });
     assert.ok(run.report()!.includes("left storage state <code>auth.json</code>"), context(run));
     assert.ok(!leaks(run), "the storage state's contents were written out");
@@ -598,7 +723,11 @@ describe("storage state", () => {
     assert.equal(run.code, 0, context(run));
     const res = results(run.outDir);
     const r = result(res, "/signed-in", 1440);
-    assert.deepEqual([r.text.added, r.text.removed], [["Signed in as tester"], ["Signed in as tester (right)"]], context(run));
+    assert.deepEqual(
+      [r.text.added, r.text.removed],
+      [["Signed in as tester"], ["Signed in as tester (right)"]],
+      context(run),
+    );
     assert.deepEqual(res.meta.storageState, { left: "auth.json", right: "auth.json" });
     assert.ok(!leaks(run), "the storage state's contents were written out");
   });
@@ -616,24 +745,48 @@ describe("the browser", () => {
   test("without the bundled Chromium it falls back to the system Chrome, or names the fix", async () => {
     // An empty browsers path hides the bundled Chromium. Which branch runs depends on whether
     // this machine has Chrome installed.
-    const run = await runCli(renderdiffArgs({ left: site.left, right: site.right, routes: ["/tall"], widths: [1440] }), {
-      env: { PLAYWRIGHT_BROWSERS_PATH: tempDir() },
-    });
+    const run = await runCli(
+      renderdiffArgs({ left: site.left, right: site.right, routes: ["/tall"], widths: [1440] }),
+      {
+        env: { PLAYWRIGHT_BROWSERS_PATH: tempDir() },
+      },
+    );
     if (run.code === 1 && !fs.existsSync(run.file("results.json"))) {
       assert.match(run.stderr, /npx playwright install chromium/, context(run));
       return;
     }
     assert.equal(run.code, 0, context(run));
-    assert.match(run.stdout, /^Bundled Chromium failed to launch; using the system Chrome \d/m, context(run));
+    assert.match(
+      run.stdout,
+      /^Bundled Chromium failed to launch; using the system Chrome \d/m,
+      context(run),
+    );
     assert.equal(results(run.outDir).meta.browser.name, "chrome");
     // Chrome wraps a one-shot capture past 16,384px, so this pins the tiled path there too.
-    assert.deepEqual(await bottomRow(run.file("tall.1440.left.png")), [0xc9, 0xd4, 0xe2], context(run));
+    assert.deepEqual(
+      await bottomRow(run.file("tall.1440.left.png")),
+      [0xc9, 0xd4, 0xe2],
+      context(run),
+    );
     const el = await runCli(
-      [...renderdiffArgs({ left: site.left, right: site.right, routes: ["/tall"], widths: [1440] }), "--selector", ".stack"],
+      [
+        ...renderdiffArgs({
+          left: site.left,
+          right: site.right,
+          routes: ["/tall"],
+          widths: [1440],
+        }),
+        "--selector",
+        ".stack",
+      ],
       { env: { PLAYWRIGHT_BROWSERS_PATH: tempDir() } },
     );
     assert.equal(el.code, 0, context(el));
-    assert.deepEqual(await bottomRow(el.file("tall@_stack.1440.left.png")), [0xc9, 0xd4, 0xe2], context(el));
+    assert.deepEqual(
+      await bottomRow(el.file("tall@_stack.1440.left.png")),
+      [0xc9, 0xd4, 0xe2],
+      context(el),
+    );
   });
 });
 
@@ -694,7 +847,10 @@ describe("crops", () => {
     assert.equal(c!.clipped, true);
     assert.ok(c!.scale >= 0.75, `scaled to ${c!.scale}`);
     const m = await sharp(run.file(c!.path)).metadata();
-    assert.ok(Math.ceil(m.width! / 28) * Math.ceil(m.height! / 28) <= 1568, `${m.width}×${m.height}`);
+    assert.ok(
+      Math.ceil(m.width! / 28) * Math.ceil(m.height! / 28) <= 1568,
+      `${m.width}×${m.height}`,
+    );
   });
 });
 
@@ -710,16 +866,25 @@ describe("element attribution", () => {
     for (const width of [1440, 375]) {
       const els = result(results(run.outDir), "/fixed", width).regions[0]!.elements!;
       assert.equal(els[0]!.selector, "header.bar", context(run));
-      assert.ok(!els.some((e) => e.selector === "div.under"), "the covered block is unchanged, so not named");
+      assert.ok(
+        !els.some((e) => e.selector === "div.under"),
+        "the covered block is unchanged, so not named",
+      );
     }
   });
 
   test("an empty block inserted is named on its side only, not paired by nth-of-type", async () => {
     const run = await capture(["/inserted"], { widths: [1440, 375] });
     for (const width of [1440, 375]) {
-      const band = result(results(run.outDir), "/inserted", width).bands!.find((b) => b.side === "left")!;
+      const band = result(results(run.outDir), "/inserted", width).bands!.find(
+        (b) => b.side === "left",
+      )!;
       // The right's first block sits where the inserted one does, under the same selector, but is 100px, not 80.
-      assert.deepEqual(band.elements?.map((e) => [e.side, e.left?.h, e.right]), [["left", 80, null]], context(run));
+      assert.deepEqual(
+        band.elements?.map((e) => [e.side, e.left?.h, e.right]),
+        [["left", 80, null]],
+        context(run),
+      );
     }
   });
 
@@ -737,8 +902,18 @@ describe("band pairing", () => {
   test("a block removed at the top and another added at the bottom stay two bands", async () => {
     const run = await capture(["/reorder"]);
     const r = result(results(run.outDir), "/reorder", 1440);
-    assert.deepEqual(r.bands?.map((b) => [b.side, b.h]), [["left", 96], ["right", 96]], context(run));
-    assert.deepEqual(r.crops.map((c) => c.kind), ["band", "band"]);
+    assert.deepEqual(
+      r.bands?.map((b) => [b.side, b.h]),
+      [
+        ["left", 96],
+        ["right", 96],
+      ],
+      context(run),
+    );
+    assert.deepEqual(
+      r.crops.map((c) => c.kind),
+      ["band", "band"],
+    );
   });
 
   test("a stripe recoloured inside identical rows is one region, not a band pair", async () => {
@@ -746,7 +921,10 @@ describe("band pairing", () => {
     const r = result(results(run.outDir), "/stripe", 1440);
     assert.deepEqual(r.bands, [], context(run));
     assert.equal(r.regions.length, 1);
-    assert.deepEqual(r.crops.map((c) => c.kind), ["region"]);
+    assert.deepEqual(
+      r.crops.map((c) => c.kind),
+      ["region"],
+    );
   });
 });
 
@@ -759,14 +937,21 @@ describe("the run summary", () => {
     assert.deepEqual(blank.rows, []);
     assert.equal(blank.errors.length, 1);
     // In full: the reason is what tells a blank page from a broken asset pipeline.
-    assert.match(blank.errors[0]!.message, /^page did not render on either side \(left: .+; right: .+\) at \/blank$/);
+    assert.match(
+      blank.errors[0]!.message,
+      /^page did not render on either side \(left: .+; right: .+\) at \/blank$/,
+    );
     assert.deepEqual([verdict.differ, verdict.routes, verdict.errors], [0, 2, 1]);
   });
 
   test("a route that only errored doesn't count as differing, and one message covers its widths", async () => {
     const run = await capture(["/blank"], { widths: [1440, 375] });
     const { routes, verdict } = parseSummary(run.stdout);
-    assert.deepEqual([verdict.differ, verdict.routes, verdict.shots, verdict.total, verdict.errors], [0, 1, 0, 2, 2], context(run));
+    assert.deepEqual(
+      [verdict.differ, verdict.routes, verdict.shots, verdict.total, verdict.errors],
+      [0, 1, 0, 2, 2],
+      context(run),
+    );
     const errors = routes.get("/blank")!.errors;
     assert.equal(errors.length, 1, context(run));
     assert.deepEqual(errors[0]!.widths, [1440, 375]);
@@ -774,10 +959,20 @@ describe("the run summary", () => {
 
   test("a threshold failure is on the verdict line even when another route errored", async () => {
     const run = await runCli(
-      renderdiffArgs({ left: site.left, right: site.right, routes: ["/color", "/blank"], widths: [1440], threshold: 0.99 }),
+      renderdiffArgs({
+        left: site.left,
+        right: site.right,
+        routes: ["/color", "/blank"],
+        widths: [1440],
+        threshold: 0.99,
+      }),
     );
     assert.equal(run.code, 1, context(run));
-    assert.deepEqual(parseSummary(run.stdout).verdict.below, { count: 1, threshold: 0.99 }, context(run));
+    assert.deepEqual(
+      parseSummary(run.stdout).verdict.below,
+      { count: 1, threshold: 0.99 },
+      context(run),
+    );
     assert.match(run.stderr, /1 route\(s\) below 99\.00%/);
   });
 });

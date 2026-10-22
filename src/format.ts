@@ -15,7 +15,8 @@ export const fmtBand = (b: { side: "left" | "right"; y: number; h: number }) =>
 export const fmtElements = (els: ElementDiff[], props = 2) =>
   els
     .map((e) => {
-      if (e.side !== "both") return `${e.side === "left" ? "+" : "-"}${e.selector}${e.text ? ` "${e.text}"` : ""}`;
+      if (e.side !== "both")
+        return `${e.side === "left" ? "+" : "-"}${e.selector}${e.text ? ` "${e.text}"` : ""}`;
       const changed = Object.entries(e.changed)
         .slice(0, props)
         .map(([p, [l, r]]) => (p === "text" ? `"${l}"→"${r}"` : `${p} ${l}→${r}`));

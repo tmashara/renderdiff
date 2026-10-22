@@ -64,10 +64,7 @@ export interface CliResult {
   file(name: string): string;
 }
 
-export function runCli(
-  args: string[],
-  opts: CliOptions = {},
-): Promise<CliResult> {
+export function runCli(args: string[], opts: CliOptions = {}): Promise<CliResult> {
   const cwd = opts.cwd ?? tempDir("renderdiff-cwd-");
   const outDir = path.join(tempDir("renderdiff-out-"), "out");
   const argv = opts.noOut ? [...args] : [...args, "--out", outDir];
@@ -86,10 +83,7 @@ export function runCli(
     child.stdout.setEncoding("utf8").on("data", (c: string) => (stdout += c));
     child.stderr.setEncoding("utf8").on("data", (c: string) => (stderr += c));
 
-    const timer = setTimeout(
-      () => child.kill("SIGKILL"),
-      opts.timeoutMs ?? 300_000,
-    );
+    const timer = setTimeout(() => child.kill("SIGKILL"), opts.timeoutMs ?? 300_000);
 
     child.on("error", (e) => {
       clearTimeout(timer);
@@ -99,9 +93,7 @@ export function runCli(
       clearTimeout(timer);
       if (signal === "SIGKILL") {
         reject(
-          new Error(
-            `renderdiff timed out.\n--- stdout ---\n${stdout}\n--- stderr ---\n${stderr}`,
-          ),
+          new Error(`renderdiff timed out.\n--- stdout ---\n${stdout}\n--- stderr ---\n${stderr}`),
         );
         return;
       }
@@ -112,8 +104,7 @@ export function runCli(
         stderr,
         outDir,
         cwd,
-        report: () =>
-          fs.existsSync(reportPath) ? fs.readFileSync(reportPath, "utf8") : null,
+        report: () => (fs.existsSync(reportPath) ? fs.readFileSync(reportPath, "utf8") : null),
         file: (name) => path.join(outDir, name),
       });
     });

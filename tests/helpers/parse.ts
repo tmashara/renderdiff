@@ -26,7 +26,12 @@ export function results(outDir: string): Results {
  * The compared entry for one comparison in `results.json`; `selector` picks among routes listed
  * once per selector, by its left side. Throws with context when absent.
  */
-export function result(res: Results, route: string, width: number, selector?: string): ComparedResult {
+export function result(
+  res: Results,
+  route: string,
+  width: number,
+  selector?: string,
+): ComparedResult {
   const found = res.results.find(
     (r) => r.url === route && r.width === width && (!selector || r.selector?.left === selector),
   );
@@ -41,7 +46,14 @@ export interface Summary {
   /** Routes on the `clean:` line; a selector route is `/a [sel]`, as is its key in `routes`. */
   clean: string[];
   /** Each differing route: widths that were clean, then one row per collapsed width group. */
-  routes: Map<string, { clean: number[]; rows: { widths: number[]; text: string; dom: string | null; crops: string[] }[]; errors: { widths: number[]; message: string }[] }>;
+  routes: Map<
+    string,
+    {
+      clean: number[];
+      rows: { widths: number[]; text: string; dom: string | null; crops: string[] }[];
+      errors: { widths: number[]; message: string }[];
+    }
+  >;
   verdict: {
     differ: number;
     routes: number;
@@ -247,7 +259,11 @@ export interface Report {
 
 const num = (s: string) => Number(s.replace(/,/g, ""));
 const unesc = (s: string) =>
-  s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+  s
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&");
 
 function between(html: string, start: string, end: string): string {
   const i = html.indexOf(start);
@@ -285,7 +301,9 @@ export function parseReport(html: string): Report {
       unstablePixels: unstable ? num(unstable[1]!) : 0,
       alignedScore: aligned ? Number(aligned[1]) / 100 : null,
       regions: [
-        ...card.matchAll(/<li>(\d+)×(\d+) at \((\d+),(\d+)\) — ([\d,]+) px(?:<span class="dom"> — (.*?)<\/span>)?<\/li>/g),
+        ...card.matchAll(
+          /<li>(\d+)×(\d+) at \((\d+),(\d+)\) — ([\d,]+) px(?:<span class="dom"> — (.*?)<\/span>)?<\/li>/g,
+        ),
       ].map((m) => ({
         w: Number(m[1]),
         h: Number(m[2]),
@@ -294,7 +312,9 @@ export function parseReport(html: string): Report {
         pixels: num(m[5]!),
         dom: m[6] ? unesc(m[6]) : null,
       })),
-      bands: [...card.matchAll(/<li>band ([^<]*)(?:<span class="dom"> — (.*?)<\/span>)?<\/li>/g)].map((m) => ({
+      bands: [
+        ...card.matchAll(/<li>band ([^<]*)(?:<span class="dom"> — (.*?)<\/span>)?<\/li>/g),
+      ].map((m) => ({
         text: m[1]!,
         dom: m[2] ? unesc(m[2]) : null,
       })),
@@ -308,9 +328,7 @@ export function parseReport(html: string): Report {
 
   const errors: ReportErrorRow[] = [];
   const errorSection = between(html, '<h2 class="bad">Errors</h2>', "</section>");
-  for (const m of errorSection.matchAll(
-    /<li><code>([^<]*)<\/code> @(\d+)px — ([\s\S]*?)<\/li>/g,
-  )) {
+  for (const m of errorSection.matchAll(/<li><code>([^<]*)<\/code> @(\d+)px — ([\s\S]*?)<\/li>/g)) {
     errors.push({ route: unesc(m[1]!), width: Number(m[2]), message: m[3]! });
   }
 
@@ -318,9 +336,7 @@ export function parseReport(html: string): Report {
   const blockPatterns = [...neutralized.matchAll(/<li><code>([^<]*)<\/code><\/li>/g)].map(
     (m) => m[1]!,
   );
-  const maskReasons = [...neutralized.matchAll(/<li>((?!<code>)[^<]*)<\/li>/g)].map(
-    (m) => m[1]!,
-  );
+  const maskReasons = [...neutralized.matchAll(/<li>((?!<code>)[^<]*)<\/li>/g)].map((m) => m[1]!);
 
   return { cards, errors, blockPatterns, maskReasons, neutralized };
 }

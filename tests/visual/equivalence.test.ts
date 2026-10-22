@@ -68,7 +68,11 @@ test("the run succeeds and measures every pair", () => {
   assert.equal(run.code, 0, `expected a clean exit${context(run)}`);
   const rows = results(run.outDir).results;
   assert.equal(rows.length, EQUIVALENCE.length * WIDTHS.length, context(run));
-  assert.deepEqual(rows.filter((r) => r.status === "error"), [], `some routes errored${context(run)}`);
+  assert.deepEqual(
+    rows.filter((r) => r.status === "error"),
+    [],
+    `some routes errored${context(run)}`,
+  );
 });
 
 test("stdout puts every route on the clean line and nothing else", () => {
@@ -112,7 +116,10 @@ for (const dir of EQUIVALENCE) {
     test(`${dir} @${width} reports the same score in results.json as in the report`, () => {
       // results.json and the HTML report are generated separately; a disagreement
       // between them would mean one of the two is lying.
-      assert.equal(result(results(run.outDir), route, width).score, card(report, route, width).score);
+      assert.equal(
+        result(results(run.outDir), route, width).score,
+        card(report, route, width).score,
+      );
     });
 
     test(`${dir} @${width} has no regions, no bands and no text diff`, () => {
@@ -120,7 +127,11 @@ for (const dir of EQUIVALENCE) {
       assert.deepEqual(r.regions, [], context(run));
       assert.deepEqual(r.bands, []);
       assert.equal(r.alignedScore, null);
-      assert.deepEqual(r.text, { added: [], removed: [] }, `same text on both sides${context(run)}`);
+      assert.deepEqual(
+        r.text,
+        { added: [], removed: [] },
+        `same text on both sides${context(run)}`,
+      );
       const c = card(report, route, width);
       assert.deepEqual([c.regions, c.added, c.removed], [[], [], []]);
     });

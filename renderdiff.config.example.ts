@@ -23,7 +23,12 @@ export default {
     { left: "/pricing", selector: { left: ".plans-v2", right: ".plans" } },
     // `before` runs on each side after the page loads, before it settles and is shot, so
     // the open menu is what gets measured. Replaces the top-level `before` for this route.
-    { left: "/docs", before: async (page) => { await page.click("[aria-label=Menu]"); } },
+    {
+      left: "/docs",
+      before: async (page) => {
+        await page.click("[aria-label=Menu]");
+      },
+    },
   ],
 
   // For every route without its own `before`, CLI routes included. Gets
