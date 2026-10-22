@@ -35,7 +35,10 @@
     "prepare": "tsc",
     "test": "node --test tests/unit/*.test.ts",
     "test:visual": "node --test --test-timeout=300000 tests/visual/*.test.ts",
-    "test:all": "npm test && npm run test:visual"
+    "test:all": "npm test && npm run test:visual",
+    "lint": "oxlint --deny-warnings",
+    "format": "oxfmt src tests renderdiff.config.example.ts",
+    "format:check": "oxfmt --check src tests renderdiff.config.example.ts"
   },
   "keywords": [
     "visual-regression",
@@ -51,6 +54,8 @@
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
+    "oxfmt": "0.74.0",
+    "oxlint": "1.89.0",
     "typescript": "^5.8.3"
   }
 }
