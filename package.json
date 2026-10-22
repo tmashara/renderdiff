@@ -1,7 +1,7 @@
 {
   "name": "renderdiff",
   "version": "0.2.0",
-  "description": "Screenshot diff between two origins — captures routes at several viewport widths, pixel-diffs them, writes a scored HTML report.",
+  "description": "Visual-parity checker for website migrations: screenshot-diffs your branch against production across viewport widths, and names the DOM element and CSS property behind each change. Built for coding agents (Claude Code, Codex, Cursor).",
   "type": "module",
   "license": "MIT",
   "author": "Timur Mashara",
@@ -42,10 +42,23 @@
   },
   "keywords": [
     "visual-regression",
-    "screenshot",
-    "diff",
+    "visual-diff",
+    "visual-testing",
+    "screenshot-diff",
+    "screenshot-comparison",
+    "pixel-diff",
+    "migration",
+    "refactor",
+    "css-refactor",
+    "framework-migration",
+    "parity",
     "playwright",
-    "pixelmatch"
+    "pixelmatch",
+    "coding-agent",
+    "ai-agent",
+    "claude-code",
+    "agent-skill",
+    "llm"
   ],
   "dependencies": {
     "pixelmatch": "^7.2.0",
