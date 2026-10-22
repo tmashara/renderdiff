@@ -6,8 +6,8 @@
 <link rel="stylesheet" href="/shared/base.css">
 <style>
 /* GUARD RAIL for pairing elements without text. The left side inserts an empty 80px block
-   before two empty 100px ones, so its nth-of-type selector names a different block on the right. */
-.blocks > section { height: 100px; margin: 0 0 32px; background: var(--accent); }
+   before two empty 400px ones, tall enough that the page outgrows the 900px viewport on any font, so its nth-of-type selector names a different block on the right. */
+.blocks > section { height: 400px; margin: 0 0 32px; background: var(--accent); }
 .blocks > p { margin: 0 0 32px; }
 .blocks > section:first-child { height: 80px; background: var(--ink); }
 </style>

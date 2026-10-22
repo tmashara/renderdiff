@@ -52,7 +52,11 @@ Breaking any of these produces a flaky suite, and the flake looks like a renderd
    at one width breaks at the next, so both sides wrap by the same rule (auto-fill, a
    negative-margin float grid) or neither wraps. The suite checks every default width plus
    600 to catch exactly that.
-8. **No animation** except in `animated`, which exists to prove `STILL_CSS` kills it, `ticker`,
+8. **Outgrow the viewport when height is the point.** A page shorter than 900px is shot
+   900px tall, so a block it inserts moves the bands instead of the height, and where the
+   page crosses 900px depends on the platform's monospace font. Make such a page taller
+   than 900px from fixed heights alone, as `inserted` does.
+9. **No animation** except in `animated`, which exists to prove `STILL_CSS` kills it, `ticker`,
    whose timer exists to be caught by the stability check, and `unsettled`, which recolours
    the whole page to trip the unstable-pixel cap.
 
