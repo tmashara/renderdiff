@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { chromium, errors, type Page } from "playwright";
-import { cancelUnstable, capture, prepare, type Shot } from "./capture.ts";
+import { cancelUnstable, capture, HookError, prepare, type Shot } from "./capture.ts";
 import { compare, crops, type Band } from "./compare.ts";
 import {
   CONTEXT_OPTIONS,
@@ -97,7 +97,7 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
 
   const stems = slugs(routes);
   const results: RouteResult[] = [];
-  const browser = await launch();
+  const { browser, channel } = await launch();
   const queue = [...jobs];
   let done = 0;
   // Whole minute, so an HH:MM display reads the same on both sides.
@@ -105,8 +105,8 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
 
   const worker = async () => {
     // One context per origin so cookies/localStorage never cross between them.
-    const leftCtx = await browser.newContext(CONTEXT_OPTIONS);
-    const rightCtx = await browser.newContext(CONTEXT_OPTIONS);
+    const leftCtx = await browser.newContext({ ...CONTEXT_OPTIONS, storageState: cfg.storageState.left ?? undefined });
+    const rightCtx = await browser.newContext({ ...CONTEXT_OPTIONS, storageState: cfg.storageState.right ?? undefined });
     const leftPage = await leftCtx.newPage();
     const rightPage = await rightCtx.newPage();
     await prepare(leftPage, cfg, now);
@@ -115,6 +115,8 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
     for (let job = queue.shift(); job; job = queue.shift()) {
       const { route, width } = job;
       const key = name(route);
+      const { before, ...where } = route;
+      const entry = { url: label(route), ...where, hook: before !== null, width };
       const tag = `${label(route)} @${width}`;
       // Its own line: parse.ts reads the route on the row as one \S+ token.
       const sel = route.selector ? `selector ${selectorText(route.selector)}` : "";
@@ -165,9 +167,7 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
         ]);
 
         results.push({
-          url: label(route),
-          ...route,
-          width,
+          ...entry,
           status: "compared",
           ...metrics,
           unstablePixels,
@@ -201,9 +201,7 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
         );
       } catch (e) {
         results.push({
-          url: label(route),
-          ...route,
-          width,
+          ...entry,
           status: "error",
           error: e instanceof Error ? e.message : String(e),
         });
@@ -223,6 +221,7 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
     );
   }
   await Promise.all(Array.from({ length: cfg.concurrency }, worker));
+  const browserMeta = { name: channel ?? "chromium", version: browser.version() };
   await browser.close();
 
   // Workers finish out of order; job order keeps results.json stable across runs.
@@ -243,6 +242,11 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
     blockUrlPatterns: cfg.blockUrlPatterns,
     hideSelectors: cfg.hideSelectors,
     masks: cfg.masks.map(({ urlPath, reason }) => ({ urlPath, reason })),
+    browser: browserMeta,
+    storageState: {
+      left: cfg.storageState.left && path.basename(cfg.storageState.left),
+      right: cfg.storageState.right && path.basename(cfg.storageState.right),
+    },
   };
   const reportPath = await writeReport(results, meta, cfg);
   const resultsPath = writeResults(results, meta, cfg.outDir);
@@ -265,23 +269,32 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
   return below.length ? 1 : results.some((r) => r.status === "error") ? 3 : 0;
 }
 
-/** A missing browser binary is the likeliest first-run failure — name the fix. */
+/**
+ * A missing browser binary is the likeliest first-run failure, so fall back to the system
+ * Chrome (both sides share it, so the comparison stays symmetric), then name the fix.
+ */
 async function launch() {
   try {
-    return await chromium.launch();
+    return { browser: await chromium.launch(), channel: null };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    throw new Error(
-      `could not launch Chromium:\n  ${msg}\n\n` +
-        `  Install the browser with:  npx playwright install chromium`,
-    );
+    try {
+      const browser = await chromium.launch({ channel: "chrome" });
+      console.log(`Bundled Chromium failed to launch; using the system Chrome ${browser.version()}.`);
+      return { browser, channel: "chrome" };
+    } catch {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new Error(
+        `could not launch Chromium, or the system Chrome:\n  ${msg}\n\n` +
+          `  Install the browser with:  npx playwright install chromium`,
+      );
+    }
   }
 }
 
 const transient = (e: unknown) =>
-  e instanceof errors.TimeoutError ||
-  (e instanceof Error &&
-    /net::ERR_|Execution context was destroyed/.test(e.message));
+  !(e instanceof HookError) &&
+  (e instanceof errors.TimeoutError ||
+    (e instanceof Error && /net::ERR_|Execution context was destroyed/.test(e.message)));
 
 /** One retry for a transient failure: a live site can time out once on a cold edge. */
 async function shoot(

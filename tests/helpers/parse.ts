@@ -215,6 +215,8 @@ export interface ReportCard {
   images: string[];
   /** Region crop links in the findings block. */
   crops: string[];
+  /** The card carries the "before hook" badge. */
+  hook: boolean;
 }
 
 export interface ReportErrorRow {
@@ -286,6 +288,7 @@ export function parseReport(html: string): Report {
       removed: [...card.matchAll(/<li class="del">- ([^<]*)<\/li>/g)].map((m) => unesc(m[1]!)),
       images: [...card.matchAll(/<a href="([^"]+)"/g)].map((m) => m[1]!),
       crops: [...card.matchAll(/<a class="crop" href="([^"]+)"/g)].map((m) => m[1]!),
+      hook: card.includes('<span class="hook">before hook</span>'),
     });
   }
 

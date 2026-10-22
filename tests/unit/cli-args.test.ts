@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { after, describe, test } from "node:test";
-import { cleanupTempDirs, runCli, REPO_ROOT } from "../helpers/cli.ts";
+import { cleanupTempDirs, runCli, REPO_ROOT, tempDir } from "../helpers/cli.ts";
 
 after(cleanupTempDirs);
 
@@ -51,6 +51,9 @@ describe("help and version", () => {
       "--selector",
       "--left-selector",
       "--right-selector",
+      "--storage-state",
+      "--left-storage-state",
+      "--right-storage-state",
     ]) {
       assert.ok(r.stdout.includes(flag), `--help does not mention ${flag}`);
     }
@@ -289,6 +292,49 @@ describe("selectors", () => {
 
   test("an empty selector exits 2", () =>
     rejects(["--dry-run", L, R, "/a", "--selector="], "--selector needs a value"));
+});
+
+describe("storage state", () => {
+  // Not dry runs, at closed ports: a bad file must stop the run before preflight and the browser.
+  const DEAD = "http://127.0.0.1:1";
+
+  test("a missing file exits 2 before preflight", async () => {
+    const r = await runCli(["/", DEAD, DEAD, "--storage-state", "nope.json"]);
+    assert.equal(r.code, 2, r.stderr);
+    assert.match(r.stderr, /storage state file not found: .*nope\.json/);
+    assert.doesNotMatch(r.stderr, /not responding/);
+  });
+
+  test("a file that isn't JSON exits 2 without echoing it", async () => {
+    const cwd = tempDir("renderdiff-cwd-");
+    fs.writeFileSync(path.join(cwd, "auth.json"), '{"cookies": [s3cret-token');
+    const r = await runCli(["/", DEAD, DEAD, "--right-storage-state", "auth.json"], { cwd });
+    assert.equal(r.code, 2, r.stderr);
+    assert.match(r.stderr, /storage state file is not valid JSON: .*auth\.json/);
+    assert.ok(!(r.stdout + r.stderr).includes("s3cret"), r.stderr);
+  });
+
+  test("JSON that isn't a storage state exits 2; an empty object is one", async () => {
+    const cwd = tempDir("renderdiff-cwd-");
+    fs.writeFileSync(path.join(cwd, "bad.json"), '{"cookies": {"session": "x"}}');
+    fs.writeFileSync(path.join(cwd, "empty.json"), "{}");
+    const r = await runCli(["/", DEAD, DEAD, "--storage-state", "bad.json"], { cwd });
+    assert.equal(r.code, 2, r.stderr);
+    assert.match(r.stderr, /storage state file is not a Playwright storage state \(cookies\/origins must be arrays\): .*bad\.json/);
+    const ok = await runCli(["--dry-run", "/", L, R, "--storage-state", "empty.json"], { cwd, noOut: true });
+    assert.equal(ok.code, 0, ok.stderr);
+  });
+
+  test("a per-side file overrides --storage-state on its side", async () => {
+    const cwd = tempDir("renderdiff-cwd-");
+    fs.writeFileSync(path.join(cwd, "a.json"), "{}");
+    const r = await runCli(["--dry-run", "/", L, R, "--storage-state", "a.json", "--left-storage-state", "nope.json"], {
+      cwd,
+      noOut: true,
+    });
+    assert.equal(r.code, 2, r.stderr);
+    assert.match(r.stderr, /storage state file not found: .*nope\.json/);
+  });
 });
 
 describe("preflight", () => {

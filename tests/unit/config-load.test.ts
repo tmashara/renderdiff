@@ -108,7 +108,7 @@ describe("validation", () => {
   // way the loader shrugs at becomes a confusing failure much later, or worse, a quiet one.
   const cases: Array<[fixture: string, needle: RegExp]> = [
     ["bad-left.mjs", /`left` must be a string/],
-    ["bad-routes.mjs", /`routes\[0\]` must be a string or an object \{ left, right\?, selector\? \}/],
+    ["bad-routes.mjs", /`routes\[0\]` must be a string or an object \{ left, right\?, selector\?, before\? \}/],
     ["bad-widths.mjs", /`widths` must be an array of positive numbers/],
     ["bad-threshold.mjs", /`threshold` must be a number between 0 and 1/],
     ["bad-concurrency.mjs", /`concurrency` must be a positive integer/],
@@ -155,6 +155,14 @@ describe("validation", () => {
       /two routes both read as \/a \[xpath=\/\/h1 \| \/\/h2\]; change one of their selectors/,
     ],
     ['{ routes: [{ left: "/a", selector: { left: ".a" } }] }', /`routes\[0\]\.selector` must be/],
+    ['{ before: "click" }', /`before` must be a function/],
+    [
+      '{ routes: ["/a", { left: "/a", before: async () => {} }] }',
+      /two routes both read as \/a; they have different before hooks — merge them into one route/,
+    ],
+    ['{ routes: [{ left: "/a", before: {} }] }', /`routes\[0\]\.before` must be a function/],
+    ['{ storageState: 1 }', /`storageState` must be a non-empty path/],
+    ['{ storageState: { left: "a.json", center: "b.json" } }', /`storageState` must be a non-empty path/],
   ];
   for (const [config, needle] of inline) {
     test(`${config} exits 2 and names the problem`, async () => {
@@ -165,6 +173,17 @@ describe("validation", () => {
       assert.match(r.stderr, needle);
     });
   }
+
+  test("a config storageState resolves from the config file's directory, not cwd", async () => {
+    const dir = tempDir("renderdiff-cfg-");
+    fs.writeFileSync(path.join(dir, "c.mjs"), 'export default { storageState: { right: "auth.json" } };\n');
+    const r = await runCli(["--dry-run", "/a", "--left", L, "--right", R, "--config", path.join(dir, "c.mjs")], { noOut: true });
+    assert.equal(r.code, 2, r.stderr);
+    assert.ok(r.stderr.includes(`storage state file not found: ${path.join(dir, "auth.json")}`), r.stderr);
+    fs.writeFileSync(path.join(dir, "auth.json"), '{"cookies":[],"origins":[]}');
+    const ok = await runCli(["--dry-run", "/a", "--left", L, "--right", R, "--config", path.join(dir, "c.mjs")], { noOut: true });
+    assert.equal(ok.code, 0, ok.stderr);
+  });
 
   test("object routes sit beside strings; right defaults to left", async () => {
     const cwd = tempDir("renderdiff-cfg-");

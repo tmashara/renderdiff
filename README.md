@@ -47,7 +47,9 @@ npm install -g renderdiff
 npx playwright install chromium   # once, if you don't already have it
 ```
 
-Requires Node >= 22.18.
+Requires Node >= 22.18. If the bundled Chromium won't launch, renderdiff falls back to an
+installed Google Chrome on both sides and prints a line saying so; `meta.browser` in
+`results.json` records which browser ran.
 
 ### Agent skill
 
@@ -92,6 +94,8 @@ renderdiff <left-origin> <right-origin> <route…> [options]
 | `--config <path>` | Config file. Default: `renderdiff.config.{ts,mts,js,mjs}` in cwd. |
 | `--selector <sel>` | Compare the one element this Playwright selector matches, on both sides, instead of the whole page. Applies to every route, over the config's per-route `selector`. |
 | `--left-selector <sel>`, `--right-selector <sel>` | That side's selector, over `--selector`. One without the other side (or `--selector`) is an error. |
+| `--storage-state <file>` | Start both sides with this Playwright storage state (cookies, localStorage), e.g. signed in. Relative to cwd. Over the config's `storageState`. |
+| `--left-storage-state <file>`, `--right-storage-state <file>` | That side's storage state, over `--storage-state`. One side alone is fine. |
 | `--dry-run` | Print the URL pairs and exit. No browser. |
 | `--open` | Open the report when the run finishes. |
 | `--progress` | A line per shot as it finishes, then the worst scores. The default on a terminal; piped, renderdiff prints one compact summary at the end. |
@@ -162,6 +166,49 @@ Things to know:
 - A selector that matches an element with no box (`display: none`) or one off the page is
   an error. The render gate stays page-level: a textless element on a rendered page is fine.
 
+## Interactions and signed-in pages
+
+When the state worth comparing is behind a click (an open menu, a dismissed modal both
+sides show), give the route a `before` hook in the config. It runs on each side after the
+page loads and its HTTP status is checked, and before renderdiff settles, masks and shoots
+it, with the clock and seeded `Math.random` already in force:
+
+```ts
+export default {
+  routes: [
+    { left: "/", before: async (page) => { await page.click("[aria-label=Menu]"); } },
+  ],
+  // For every route without its own `before` (which replaces it), CLI routes included.
+  before: async (page, { side, route, width }) => {
+    const accept = page.getByRole("button", { name: "Accept" });
+    if (await accept.isVisible()) await accept.click();
+  },
+};
+```
+
+`side` is `"left"` or `"right"`, `route` the route's name (`/a` or `/a::/b`), `width` the
+viewport width. Use `side` only where the markup legitimately differs (the button has a
+different selector on each side), never to make the sides look alike. A hook that throws
+is a route error, `before hook failed on left: …`, and isn't retried. A route that ran one
+has `"hook": true` in `results.json` and a `before hook` badge on its report card.
+Actions in a hook use Playwright's 30s default timeout, so check before clicking what may
+not be there (as above); `hideSelectors` and `extraCss` apply after the hook.
+
+For pages behind a login, save a Playwright storage state once and pass it:
+
+```
+npx playwright codegen --save-storage=auth.json https://example.com/login
+renderdiff http://localhost:3000 https://example.com /account --storage-state auth.json
+```
+
+`--left-storage-state` / `--right-storage-state` give each side its own file, and the
+config takes `storageState: "auth.json"` or `{ left, right }`, relative to the config file.
+A missing or non-JSON file, or one that isn't a storage state, exits 2 before the browser starts. The file's contents are never
+printed; `meta.storageState` and the report name only each side's file. It holds live
+session tokens: **never commit it**, and add it to `.gitignore`. The out dir then holds
+signed-in screenshots, and their text in `results.json`, so don't publish or commit that
+either; add the out dir to `.gitignore` too.
+
 ## Config file
 
 Flags cover a one-off run. A `renderdiff.config.ts` (or `.mjs`) in the working directory
@@ -188,6 +235,8 @@ export default {
   masks: [
     { selector: "[data-star-count]", reason: "live star count", urlPath: "/pricing" },
   ],
+
+  storageState: "auth.json",   // relative to this file; never commit it
 };
 ```
 
@@ -278,11 +327,14 @@ Everything lands in the out dir (`./renderdiff-out` by default):
     "widths": [1440, 375], "threshold": null,
     "clock": "…",                // the instant both sides' clocks start at
     "blockUrlPatterns": ["…"], "hideSelectors": ["…"],
-    "masks": [{ "urlPath": "/pricing", "reason": "live star count" }]   // no urlPath: every route
+    "masks": [{ "urlPath": "/pricing", "reason": "live star count" }],   // no urlPath: every route
+    "browser": { "name": "chromium", "version": "…" },   // "chrome" when it fell back
+    "storageState": { "left": "auth.json", "right": null }   // file names only
   },
   "results": [
     {
       "url": "/about", "left": "/about", "right": "/about",   // a pair: "/a::/b", "/a", "/b"
+      "selector": null, "hook": false,                         // hook: a before hook ran
       "width": 1440, "status": "compared",
       "score": 0.9714,           // share of measured pixels that match
       "alignedScore": 1,         // score over the aligned rows; null unless there are bands
@@ -342,10 +394,13 @@ Paths are relative to the out dir. Results are in route-then-width order.
   as `unstable`, and excluded from the measurement — the score is over the remaining
   pixels. A route more than 25% unstable errors as `page did not settle`.
 - **Isolates state** — one browser context per origin, so cookies and localStorage never
-  cross. Both sides of a route load at the same time.
+  cross (a storage state file seeds each context on its own). Both sides of a route load at
+  the same time.
 - **Retries once** per shot; a live site can time out on a cold edge.
-- **Stitches tall pages.** Chromium silently truncates a single screenshot past 16,384px,
-  so taller pages are captured as tiles through CDP and stitched back together. Masks are
+- **Stitches tall pages.** A single screenshot past 16,384px can come out truncated or
+  wrapped (Chrome repeats the top of the page; recent headless Chromium does not), so taller
+  pages, and element shots taller than that, are captured as tiles through CDP and stitched
+  back together. Masks are
   painted onto the final image from each element's bounding box, so they apply the same
   way on both paths. Past 40,000px it errors — that's a broken layout, not a page.
 
@@ -398,8 +453,8 @@ ephemeral ports. Three groups:
 - *Guard rails* — one per defence above: the blank-page refusal (and a short sign-in page
   that must not be refused), the 18,000px tiled capture with masks in both tiles, animation
   stilling, the shared clock start and seeded randomness, the unstable-pixel check, lazy-image
-  settling (native and script-driven, 4,800px below the fold), consent hiding, masks, and
-  network blocking. Masks
+  settling (native and script-driven, 4,800px below the fold), consent hiding, masks,
+  network blocking, `before` hooks and storage state. Masks
   and blocking each run twice, with and without their config, so the mechanism is shown doing
   something rather than a page merely happening to match.
 

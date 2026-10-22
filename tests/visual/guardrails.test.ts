@@ -292,7 +292,32 @@ describe("the tiled capture path", () => {
       assert.notDeepEqual(await pixel(file, 9_090), [255, 0, 255], `block 51 masked on ${side}`);
     }
   });
+
+  test("the bottom tile is the page's own last rows, not padding or a repeat of the top", async () => {
+    // A missing tile would be magenta padding; a wrapped one-shot repeats the top. The last
+    // row is block 100's 1px #c9d4e2 border, which neither would give.
+    for (const side of ["left", "right"]) {
+      assert.deepEqual(await bottomRow(run.file(`tall.1440.${side}.png`)), [0xc9, 0xd4, 0xe2], `${side}${context(run)}`);
+    }
+  });
+
+  test("an element taller than the cap is tiled too, down to its own last row", async () => {
+    const el = await runCli([...renderdiffArgs({ left: site.left, right: site.right, routes: ["/tall"], widths: [1440] }), "--selector", ".stack"]);
+    assert.equal(el.code, 0, context(el));
+    for (const side of ["left", "right"]) {
+      const file = el.file(`tall@_stack.1440.${side}.png`);
+      assert.equal((await sharp(file).metadata()).height, EXPECT_HEIGHT, context(el));
+      assert.deepEqual(await bottomRow(file), [0xc9, 0xd4, 0xe2], `${side}${context(el)}`);
+    }
+  });
 });
+
+/** The RGB of the last row's middle pixel. */
+const bottomRow = async (file: string) => {
+  const img = sharp(file);
+  const { width = 0, height = 0 } = await img.metadata();
+  return [...(await img.extract({ left: width >> 1, top: height - 1, width: 1, height: 1 }).removeAlpha().raw().toBuffer())];
+};
 
 describe("masks", () => {
   test("an unmasked drifting value costs the score", async () => {
@@ -469,6 +494,144 @@ describe("component scope", () => {
     assert.deepEqual(summary.clean, ["/color [h1]"], context(run));
     assert.ok(summary.routes.has("/color [.swatch >> nth=2]"), context(run));
     assert.equal(summary.verdict.worst?.route, "/color [.swatch >> nth=2]", context(run));
+  });
+});
+
+describe("before hooks", () => {
+  const hooked = (config: string, routes: string[] = []) => {
+    const file = path.join(tempDir(), "hook.mjs");
+    fs.writeFileSync(file, `export default ${config};\n`);
+    return capture(routes, { config: file });
+  };
+
+  test("without a hook the closed menu matches on both sides", async () => {
+    const run = await capture(["/menu"]);
+    assert.equal(run.code, 0, context(run));
+    const r = result(results(run.outDir), "/menu", 1440);
+    assert.equal(r.diffPixels, 0, context(run));
+    assert.equal(r.hook, false);
+    assert.equal(cardFor(run, "/menu").hook, false);
+  });
+
+  test("a route's hook opens the menu on both sides before the shot", async () => {
+    const run = await hooked(
+      '{ routes: [{ left: "/menu", before: async (page) => { await page.click("#toggle"); } }] }',
+    );
+    assert.equal(run.code, 0, context(run));
+    const r = result(results(run.outDir), "/menu", 1440);
+    // Each side's panel says something different, so this only differs if both opened.
+    assert.ok(r.diffPixels > 0, `the hook did not run before the shot${context(run)}`);
+    assert.deepEqual(r.text.added, ["Panel built by the left side"], context(run));
+    assert.deepEqual(r.text.removed, ["Panel built by the right side, worded differently"], context(run));
+    assert.equal(r.hook, true);
+    assert.equal(cardFor(run, "/menu").hook, true, context(run));
+  });
+
+  test("a top-level hook runs for CLI routes, with the side, route and width", async () => {
+    const run = await hooked(
+      "{ before: async (page, { side, route, width }) => { " +
+        'await page.locator("h1").evaluate((h, t) => (h.textContent = t), `${side} ${route} ${width}`); } }',
+      ["/menu"],
+    );
+    assert.equal(run.code, 0, context(run));
+    const r = result(results(run.outDir), "/menu", 1440);
+    assert.deepEqual([r.text.added, r.text.removed], [["left /menu 1440"], ["right /menu 1440"]], context(run));
+  });
+
+  test("a route's own hook replaces the top-level one", async () => {
+    const run = await hooked(
+      '{ before: async () => { throw new Error("top-level ran"); }, routes: [{ left: "/menu", before: async () => {} }] }',
+    );
+    assert.equal(run.code, 0, context(run));
+    assert.equal(result(results(run.outDir), "/menu", 1440).diffPixels, 0, context(run));
+  });
+
+  test("a hook that throws is a route error naming the hook, and is not retried", async () => {
+    const before = site.hits("/menu");
+    // A message the transient-error retry would otherwise match.
+    const run = await hooked('{ before: async () => { throw new Error("net::ERR_FAKE from the hook"); } }', ["/menu"]);
+    assert.equal(run.code, 3, context(run));
+    const [r] = results(run.outDir).results;
+    assert.equal(r?.status, "error", context(run));
+    assert.equal(r?.status === "error" && r.error, "before hook failed on left: net::ERR_FAKE from the hook");
+    assert.equal(r?.hook, true);
+    assert.equal(site.hits("/menu") - before, 2, `the hook was retried${context(run)}`);
+  });
+});
+
+describe("storage state", () => {
+  const SECRET = "s3cret-session-token";
+  const authIn = (dir: string) => {
+    fs.writeFileSync(
+      path.join(dir, "auth.json"),
+      JSON.stringify({
+        cookies: [{ name: "session", value: SECRET, domain: "127.0.0.1", path: "/", expires: -1, httpOnly: false, secure: false, sameSite: "Lax" }],
+        origins: [],
+      }),
+    );
+    return dir;
+  };
+  const leaks = (run: CliResult) =>
+    [run.stdout, run.stderr, run.report() ?? "", fs.readFileSync(run.file("results.json"), "utf8")].some((s) => s.includes(SECRET));
+
+  test("one side's file signs in that side only, and only its name is recorded", async () => {
+    const cwd = authIn(tempDir("renderdiff-cwd-"));
+    const run = await runCli(
+      [...renderdiffArgs({ left: site.left, right: site.right, routes: ["/signed-in"], widths: [1440] }), "--left-storage-state", "auth.json"],
+      { cwd },
+    );
+    assert.equal(run.code, 0, context(run));
+    const res = results(run.outDir);
+    const r = result(res, "/signed-in", 1440);
+    assert.deepEqual([r.text.added, r.text.removed], [["Signed in as tester"], ["Signed out"]], context(run));
+    assert.deepEqual(res.meta.storageState, { left: "auth.json", right: null });
+    assert.ok(run.report()!.includes("left storage state <code>auth.json</code>"), context(run));
+    assert.ok(!leaks(run), "the storage state's contents were written out");
+  });
+
+  test("a config's file, relative to the config, signs in both sides", async () => {
+    const dir = authIn(tempDir());
+    fs.writeFileSync(path.join(dir, "c.mjs"), 'export default { storageState: "auth.json" };\n');
+    const run = await capture(["/signed-in"], { config: path.join(dir, "c.mjs") });
+    assert.equal(run.code, 0, context(run));
+    const res = results(run.outDir);
+    const r = result(res, "/signed-in", 1440);
+    assert.deepEqual([r.text.added, r.text.removed], [["Signed in as tester"], ["Signed in as tester (right)"]], context(run));
+    assert.deepEqual(res.meta.storageState, { left: "auth.json", right: "auth.json" });
+    assert.ok(!leaks(run), "the storage state's contents were written out");
+  });
+});
+
+describe("the browser", () => {
+  test("results.json records the browser", async () => {
+    const run = await capture(["/short"]);
+    assert.equal(run.code, 0, context(run));
+    const { browser } = results(run.outDir).meta;
+    assert.equal(browser.name, "chromium");
+    assert.match(browser.version, /^\d+\./);
+  });
+
+  test("without the bundled Chromium it falls back to the system Chrome, or names the fix", async () => {
+    // An empty browsers path hides the bundled Chromium. Which branch runs depends on whether
+    // this machine has Chrome installed.
+    const run = await runCli(renderdiffArgs({ left: site.left, right: site.right, routes: ["/tall"], widths: [1440] }), {
+      env: { PLAYWRIGHT_BROWSERS_PATH: tempDir() },
+    });
+    if (run.code === 1 && !fs.existsSync(run.file("results.json"))) {
+      assert.match(run.stderr, /npx playwright install chromium/, context(run));
+      return;
+    }
+    assert.equal(run.code, 0, context(run));
+    assert.match(run.stdout, /^Bundled Chromium failed to launch; using the system Chrome \d/m, context(run));
+    assert.equal(results(run.outDir).meta.browser.name, "chrome");
+    // Chrome wraps a one-shot capture past 16,384px, so this pins the tiled path there too.
+    assert.deepEqual(await bottomRow(run.file("tall.1440.left.png")), [0xc9, 0xd4, 0xe2], context(run));
+    const el = await runCli(
+      [...renderdiffArgs({ left: site.left, right: site.right, routes: ["/tall"], widths: [1440] }), "--selector", ".stack"],
+      { env: { PLAYWRIGHT_BROWSERS_PATH: tempDir() } },
+    );
+    assert.equal(el.code, 0, context(el));
+    assert.deepEqual(await bottomRow(el.file("tall@_stack.1440.left.png")), [0xc9, 0xd4, 0xe2], context(el));
   });
 });
 

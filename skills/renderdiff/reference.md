@@ -32,6 +32,7 @@ Report colouring (`--open`, for a human): green above 99.5%, amber to 97%, red b
 | "I'll lower `--threshold` until it passes." | Threshold is a CI gate, not a dial for reaching green. |
 | "That route errors, I'll drop it from the list." | Shrinking the route list shrinks what you verified. Fix it, or say it's unverified. |
 | "One width is enough." | Migrations break at one width and not others. That's why there are five defaults. |
+| "A `before` hook that hides that element on the left gets this clean." | That hook is a mask with no `reason` in the report. A hook brings both sides to the same *state* (opens the menu, dismisses a modal both show, logs in); it never edits one side to match the other. |
 
 ## results.json
 
@@ -41,7 +42,9 @@ insertion point, `layout` `stacked` = left on top or `side` = left on the left, 
 `clipped`), `selector` (`{ left, right }` or null), one result per line, so `grep '"url":"/about"'` pulls a route.
 Paths are relative to the out dir. `summary` has `compared`, `errors`, `mean`, `worst` and
 `belowThreshold`; `meta` records origins, widths, threshold, the pinned clock, block
-patterns, hidden selectors and mask reasons. The normal loop doesn't need it.
+patterns, hidden selectors, mask reasons, the browser (`chromium`, or `chrome` when it fell
+back to the system Chrome) and each side's storage state file name. `hook: true` marks a
+route a `before` hook ran on. The normal loop doesn't need it.
 
 ## Config file
 
@@ -96,6 +99,24 @@ cookie script ran wedges the renderer).
   a shorter scroll container, whatever paints below the container is too; a transformed
   element is shot at its axis-aligned box. `xpath=` and `>>` work and `::` is never split;
   pseudo-elements are rejected by Playwright; iframes can't be reached.
+- **`before` hooks** (config only: `before: async (page, { side, route, width }) => …` on a
+  route object, or top level for every route without its own) run after load and the HTTP
+  check, before settle, masks and the shot. Legitimate: opening a menu or tab, dismissing a
+  modal or banner *both* sides show, signing in, scrolling a carousel to slide 1 on both.
+  Masking a real difference: branching on `side` to make the sides look alike, hiding or
+  removing an element on one side, waiting out a bug on one side only. `side` is for markup
+  that legitimately differs (the same button, a different selector). A throw is
+  `ERROR before hook failed on left: …`, never retried. Say in the verdict that a hook ran;
+  the report badges those cards and results.json has `hook: true`.
+- **Signed-in pages:** `npx playwright codegen --save-storage=auth.json <login url>`, then
+  `--storage-state auth.json` (or `--left-storage-state` / `--right-storage-state`, or
+  config `storageState`, relative to the config file). Missing, non-JSON or not a storage state: exit 2.
+  The file holds live session tokens: never commit it, add it to `.gitignore`, and don't
+  paste it into a chat. renderdiff records only its file name. The out dir then holds
+  signed-in screenshots and their text in results.json: don't publish or commit it either
+  (add it to `.gitignore`).
+- **Browser:** if the bundled Chromium won't launch, renderdiff uses the system Chrome on
+  both sides and says so; else it prints the `npx playwright install chromium` hint.
 - **Analytics, consent and A/B tooling are blocked at the network layer** on both sides,
   and animations are stilled. If something still flickers between runs, it's a candidate
   for `blockUrlPatterns`, not for a mask.

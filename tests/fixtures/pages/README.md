@@ -17,7 +17,7 @@ Three groups:
   unconditionally would pass the suite. They also pin the diff regions (`color`), the row
   alignment (`taller`, `nav`, and `shifted`, which has no band) and the text diff (`nav`).
 - **Guard rails** — `blank`, `tall`, `animated`, `lazy`, `lazy-deep`, `lazy-js`, `consent`,
-  `drifting`, `tracker`, `clock`, `ticker`, `unsettled`, `sprite`, `short`, `tall-region`, `reorder`, `stripe`, `frameset`.
+  `drifting`, `tracker`, `clock`, `ticker`, `unsettled`, `sprite`, `short`, `tall-region`, `reorder`, `stripe`, `frameset`, `menu`, `signed-in`.
   One per defence in `src/capture.ts` / `src/config.ts`.
 
 ## Authoring rules
