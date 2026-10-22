@@ -1,6 +1,7 @@
 import pixelmatch from "pixelmatch";
 import sharp, { type OverlayOptions } from "sharp";
 import type { Shot } from "./capture.ts";
+import type { ElementDiff } from "./locate.ts";
 import { MASK_COLOR } from "./config.ts";
 
 /**
@@ -26,6 +27,8 @@ export interface Region {
   h: number;
   /** Differing pixels inside it. */
   pixels: number;
+  /** The elements under it; absent when not looked at. */
+  elements?: ElementDiff[];
 }
 
 /** Rows one side has that the other lacks, at `y` in that side's own coordinates. */
@@ -33,6 +36,8 @@ export interface Band {
   side: "left" | "right";
   y: number;
   h: number;
+  /** The elements in its rows; absent when not looked at. */
+  elements?: ElementDiff[];
 }
 
 /** Left is the changed version, right the reference: `added` is on left only, `removed` on right only. */
@@ -73,6 +78,8 @@ export interface Spot {
   kind: "band" | "region";
   left: Box;
   right: Box;
+  /** The result entry it locates. */
+  target: Region | Band;
 }
 
 const PIXELMATCH = { threshold: 0.1, includeAA: false, alpha: 0.25 };
@@ -145,7 +152,7 @@ export async function compare(left: Shot, right: Shot): Promise<Diff> {
     ? aligned.spots
     : [
         ...aligned.spots,
-        ...found.map(({ pixels, ...box }): Spot => ({ kind: "region", left: box, right: box })),
+        ...found.map(({ x, y, w, h }, i): Spot => ({ kind: "region", left: { x, y, w, h }, right: { x, y, w, h }, target: found[i]! })),
       ];
   // Padding is magenta against real content, so a height difference lands in
   // `diffPixels` and drags the score down. Intended: a page 400px shorter than the
@@ -378,7 +385,7 @@ function align(l: Buffer, r: Buffer, w: number, cw: number, lh: number, rh: numb
       const { x, w: bw } = inkX(b.side === "left" ? l : r, w, cw, b.y, b.y + b.h);
       const here = { x, y: b.y, w: bw, h: b.h };
       const seam = { x, y: at[i]!, w: bw, h: 0 };
-      return { kind: "band", left: b.side === "left" ? here : seam, right: b.side === "right" ? here : seam };
+      return { kind: "band", left: b.side === "left" ? here : seam, right: b.side === "right" ? here : seam, target: b };
     })
     .sort((a, b) => b.left.h + b.right.h - (a.left.h + a.right.h));
   if (!bands.length || !rows.length) return { bands, alignedScore: null, regions: null, spots };
@@ -407,13 +414,14 @@ function align(l: Buffer, r: Buffer, w: number, cw: number, lh: number, rh: numb
     const y = rows[g.y]![s];
     return { y, h: rows[g.y + g.h - 1]![s] + 1 - y };
   };
-  for (const { pixels, ...g } of found) {
-    spots.push({ kind: "region", left: { ...g, ...side(g as Region, 0) }, right: { ...g, ...side(g as Region, 1) } });
-  }
+  const regs = found.map((g) => ({ ...g, ...side(g, 0) }));
+  found.forEach((g, i) => {
+    spots.push({ kind: "region", left: { x: g.x, w: g.w, ...side(g, 0) }, right: { x: g.x, w: g.w, ...side(g, 1) }, target: regs[i]! });
+  });
   return {
     bands,
     alignedScore: measured > 0 ? 1 - diff / measured : null,
-    regions: found.map((g) => ({ ...g, ...side(g, 0) })),
+    regions: regs,
     spots,
   };
 }

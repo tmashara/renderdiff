@@ -41,7 +41,7 @@ export interface Summary {
   /** Routes on the `clean:` line; a selector route is `/a [sel]`, as is its key in `routes`. */
   clean: string[];
   /** Each differing route: widths that were clean, then one row per collapsed width group. */
-  routes: Map<string, { clean: number[]; rows: { widths: number[]; text: string; crops: string[] }[]; errors: { widths: number[]; message: string }[] }>;
+  routes: Map<string, { clean: number[]; rows: { widths: number[]; text: string; dom: string | null; crops: string[] }[]; errors: { widths: number[]; message: string }[] }>;
   verdict: {
     differ: number;
     routes: number;
@@ -76,7 +76,9 @@ export function parseSummary(stdout: string): Summary {
     } else if (at && (m = /^  @([\d,]+)  ERROR (.*)$/.exec(line))) {
       at.errors.push({ widths: m[1]!.split(",").map(Number), message: m[2]! });
     } else if (at && (m = /^  @([\d,]+)  (.*)$/.exec(line))) {
-      at.rows.push({ widths: m[1]!.split(",").map(Number), text: m[2]!, crops: [] });
+      at.rows.push({ widths: m[1]!.split(",").map(Number), text: m[2]!, dom: null, crops: [] });
+    } else if (at?.rows.length && (m = /^    dom (.*)$/.exec(line))) {
+      at.rows.at(-1)!.dom = m[1]!;
     } else if (at?.rows.length && (m = /^    crops (.*)$/.exec(line))) {
       at.rows.at(-1)!.crops = m[1]!.split(" ");
     }
@@ -119,6 +121,8 @@ export interface ProgressRow {
   unaligned: boolean;
   added: number;
   removed: number;
+  /** The `dom` detail line, or null. */
+  dom: string | null;
 }
 
 export interface Box {
@@ -158,6 +162,7 @@ export function parseProgress(stdout: string): ProgressRow[] {
         unaligned: false,
         added: 0,
         removed: 0,
+        dom: null,
       });
       continue;
     }
@@ -176,6 +181,8 @@ export function parseProgress(stdout: string): ProgressRow[] {
     } else if ((d = TEXT.exec(line))) {
       last.added = Number(d[1]);
       last.removed = Number(d[2]);
+    } else if ((d = /^\s+dom (.+)$/.exec(line))) {
+      last.dom = d[1]!;
     } else if (/^\s+rows too different to align$/.test(line)) {
       last.unaligned = true;
     }
@@ -207,8 +214,10 @@ export interface ReportCard {
   unstablePixels: number;
   /** Null when the card shows no aligned score. */
   alignedScore: number | null;
-  /** The listed regions (the card caps the list). */
-  regions: (Box & { pixels: number })[];
+  /** The listed regions (the card caps the list), each with the elements line it shows, or null. */
+  regions: (Box & { pixels: number; dom: string | null })[];
+  /** The listed bands: `+24px at y=196 (left)` and the elements line, or null. */
+  bands: { text: string; dom: string | null }[];
   /** The text-diff lines listed on the card: left-only and right-only. */
   added: string[];
   removed: string[];
@@ -276,13 +285,18 @@ export function parseReport(html: string): Report {
       unstablePixels: unstable ? num(unstable[1]!) : 0,
       alignedScore: aligned ? Number(aligned[1]) / 100 : null,
       regions: [
-        ...card.matchAll(/<li>(\d+)×(\d+) at \((\d+),(\d+)\) — ([\d,]+) px<\/li>/g),
+        ...card.matchAll(/<li>(\d+)×(\d+) at \((\d+),(\d+)\) — ([\d,]+) px(?:<span class="dom"> — (.*?)<\/span>)?<\/li>/g),
       ].map((m) => ({
         w: Number(m[1]),
         h: Number(m[2]),
         x: Number(m[3]),
         y: Number(m[4]),
         pixels: num(m[5]!),
+        dom: m[6] ? unesc(m[6]) : null,
+      })),
+      bands: [...card.matchAll(/<li>band ([^<]*)(?:<span class="dom"> — (.*?)<\/span>)?<\/li>/g)].map((m) => ({
+        text: m[1]!,
+        dom: m[2] ? unesc(m[2]) : null,
       })),
       added: [...card.matchAll(/<li class="add">\+ ([^<]*)<\/li>/g)].map((m) => unesc(m[1]!)),
       removed: [...card.matchAll(/<li class="del">- ([^<]*)<\/li>/g)].map((m) => unesc(m[1]!)),

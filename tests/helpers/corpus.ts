@@ -21,7 +21,7 @@ export const EQUIVALENCE = [
 ] as const;
 
 /** Deliberately different. Must score low — otherwise the suite proves nothing. */
-export const CONTROLS = ["shifted", "taller", "color", "nav"] as const;
+export const CONTROLS = ["shifted", "taller", "color", "nav", "margin"] as const;
 
 /** One per defence in src/capture.ts and src/config.ts. */
 export const GUARDRAILS = [
@@ -45,6 +45,7 @@ export const GUARDRAILS = [
   "frameset",
   "menu",
   "signed-in",
+  "fixed",
 ] as const;
 
 export const ALL: string[] = [...EQUIVALENCE, ...CONTROLS, ...GUARDRAILS];

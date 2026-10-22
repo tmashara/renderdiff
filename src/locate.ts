@@ -1,0 +1,286 @@
+import type { Locator, Page } from "playwright";
+import type { Shot } from "./capture.ts";
+import type { Box, Spot } from "./compare.ts";
+
+/** Names the DOM elements behind each change, from the pages still holding the shot's document. */
+
+/** A DOM element behind a change. Boxes in that side's page px (element px for a selector route). */
+export interface ElementDiff {
+  /** CSS selector, unique on the side(s) it names; usable as --selector or querySelector. */
+  selector: string;
+  /** Where it exists: "left" only in your change, "right" only in the reference. */
+  side: "both" | "left" | "right";
+  left: Box | null;
+  right: Box | null;
+  /** Computed properties that differ, [left, right], most telling first; `text` when its text does. */
+  changed: Record<string, [string, string]>;
+  /** The start of its text (left's when both), "" if none. */
+  text: string;
+}
+
+const MAX_SPOTS = 5;
+const PER_SPOT = 3;
+const MAX_CHANGED = 6;
+
+/** Layout first; width and height last, since they are usually a consequence. */
+const PROPS = [
+  "display", "position", "float", "flex-direction", "flex-wrap", "justify-content", "align-items", "gap",
+  "grid-template-columns", "margin-top", "margin-right", "margin-bottom", "margin-left", "padding-top",
+  "padding-right", "padding-bottom", "padding-left", "border-top-width", "border-right-width",
+  "border-bottom-width", "border-left-width", "font-family", "font-size", "font-weight", "line-height",
+  "letter-spacing", "text-align", "text-transform", "white-space", "color", "background-color",
+  "border-top-color", "border-top-left-radius", "box-shadow", "opacity", "transform", "visibility",
+  "z-index", "width", "height",
+];
+
+interface Seen {
+  sel: string;
+  tag: string;
+  text: string;
+  box: Box;
+  styles: string[];
+}
+
+interface Hit extends Seen {
+  prev: Seen | null;
+  parent: Seen | null;
+}
+
+interface Find {
+  sel: string;
+  tag: string;
+  text: string;
+  y: number;
+}
+
+interface ProbeArgs {
+  boxes: (Box | null)[];
+  find: Find[];
+  masked: Node[];
+  props: string[];
+  perSpot: number;
+}
+
+/** Runs in the page. At scroll 0 a client rect is page px, below the fold too. */
+function probe({ boxes, find, masked, props, perSpot }: ProbeArgs) {
+  const MAX_SCAN = 50_000;
+  const HASHED = /\d{3,}|^(css|sc|jsx|svelte)-|__[\w-]{5,}$|^_/;
+  const TEST = ["data-testid", "data-test", "data-test-id", "data-cy", "data-qa"];
+  const quote = (n: string, v: string) => `[${n}=${JSON.stringify(v)}]`;
+  const unique = (s: string) => document.querySelectorAll(s).length === 1;
+  const snippet = (e: Element) =>
+    ((e as HTMLElement).innerText ?? e.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 40);
+
+  const part = (e: Element) => {
+    const tag = e.localName;
+    let s = CSS.escape(tag);
+    const href = e.getAttribute("href");
+    if (tag === "a" && href && href.length < 60 && !href.startsWith("javascript:")) s += quote("href", href);
+    else {
+      for (const n of ["name", "aria-label", ...(tag === "input" ? ["type"] : [])]) {
+        const v = e.getAttribute(n);
+        if (v && v.length < 60) {
+          s += quote(n, v);
+          break;
+        }
+      }
+    }
+    // ponytail: hashed-class heuristic, attributes and nth-of-type are the fallback
+    s += Array.from(e.classList).filter((c) => !HASHED.test(c)).slice(0, 2).map((c) => `.${CSS.escape(c)}`).join("");
+    const siblings = e.parentElement ? Array.from(e.parentElement.children) : [];
+    if (siblings.some((c) => c !== e && c.matches(s))) {
+      s += `:nth-of-type(${siblings.filter((c) => c.localName === tag).indexOf(e) + 1})`;
+    }
+    return s;
+  };
+
+  const selector = (e: Element) => {
+    if (e.id && unique(`#${CSS.escape(e.id)}`)) return `#${CSS.escape(e.id)}`;
+    for (const n of TEST) {
+      const v = e.getAttribute(n);
+      if (v && unique(e.localName + quote(n, v))) return e.localName + quote(n, v);
+    }
+    let path = "";
+    for (let n: Element | null = e; n && n !== document.documentElement; n = n.parentElement) {
+      if (n !== e && n.id && unique(`#${CSS.escape(n.id)}`)) return `#${CSS.escape(n.id)} > ${path}`;
+      path = path ? `${part(n)} > ${path}` : part(n);
+      if (unique(path)) break;
+    }
+    return path;
+  };
+
+  const seen = (e: Element) => {
+    const r = e.getBoundingClientRect();
+    const cs = getComputedStyle(e);
+    return {
+      sel: selector(e),
+      tag: e.localName,
+      text: snippet(e),
+      box: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) },
+      styles: props.map((p) => cs.getPropertyValue(p)),
+    };
+  };
+  const hit = (e: Element) => {
+    const parent = e.parentElement;
+    return {
+      ...seen(e),
+      prev: e.previousElementSibling ? seen(e.previousElementSibling) : null,
+      parent: parent && parent !== document.body ? seen(parent) : null,
+    };
+  };
+
+  const all: { e: Element; r: DOMRect }[] = [];
+  const els = document.body?.querySelectorAll("*") ?? [];
+  for (let i = 0; i < els.length && i < MAX_SCAN; i++) {
+    const e = els[i]!;
+    if ((e as SVGElement).ownerSVGElement || masked.some((m) => m.contains(e))) continue;
+    const r = e.getBoundingClientRect();
+    if (r.width && r.height) all.push({ e, r });
+  }
+
+  const picks = boxes.map((b) => {
+    if (!b) return [];
+    const ranked = all
+      .map(({ e, r }) => {
+        const ix = Math.min(r.right, b.x + b.w) - Math.max(r.left, b.x);
+        const iy = Math.min(r.bottom, b.y + b.h) - Math.max(r.top, b.y);
+        return { e, r, ix, iy, area: r.width * r.height, score: ix > 0 && iy > 0 ? (ix * iy) / Math.max(r.width * r.height, b.w * b.h) : 0 };
+      })
+      .filter((c) => c.score > 0)
+      .sort((p, q) => q.score - p.score || p.area - q.area)
+      .slice(0, 10)
+      .filter((c) => c.e.checkVisibility?.({ opacityProperty: true, visibilityProperty: true }) ?? true);
+    for (const c of ranked) {
+      const cx = Math.max(c.r.left, b.x) + c.ix / 2;
+      const cy = Math.max(c.r.top, b.y) + c.iy / 2;
+      if (cy >= innerHeight || cx >= innerWidth) continue;
+      // Something painted over it there, e.g. fixed chrome.
+      const top = document.elementFromPoint(cx, cy);
+      if (top && top !== c.e && !c.e.contains(top) && !top.contains(c.e)) c.score *= 0.25;
+    }
+    ranked.sort((p, q) => q.score - p.score || p.area - q.area);
+    const chosen: Element[] = [];
+    for (const { e } of ranked) {
+      if (chosen.length === perSpot) break;
+      if (chosen.some((p) => p.contains(e) || e.contains(p))) continue;
+      chosen.push(e);
+    }
+    return chosen.map(hit);
+  });
+
+  const found = find.map(({ sel, tag, text, y }) => {
+    let e: Element | null = null;
+    try {
+      e = document.querySelector(sel);
+    } catch {}
+    if (e && text && snippet(e) !== text) e = null;
+    // An insertion shifts nth-of-type, so fall back to the same tag with the same text.
+    if (!e && text) {
+      const same = Array.from(document.querySelectorAll(tag)).filter((c) => snippet(c) === text);
+      e = same.sort((p, q) => Math.abs(p.getBoundingClientRect().y - y) - Math.abs(q.getBoundingClientRect().y - y))[0] ?? null;
+    }
+    return e ? hit(e) : null;
+  });
+
+  return { picks, found };
+}
+
+type Pair = [Seen | null, Seen | null];
+
+function element([l, r]: Pair, origins: Shot["origin"][]): ElementDiff {
+  const changed: Record<string, [string, string]> = {};
+  if (l && r) {
+    if (l.text !== r.text) changed.text = [l.text, r.text];
+    PROPS.forEach((p, i) => {
+      if (l.styles[i] !== r.styles[i]) changed[p] = [l.styles[i]!, r.styles[i]!];
+    });
+  }
+  const at = (s: Seen | null, o: Shot["origin"]) => s && { ...s.box, x: s.box.x - o.x, y: s.box.y - o.y };
+  return {
+    selector: (l ?? r)!.sel,
+    side: l && r ? "both" : l ? "left" : "right",
+    left: at(l, origins[0]!),
+    right: at(r, origins[1]!),
+    changed: Object.fromEntries(Object.entries(changed).slice(0, MAX_CHANGED)),
+    text: (l ?? r)!.text,
+  };
+}
+
+const moved = (a: Box, b: Box) => a.x !== b.x || a.y !== b.y || a.w !== b.w || a.h !== b.h;
+
+/**
+ * Sets `elements` on the first `MAX_SPOTS` spots' regions and bands. Each side picks the
+ * elements that best fill its box, then the other side looks for each by selector.
+ */
+export async function locate(
+  pages: [Page, Page],
+  shots: [Shot, Shot],
+  spots: Spot[],
+  masks: [Locator[], Locator[]],
+): Promise<void> {
+  const todo = spots.slice(0, MAX_SPOTS);
+  if (!todo.length) return;
+  const masked = await Promise.all(
+    masks.map(async (ls) => (await Promise.all(ls.map((l) => l.elementHandles()))).flat()),
+  );
+  const boxes = (s: 0 | 1) =>
+    todo.map((t) => {
+      const b = s ? t.right : t.left;
+      const o = shots[s].origin;
+      return b.w && b.h ? { ...b, x: b.x + o.x, y: b.y + o.y } : null;
+    });
+  const run = (s: 0 | 1, find: Find[]) =>
+    pages[s].evaluate(probe, { boxes: find.length ? [] : boxes(s), find, masked: masked[s]!, props: PROPS, perSpot: PER_SPOT });
+
+  const [l, r] = await Promise.all([run(0, []), run(1, [])]);
+  const picks = [l.picks, r.picks] as Hit[][][];
+  // Each side looks for what only the other picked.
+  const asks = ([0, 1] as const).map((s) =>
+    picks[1 - s]!.flatMap((hits, i) =>
+      hits.filter((h) => !picks[s]![i]!.some((o) => o.sel === h.sel)).map((h) => ({ i, h })),
+    ),
+  );
+  const answers = await Promise.all(
+    ([0, 1] as const).map((s) =>
+      asks[s]!.length
+        ? run(s, asks[s]!.map(({ h }) => ({ sel: h.sel, tag: h.tag, text: h.text, y: h.box.y }))).then((a) => a.found as (Hit | null)[])
+        : [],
+    ),
+  );
+
+  todo.forEach((spot, i) => {
+    const pairs: [Hit | null, Hit | null][] = [];
+    const keys = new Set<string>();
+    for (const s of [0, 1] as const) {
+      for (const h of picks[s]![i]!) {
+        const k = asks[1 - s]!.findIndex((a) => a.i === i && a.h === h);
+        const other = picks[1 - s]![i]!.find((o) => o.sel === h.sel) ?? (k >= 0 ? answers[1 - s]![k]! : null);
+        const pair: [Hit | null, Hit | null] = s ? [other, h] : [h, other];
+        const key = `${pair[0]?.sel}\n${pair[1]?.sel}`;
+        if (!keys.has(key)) keys.add(key), pairs.push(pair);
+      }
+    }
+    const out: ElementDiff[] = [];
+    for (const [a, b] of pairs.slice(0, PER_SPOT)) {
+      const el = element([a, b], [shots[0].origin, shots[1].origin]);
+      out.push(el);
+      // ponytail: one level of cause; a deeper cascade search if agents ask for it
+      if (el.left && el.right && !Object.keys(el.changed).length && moved(el.left, el.right)) {
+        for (const [p, q] of [[a!.prev, b!.prev], [a!.parent, b!.parent]] as Pair[]) {
+          if (!p || !q || p.sel !== q.sel) continue;
+          const cause = element([p, q], [shots[0].origin, shots[1].origin]);
+          if (Object.keys(cause.changed).length && !out.some((o) => o.selector === cause.selector)) {
+            out.push(cause);
+            break;
+          }
+        }
+      }
+    }
+    const unique = out.filter((e, j) => out.findIndex((o) => o.selector === e.selector) === j);
+    // A band's rows are what one side added; an element on both sides there was only pushed.
+    const added = unique.filter((e) => e.side !== "both");
+    // Unchanged and unmoved, e.g. covered by what changed: noise beside anything that explains.
+    const telling = unique.filter((e) => e.side !== "both" || Object.keys(e.changed).length || moved(e.left!, e.right!));
+    spot.target.elements = spot.kind === "band" && added.length ? added : telling.length ? telling : unique;
+  });
+}

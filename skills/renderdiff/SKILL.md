@@ -23,7 +23,7 @@ Triage, rationalizations, config and gotchas: [reference.md](reference.md).
 ## Verdict (all four, in order)
 
 1. **Numbers** — the `renderdiff:` verdict line and each differing route's rows.
-2. **What you saw in the crops you opened**, per route and width ("/pricing @1440: footer 40px lower on left").
+2. **What you saw** in `dom` and the crops you opened, per route and width, naming the element ("/pricing @1440: `.cta` margin-left 24px→16px").
 3. **Not verified** — errors, skipped widths, masked areas, regions you didn't open, routes not listed.
 4. **Call** — parity, regression, or expected change, and why.
 
@@ -38,11 +38,16 @@ A score without looking is not a verdict: 99.6% can be a missing nav link.
 3. Read `text` first: `-"x"` is only on the reference (missing in your change), `+"x"` only on yours.
 4. A `band -24@y196` is 24 rows only the right has (`+` only the left) at that `y`;
    `aligned 100.00%` means the band is the whole difference. `unaligned`: no bands, see reference.md.
-5. `Read` the crops the `crops` line under each row names, in the directory of the
-   results.json on the verdict line: up to three per width, bands first. Left is always on
-   top or on the left; the change is boxed in red, and a red seam marks where one side lacks the other's rows. Full shots (a crop's name
+5. Read `dom` before any crop: `sel prop l→r` names the element and the computed property
+   (left first); `+sel`/`-sel` exist only on the left/right; `sel x+8` moved with no style of
+   its own changed, so look at the neighbour or parent listed after it. Find the rule, not
+   the value. `--selector <sel>` scopes a rerun to it.
+6. `Read` the crops for what `dom` doesn't explain (no `dom`, text, images): the `crops` line
+   under each row names them, in the directory of the results.json on the verdict line, up to
+   three per width, bands first. Left is always on top or on the left; the change is boxed in
+   red, and a red seam marks where one side lacks the other's rows. Full shots (a crop's name
    with `left`, `right` or `diff` for `c{n}`) only when a crop doesn't explain itself.
-6. Explain every band, region and text line, then widen to all routes and the default widths.
+7. Explain every band, region and text line, then widen to all routes and the default widths.
    For a row collapsed across widths, open the widest and the narrowest.
 
 Exit: 0 nothing below `--threshold` and no errors — without `--threshold` a diff still exits 0,

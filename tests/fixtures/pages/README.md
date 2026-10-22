@@ -12,12 +12,13 @@ Three groups:
   `inline-block-vs-flex`. The two sides are visually identical and built with different CSS.
   These must score ≈100%. They are the corpus's central claim: the score tracks pixels, not
   markup, so a CSS refactor that changed nothing visible reads as "nothing changed".
-- **Controls** — `shifted`, `taller`, `color`, `nav`. Deliberately different. These must score low.
+- **Controls** — `shifted`, `taller`, `color`, `nav`, `margin`. Deliberately different. These must score low.
   A corpus of only passing cases proves nothing; without these, a tool that returned 100%
   unconditionally would pass the suite. They also pin the diff regions (`color`), the row
-  alignment (`taller`, `nav`, and `shifted`, which has no band) and the text diff (`nav`).
+  alignment (`taller`, `nav`, and `shifted`, which has no band), the text diff (`nav`) and the
+  elements each change names (`margin`, `color`, `nav`).
 - **Guard rails** — `blank`, `tall`, `animated`, `lazy`, `lazy-deep`, `lazy-js`, `consent`,
-  `drifting`, `tracker`, `clock`, `ticker`, `unsettled`, `sprite`, `short`, `tall-region`, `reorder`, `stripe`, `frameset`, `menu`, `signed-in`.
+  `drifting`, `tracker`, `clock`, `ticker`, `unsettled`, `sprite`, `short`, `tall-region`, `reorder`, `stripe`, `frameset`, `menu`, `signed-in`, `fixed`.
   One per defence in `src/capture.ts` / `src/config.ts`.
 
 ## Authoring rules

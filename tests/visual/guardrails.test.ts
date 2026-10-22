@@ -446,6 +446,7 @@ describe("component scope", () => {
     assert.equal(r.totalPixels, 208 * 160, context(run));
     assert.ok(r.score < 0.1, context(run));
     assert.deepEqual(r.regions.map(({ x, y, w, h }) => [x, y, w, h]), [[0, 0, 208, 160]], context(run));
+    assert.deepEqual(r.regions[0]!.elements?.map((e) => [e.left, e.changed["background-color"]?.[1]]), [[{ x: 0, y: 0, w: 208, h: 160 }, "rgb(198, 40, 40)"]], "named in the element's own pixels");
     assert.equal(row(parseProgress(run.stdout), "/color", 1440).selector, SWATCH, context(run));
     assert.ok(cardFor(run, `/color [${SWATCH}]`), context(run));
     assert.ok(r.images.left.startsWith("color@xpath_"), r.images.left);
@@ -693,6 +694,23 @@ describe("crops", () => {
     assert.ok(c!.scale >= 0.75, `scaled to ${c!.scale}`);
     const m = await sharp(run.file(c!.path)).metadata();
     assert.ok(Math.ceil(m.width! / 28) * Math.ceil(m.height! / 28) <= 1568, `${m.width}×${m.height}`);
+  });
+});
+
+describe("element attribution", () => {
+  test("a region names the element that fills it, not the page around it", async () => {
+    const run = await capture(["/tall-region"]);
+    const [e] = result(results(run.outDir), "/tall-region", 1440).regions[0]!.elements!;
+    assert.equal(e!.selector, "div.column", context(run));
+  });
+
+  test("under fixed chrome, the element painted on top is named first", async () => {
+    const run = await capture(["/fixed"], { widths: [1440, 375] });
+    for (const width of [1440, 375]) {
+      const els = result(results(run.outDir), "/fixed", width).regions[0]!.elements!;
+      assert.equal(els[0]!.selector, "header.bar", context(run));
+      assert.ok(!els.some((e) => e.selector === "div.under"), "the covered block is unchanged, so not named");
+    }
   });
 });
 

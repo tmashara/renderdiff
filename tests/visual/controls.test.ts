@@ -8,6 +8,7 @@
  *   taller   one extra section, so one side is padded with magenta
  *   color    one recoloured box, geometry untouched
  *   nav      one nav link missing on the left, so everything below it moves up 24px
+ *   margin   one chip's margin-left changed, so it and the chip after it move 8px
  *
  * Bounds are set from measured values (recorded beside each assertion) and left loose enough
  * that font rendering cannot flip them, but far below parity. The point is direction, not a
@@ -145,7 +146,7 @@ for (const width of WIDTHS) {
     assert.deepEqual(r.bands, [], "a recolour moves no rows");
     assert.deepEqual(r.text, { added: [], removed: [] }, "a recolour changes no text");
     const listed = card(report, "/color", width).regions;
-    assert.deepEqual(listed, [g], "the card lists the same single region");
+    assert.deepEqual(listed.map(({ dom, ...b }) => b), [{ x: g.x, y: g.y, w: g.w, h: g.h, pixels: g.pixels }], "the card lists the same single region");
     assert.ok(g.pixels > 0);
   });
 
@@ -198,13 +199,63 @@ for (const route of ["/color", "/nav"]) {
       assert.equal(r.heightDelta, c.heightDelta);
       assert.equal(r.widthDelta, c.widthDelta);
       assert.equal(r.unstablePixels, c.unstablePixels);
-      assert.deepEqual(r.regions.slice(0, 5), c.regions);
+      assert.deepEqual(r.regions.slice(0, 5).map(({ elements, ...g }) => g), c.regions.map(({ dom, ...g }) => g));
       assert.deepEqual(r.text, { added: c.added, removed: c.removed });
       assert.deepEqual(Object.values(r.images), c.images);
       assert.deepEqual(r.crops.map((x) => x.path), c.crops);
     });
   }
 }
+
+for (const width of WIDTHS) {
+  test(`margin @${width} names the chip whose margin changed, and the value on each side`, () => {
+    const r = result(results(run.outDir), "/margin", width);
+    const named = r.regions.flatMap((g) => g.elements ?? []);
+    const blog = named.find((e) => /a\[href="#blog"\]/.test(e.selector));
+    assert.ok(blog, `${JSON.stringify(r.regions)}${context(run)}`);
+    assert.equal(blog.side, "both");
+    assert.deepEqual(blog.changed["margin-left"], ["24px", "16px"]);
+    // Contact moved with it but has no style of its own that changed.
+    const contact = named.find((e) => /#contact/.test(e.selector));
+    assert.deepEqual(contact && [contact.changed, contact.left!.x - contact.right!.x], [{}, 8], context(run));
+  });
+
+  test(`nav @${width} names the link only the right has, in its band`, () => {
+    const r = result(results(run.outDir), "/nav", width);
+    assert.deepEqual(
+      r.bands![0]!.elements?.map((e) => [e.side, e.text, e.left]),
+      [["right", "Pricing", null]],
+      context(run),
+    );
+    assert.match(r.bands![0]!.elements![0]!.selector, /a\[href="#pricing"\]/);
+  });
+
+  test(`color @${width} names the swatch and its new background`, () => {
+    const [e] = result(results(run.outDir), "/color", width).regions[0]!.elements!;
+    assert.match(e!.selector, /swatch/, context(run));
+    assert.deepEqual(e!.changed, { "background-color": ["rgb(31, 111, 235)", "rgb(198, 40, 40)"] });
+  });
+}
+
+test("a named element's selector is unique on both sides, so --selector takes it", async () => {
+  const [blog] = result(results(run.outDir), "/margin", 1440).regions.flatMap((g) => g.elements ?? []).filter((e) => /#blog/.test(e.selector));
+  const r = await runCli([
+    ...renderdiffArgs({ left: site.left, right: site.right, routes: ["/margin"], widths: [1440] }),
+    "--selector",
+    blog!.selector,
+  ]);
+  assert.equal(r.code, 0, context(r));
+  assert.equal(result(results(r.outDir), "/margin", 1440).selector?.left, blog!.selector);
+});
+
+test("the piped summary and the report card show the same elements", () => {
+  const { routes } = parseSummary(run.stdout);
+  assert.match(routes.get("/margin")!.rows[0]!.dom ?? "", /a\[href="#blog"\] margin-left 24px→16px/, context(run));
+  assert.equal(routes.get("/nav")!.rows[0]!.dom, '@1440 -a[href="#pricing"] "Pricing"', context(run));
+  const dom = routes.get("/color")!.rows[0]!.dom;
+  assert.equal(`@1440 ${card(report, "/color", 1440).regions[0]!.dom}`, dom, context(run));
+  assert.equal(`@1440 ${card(report, "/nav", 1440).bands[0]!.dom}`, routes.get("/nav")!.rows[0]!.dom);
+});
 
 test("results.json carries the run meta and a summary that matches the report", () => {
   const { meta, summary, results: rows } = results(run.outDir);
@@ -310,7 +361,8 @@ for (const width of WIDTHS) {
     const r = result(results(run.outDir), "/color", width);
     assert.equal(r.crops.length, 1, context(run));
     const [c] = r.crops;
-    const { pixels, ...box } = r.regions[0]!;
+    const { x, y, w, h } = r.regions[0]!;
+    const box = { x, y, w, h };
     assert.deepEqual([c!.kind, c!.left, c!.right, c!.scale, c!.clipped], ["region", box, box, 1, false]);
   });
 }

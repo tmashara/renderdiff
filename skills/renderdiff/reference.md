@@ -12,6 +12,10 @@
 | Uniform low score, whole page shifted | Almost always a height or font-loading difference near the top pushing everything down. A `band` names where; compare left and right at that `y`. No band means the shift is horizontal or the content itself changed. |
 | `text -"x" +"y"` | Content differs: `-` lines are on the reference only, `+` on your change only. `(+N more)` means more lines; the report card or results.json lists them all. |
 | `unaligned` | The pages differ in height but share too few identical rows to align, so no bands. Either they are very different, the edits total more than 2,000 rows, or sub-threshold noise touches every row. Use the height delta and regions. |
+| `dom sel margin-left 24px→16px` | That element is on both sides and those computed values differ, left first. The value is a symptom: find the rule that sets it, and check it changed on purpose. |
+| `dom +sel "x"` / `dom -sel "x"` | That element exists only on the left (your change) / only on the right. |
+| `dom sel x+8` | It moved but no style of its own changed: the neighbour or parent listed after it is the cause; with none listed, look above it. |
+| No `dom` line | Nothing visible was found under the change (a canvas or image's own pixels), or it was past the first five bands and regions. Open the crop. |
 | `band …@y~N` | Widths collapsed into one row put the band at different `y`; `N` is the first width's. |
 | `unstable Npx` | Pixels that kept changing between shots of the same load on one origin (a ticker, a carousel, a video). Painted out on both sides and excluded from the score. A large number means a big area went unmeasured: look at the magenta on the full shots. Such a route is never on the `clean:` line. |
 | `ERROR selector "…" matched N elements on left (/a), expected 1` | A selector must match exactly one element per side. Make it more specific (`>> nth=0`, an id, `data-test`), or list the route once per element. |
@@ -27,6 +31,7 @@ Report colouring (`--open`, for a human): green above 99.5%, amber to 97%, red b
 | "Worst is 99.1%, no regressions." | You reported a number, not a check. Open the worst route's crops. |
 | "99.6%, it's noise." | Check `text` and the region count first. A missing nav link is 99.6% and one `-` line. |
 | "It's probably just fonts / antialiasing." | "Probably" is exactly what the crop resolves. Look. |
+| "`dom` says margin, done." | It's a computed value. Confirm the source rule changed on purpose, and still open the crop when the region is large or `dom` names nothing. |
 | "The crops looked fine, done." | There are at most three: bands, then the largest regions. Check the region count, any `clipped` crop in results.json, and open the diff PNG for the rest and for any height delta: padding is never cropped. |
 | "Masking the header gets this to 100%." | Every mask is coverage surrendered. Mask only content *proven* to vary per load (clocks, star counts, rotating quotes), with a `reason`, which the report prints verbatim. |
 | "I'll lower `--threshold` until it passes." | Threshold is a CI gate, not a dial for reaching green. |
@@ -37,7 +42,8 @@ Report colouring (`--open`, for a human): green above 99.5%, amber to 97%, red b
 ## results.json
 
 Scripts, and drilling into one route: every score, region (`x,y,w,h,pixels`, left-page
-px), band, full text diff, image path and crop (`kind`, each side's box with `h` 0 at an
+px), band, their `elements` (`selector`, `side`, each side's box, `changed`, `text`; absent
+when not looked at, `[]` when nothing visible was there), full text diff, image path and crop (`kind`, each side's box with `h` 0 at an
 insertion point, `layout` `stacked` = left on top or `side` = left on the left, `scale`,
 `clipped`), `selector` (`{ left, right }` or null), one result per line, so `grep '"url":"/about"'` pulls a route.
 Paths are relative to the out dir. `summary` has `compared`, `errors`, `mean`, `worst` and
