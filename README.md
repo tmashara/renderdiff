@@ -1,80 +1,79 @@
 # renderdiff
 
-Screenshot diff between two origins.
+**Did my migration change how the site renders? A visual-parity check for coding agents.**
 
-Give it a list of routes and two base URLs. It screenshots each route on both sides at
-several viewport widths, pixel-diffs the pairs, and writes a scored HTML report with
-left / right / diff side by side, plus `results.json` and crops of the changes, sized to stay
-legible to coding agents.
+renderdiff screenshots the same routes on two running copies of a site (your branch on
+localhost, and production) at five viewport widths and pixel-diffs each pair. For every
+change it tells you where on the page it is, which DOM element and CSS property is behind
+it, and what text differs. It also writes small crops sized for an LLM's context. It refuses
+to score what it can't trust: blank pages, error pages, pages still moving. A clean result
+means the pixels really matched.
 
-Useful for the "did I break anything?" question a test suite can't answer: a framework
-migration, a CSS refactor, a dependency bump, a staging-vs-production check.
+### Who it's for
 
+Developers who hand a **large website migration** to a coding agent (Claude Code, Codex,
+Cursor), and the agents themselves. The goal of such a migration is *no visible change*, and
+the agent needs a cheap, trustworthy loop: change → `renderdiff` → explain every difference
+→ repeat.
+
+**Use it for:**
+
+- framework migrations (e.g. Gatsby → Next.js, Vue 2 → 3, jQuery templates → React)
+- CSS or design-system refactors (Sass → Tailwind, BEM → CSS modules, a token swap)
+- template or component rewrites, CMS moves, static-site-generator swaps
+- dependency and build upgrades (bundler, PostCSS, font loading)
+- pages that moved during the migration (`/pricing::/plans`), and one component at a time (`--selector`)
+
+**Don't use it for:**
+
+- intentional redesigns: when everything is meant to change, the score says nothing
+- cross-browser testing (Chromium only) or stored-baseline snapshot tests (both origins must be live)
+- discovering routes: you list them; there is no crawler
+- component libraries in isolation; Storybook-based tools fit that better
+
+### 30-second quickstart
+
+```bash
+npx playwright install chromium            # once per machine
+npx renderdiff@latest http://localhost:3000 https://example.com / /about /pricing
 ```
-renderdiff http://localhost:3000 https://example.com / /about /pricing
-```
 
-On a terminal it prints a line per shot as it lands, then the worst scores and the paths
-to `report.html` and `results.json`. Piped — to a file, CI or a coding agent — it prints
-one summary at the end instead, listing only what differs:
+**Left (first origin) is your change; right (second) is the reference.** Piped, which is
+what an agent sees, renderdiff prints only what differs:
 
 ```
 Routes: 3
-clean: /
+clean: / /pricing
 /about  clean @1152,896,704,375
   @1440  97.41%  h-24  band -24@y196  aligned 100.00%  text -"Pricing"
     dom -nav > a[href="/pricing"] "Pricing"
     crops about.1440.c1.png
-/pricing
-  @1440,1152,896,704,375  99.12%–99.87%  1 reg
-    dom @1440 div.plans > a.cta margin-left 24px→16px
-    crops pricing.1440.c1.png pricing.1152.c1.png pricing.896.c1.png pricing.704.c1.png pricing.375.c1.png
-renderdiff: 2 of 3 routes differ (6 of 15 shots), 0 errors, worst 97.41% /about@1440 — /Users/you/site/renderdiff-out/results.json
+renderdiff: 1 of 3 routes differ (1 of 15 shots), 0 errors, worst 97.41% /about@1440 — ./renderdiff-out/results.json
 ```
 
-A row covers the widths that agree on everything but the score (shown as a range): height
-delta (`h`), bands (`+` rows only left has, `-` rows only right has, at `y`; `~` when the
-widths put it in different places), aligned score, region count, unstable pixels and up to
-three text-diff lines (`-"x"` only on the right, `+"x"` only on the left). Under a row,
-`dom` names up to three elements behind the changes (see **Elements** below; `@w` when the
-row covers several widths: the first one's), and `crops` lists that row's crop files,
-relative to the directory `results.json` is in. Errors print in
-full, grouped across the widths that share a message. Clean means not one pixel differs
-and none went unmeasured as unstable; a route with unstable pixels gets its own row. With
-`--threshold`, the verdict line ends `, B below 97.00%`. `--progress` gets the per-shot
-output when piped, `--no-progress` the summary on a terminal.
+Read as: on `/about` at 1440px, your change is 24px shorter (`h-24`) because 24 rows that
+only the reference has (`band -24`) are missing at y=196. With those rows cut out the page
+matches exactly (`aligned 100.00%`). The missing rows are the "Pricing" nav link, which
+exists only on the reference (`-`). Open `renderdiff-out/about.1440.c1.png` to see it.
 
-## Install
+**Without `--threshold`, a diff still exits 0**, so read the summary.
 
-```bash
-npm install -g renderdiff
-npx playwright install chromium   # once, if you don't already have it
-```
+### For coding agents
 
-Requires Node >= 22.18. If the bundled Chromium won't launch, renderdiff falls back to an
-installed Google Chrome on both sides and prints a line saying so; `meta.browser` in
-`results.json` records which browser ran.
-
-### Agent skill
-
-[`skills/renderdiff/SKILL.md`](./skills/renderdiff/SKILL.md) teaches a coding agent to use
-renderdiff without fooling itself: run it with `npx renderdiff@latest`, read the summary
-it prints, then the text diff, the bands and the region crops, and give a verdict that says
-what it looked at — not just a score. The longer reference (triage, rationalizations,
-config, gotchas) sits next to it in `reference.md` and is read only when needed.
-
-In Claude Code, as a plugin:
+Install the skill so the agent runs the loop and reports a verdict, not a bare score:
 
 ```
-/plugin marketplace add tmashara/renderdiff
+/plugin marketplace add tmashara/renderdiff     # Claude Code
 /plugin install renderdiff@renderdiff
+npx skills add tmashara/renderdiff              # Codex, Cursor, others (skills.sh)
 ```
 
-For other agents (Codex, Cursor and so on), with [skills](https://skills.sh):
+### Requirements
 
-```bash
-npx skills add tmashara/renderdiff
-```
+Node >= 22.18 and Chromium (`npx playwright install chromium`). `npm install -g renderdiff`
+installs it globally. If the bundled Chromium won't launch, renderdiff falls back to an
+installed Google Chrome on both sides and says so; `meta.browser` in `results.json` records
+which ran.
 
 ## Usage
 
@@ -84,7 +83,7 @@ renderdiff <left-origin> <right-origin> <route…> [options]
 
 | Argument or flag | |
 | --- | --- |
-| `<origin>` | An argument starting with `http://` or `https://`. The first is left, the second right; a third is an error. |
+| `<origin>` | An argument starting with `http://` or `https://`. The first is left (your change), the second right (the reference); a third is an error. |
 | `<route>` | A literal path, e.g. `/about`, or a pair `/pricing::/plans` (see below). |
 | `--left <url>` | Left origin, instead of the first positional one. Giving both is an error. |
 | `--right <url>` | Right origin, instead of the second positional one. |
@@ -105,155 +104,90 @@ renderdiff <left-origin> <right-origin> <route…> [options]
 | `--no-progress` | The compact summary even on a terminal. |
 | `-h, --help` / `-v, --version` | |
 
-Routes are **literal paths** — there is no route discovery and globs are rejected. Each
+Routes are **literal paths**: there is no route discovery and globs are rejected. Each
 route is loaded on both origins, unless it's a pair.
 
-Default widths are `1440, 1152, 896, 704, 375` — one inside each common responsive band
-rather than on a breakpoint boundary, so a layout switch never flaps between captures.
+Default widths are `1440, 1152, 896, 704, 375`: each sits mid-way inside a common breakpoint
+range rather than on a boundary, so a layout switch never flaps between runs.
 
-Exit codes: `0` no route errored and none scored below `--threshold` (without one, a diff
-still exits 0) · `1` a route scored below `--threshold` · `2` bad arguments, bad config, or an
-origin that isn't responding · `3` a route errored, so it went unmeasured, or the run
-crashed (e.g. no Chromium). `1` wins over `3` when both happen.
+| Exit | Meaning |
+| --- | --- |
+| `0` | No route errored and none scored below `--threshold`. Without one, a diff still exits 0. |
+| `1` | A route scored below `--threshold`. Wins over `3` when both happen. |
+| `2` | Bad arguments, bad config, or an origin that isn't responding. |
+| `3` | A route errored, so it went unmeasured, or the run crashed (e.g. no Chromium). |
 
-## Comparing different routes or components
-
-When a migration moved a page, give the route as a pair: `left::right`.
-
-```
-renderdiff http://localhost:3000 https://example.com /pricing::/plans /about::/company/about
-```
-
-`/pricing::/plans` loads `/pricing` on the left and `/plans` on the right. The split is
-on the first `::` followed by `/`, so `/q?x=std::vector` and `/wiki/Talk:Foo` stay single
-routes, and `pricing::plans` (no slash) is a literal path; `--dry-run` shows how each
-route was read. Each side is normalized on its own, a pair with identical sides is the
-plain route, and an empty side (`/pricing::`) is an error.
-
-A pair is named `/pricing::/plans` in stdout, `results.json` (`url`, plus `left` and
-`right`) and the report; its images are `pricing~plans.{width}.*.png`. A mask whose
-`urlPath` is either side's path is painted on both sides. In a config file, a route can
-also be an object, `{ left: "/pricing", right: "/plans" }`, where `right` defaults to
-`left`.
-
-To compare one component instead of the whole page, give a selector:
+### Moved pages, components, interactions, sign-in
 
 ```
+renderdiff http://localhost:3000 https://example.com /pricing::/plans
 renderdiff http://localhost:3000 https://example.com /pricing --selector "[data-test=plans]"
-renderdiff http://localhost:3000 https://example.com /pricing --left-selector .plans-v2 --right-selector .plans
 ```
 
-Any Playwright selector works, `xpath=` and `>>` chains included, and it's never split on
-`::`. It must match **exactly one** element on each side; otherwise the route errors at once
-with the count (`selector ".card" matched 6 elements on left (/pricing), expected 1`). The
-shot, the score, the regions and the text diff are that element's, in its own pixels; a
-mask is painted where it overlaps the element.
-
-A CLI selector applies to every route and replaces the config's. In a config file a route
-object takes `selector: ".plans"` or `selector: { left: ".plans-v2", right: ".plans" }`;
-to compare several components of one page, list the route once per selector. Such a route
-is `/pricing [.plans]` in the summary and the report, keeps `/pricing @1440` on a
-`--progress` row with the selector on the line under it, has `selector` in `results.json`
-(`{ left, right }`, or `null` for a whole page), and its images are
-`pricing@_plans.{width}.*.png`.
-
-Things to know:
-
-- The whole page still loads and settles first, so a component costs about what its page does.
-- It's shot at scroll 0 with the rest of the page, so a fixed or sticky header over it is
-  in the shot. Hide it with `hideSelectors`.
-- An element inside a shorter scroll container includes whatever paints below the container.
-- A transformed element is shot at its axis-aligned bounding box.
-- Pseudo-elements (`::before`) are rejected by Playwright; elements inside iframes can't be
-  reached. Open shadow roots are pierced.
-- A selector that matches an element with no box (`display: none`) or one off the page is
-  an error. The render gate stays page-level: a textless element on a rendered page is fine.
-
-## Interactions and signed-in pages
-
-When the state worth comparing is behind a click (an open menu, a dismissed modal both
-sides show), give the route a `before` hook in the config. It runs on each side after the
-page loads and its HTTP status is checked, and before renderdiff settles, masks and shoots
-it, with the clock and seeded `Math.random` already in force:
-
-```ts
-export default {
-  routes: [
-    { left: "/", before: async (page) => { await page.click("[aria-label=Menu]"); } },
-  ],
-  // For every route without its own `before` (which replaces it), CLI routes included.
-  before: async (page, { side, route, width }) => {
-    const accept = page.getByRole("button", { name: "Accept" });
-    if (await accept.isVisible()) await accept.click();
-  },
-};
-```
-
-`side` is `"left"` or `"right"`, `route` the route's name (`/a` or `/a::/b`), `width` the
-viewport width. Use `side` only where the markup legitimately differs (the button has a
-different selector on each side), never to make the sides look alike. A hook that throws
-is a route error, `before hook failed on left: …`, and isn't retried. A route that ran one
-has `"hook": true` in `results.json` and a `before hook` badge on its report card.
-Actions in a hook use Playwright's 30s default timeout, so check before clicking what may
-not be there (as above); `hideSelectors` and `extraCss` apply after the hook.
-
-For pages behind a login, save a Playwright storage state once and pass it:
+A pair `left::right` loads `/pricing` on the left and `/plans` on the right. `--selector`
+compares one element, which must match exactly once per side (`--left-selector` /
+`--right-selector` when the markup differs). A state behind a click takes a config `before`
+hook. For pages behind a login:
 
 ```
 npx playwright codegen --save-storage=auth.json https://example.com/login
 renderdiff http://localhost:3000 https://example.com /account --storage-state auth.json
 ```
 
-`--left-storage-state` / `--right-storage-state` give each side its own file, and the
-config takes `storageState: "auth.json"` or `{ left, right }`, relative to the config file.
-A missing or non-JSON file, or one that isn't a storage state, exits 2 before the browser starts. The file's contents are never
-printed; `meta.storageState` and the report name only each side's file. It holds live
-session tokens: **never commit it**, and add it to `.gitignore`. The out dir then holds
-signed-in screenshots, and their text in `results.json`, so don't publish or commit that
-either; add the out dir to `.gitignore` too.
+`auth.json` holds live session tokens: **never commit it**, and keep the out dir (signed-in
+screenshots and text) out of git too. Details: [docs/scoping.md](https://github.com/tmashara/renderdiff/blob/main/docs/scoping.md).
 
 ## Config file
 
-Flags cover a one-off run. A `renderdiff.config.ts` (or `.mjs`) in the working directory
-covers a repo you diff repeatedly, and expresses the things flags can't: **masks** for
-content that legitimately drifts, extra selectors to hide, extra URLs to block.
+Flags cover a one-off run. A `renderdiff.config.{ts,mts,js,mjs}` in the working directory
+covers a repo you diff repeatedly, and expresses what flags can't: **masks** for content
+that legitimately drifts, extra selectors to hide, extra URLs to block, `before` hooks.
 
 ```ts
 export default {
-  left: "http://localhost:3000",
-  right: "https://example.com",
-  routes: [
-    "/",
-    "/about",
-    "/pricing::/plans",
-    { left: "/blog", right: "/posts" },
-    { left: "/pricing", selector: "[data-test=plans]" },
-  ],
+  left: "http://localhost:3000",   // your change
+  right: "https://example.com",    // the reference
+  routes: ["/", "/about", "/pricing::/plans", { left: "/pricing", selector: "[data-test=plans]" }],
   widths: [1440, 896, 375],
   threshold: 0.97,
-
   hideSelectors: [".site-cookie-banner"],
   blockUrlPatterns: ["**://*.my-tracker.example/**"],
-
-  masks: [
-    { selector: "[data-star-count]", reason: "live star count", urlPath: "/pricing" },
-  ],
-
-  storageState: "auth.json",   // relative to this file; never commit it
+  masks: [{ selector: "[data-star-count]", reason: "live star count", urlPath: "/pricing" }],
 };
 ```
 
-A mask needs a `reason` and exactly one of `selector` (a Playwright selector) or
-`locate: (page) => Locator`, the escape hatch for what a selector can't say. Without
-`urlPath` it applies to every route.
+**Precedence: CLI flag > config file > built-in default.** Every field is annotated in
+[`renderdiff.config.example.ts`](./renderdiff.config.example.ts). `export default { … }`
+needs no import; `import type { RenderdiffConfig } from "renderdiff"` is for editor types
+only.
 
-See [`renderdiff.config.example.ts`](./renderdiff.config.example.ts) for every field, annotated.
+## Reading the output
 
-**Precedence: CLI flag > config file > built-in default.**
+**Signs always point at your change:** `+` = only in or more in the left (your change);
+`-` = only in or more in the right (the reference).
 
-`export default { … }` needs no import. `import type { RenderdiffConfig } from "renderdiff"`
-with `satisfies RenderdiffConfig` is for editor types only; Node erases it, so the file loads
-without renderdiff installed in that project.
+| Token | Meaning |
+| --- | --- |
+| `97.41%` | Share of measured pixels that match. A range (`99.12%–99.87%`) when one row covers several widths. A triage signal, not a verdict. |
+| `@1440,1152` | The widths a row covers. They agree on height and width delta, bands, aligned score and text; score and region count are ranges. |
+| `h-24` / `w+8` | Height / width delta, left − right. The smaller image is padded with magenta, and the padding counts against the score on purpose. |
+| `band -24@y196` | 24 rows only the reference has, at y=196 (`+`: only your change has them). `@y~196`: the row's widths put it at different y; the first width's is shown. |
+| `aligned 100.00%` | The score with the bands cut out. 100% means the band is the whole difference. |
+| `unaligned` | Heights differ but too few rows match to find bands. Use the height delta and regions. |
+| `3 reg` | Regions: connected patches of differing pixels. A missing link barely moves the score, but it is still a region. |
+| `unstable 1,204px` | Pixels that kept changing between shots of the same load (a ticker, a carousel). Excluded from the score, so the route is never clean. |
+| `text -"Pricing"` | A line of visible text only the reference has (`+`: only your change). Up to three, then `(+N more)`. |
+| `dom sel prop a→b` | Element on both sides whose computed `prop` differs, left value first. |
+| `dom +sel` / `-sel` | Element only on the left / only on the right. |
+| `dom sel x+8` | It moved without its own style changing; the neighbour or parent listed after it is the cause. |
+| `dom sel` | On both sides and unchanged in style or position, so its own pixels changed (an image or canvas). |
+| `crops …` | Up to 3 PNGs per comparison, bands first, relative to `results.json`. Left is on top or on the left, and the change is boxed in red. |
+| `ERROR …` | Unmeasured, which is neither a pass nor a fail. Exits 3. |
+| `accepted:` / `stale accepted:` | Shots whose every difference was accepted, and accepted entries the run no longer saw. See below. |
+| `rerun:` | With `--rerun-failed`: how many shots were rerun and how many reused. |
+
+Read text first, then `dom`, then the crops for anything `dom` doesn't explain. Full
+detail, including the `--progress` and report forms: [docs/output.md](https://github.com/tmashara/renderdiff/blob/main/docs/output.md).
 
 ## Accepted differences and reruns
 
@@ -266,133 +200,27 @@ renderdiff http://localhost:3000 https://example.com / /about --accept "differs 
 renderdiff http://localhost:3000 https://example.com / /about --rerun-failed
 ```
 
-`--accept "<reason>"` runs as usual, then writes every difference it saw that isn't accepted
-yet to `renderdiff.accepted.json`, next to the config file (or in cwd without one), each with
-the reason. Scope it the way you scope any run: pass only the routes and `--width`s to accept.
-Commit the file; it is one entry per line, so its diff reads as what was accepted.
-
-A shot whose every difference matches an accepted one is `accepted`: it is listed on an
-`accepted:` line like `clean:`, doesn't count as differing or toward `--threshold`, and has
-`"accepted": true` in `results.json` and a badge in the report. Anything else on the page
-still shows: a row with some changes accepted says `1 accepted`, and its `dom` line skips
-them. A shot with unstable pixels is never accepted, since part of it went unmeasured.
-`summary.mean` and `summary.worst` leave accepted shots out, like the verdict line.
-Accepted entries for a route and width the run measured but didn't see are **stale**: they
-print on a `stale accepted:` line, sit in `summary.stale` and the report, and the next
-`--accept` over that route and width prunes them.
-
-Each entry is one change, a band or a region, keyed by route (as the summary names it) and
-width, with a fingerprint. Two changes match when they have the same kind and side, the same
-`x`, width and height (regions sit on the 16px grid, bands are exact rows), the same hash of
-every pixel under the change on both sides at 4 bits a channel, and, when the entry named
-elements, the same `dom` elements with the same changed values. That makes a match:
-
-- robust to a change above it moving it down the page (`y` is left out), to unrelated
-  changes elsewhere (they are their own changes, and stay unaccepted), and to shade jitter
-  that stays within one of sixteen steps per channel;
-- strict about the spot itself: any other change to what is drawn there, a change touching
-  it (the region grows), or a second identical change (an entry matches once) all surface.
-
-The cost is false alarms rather than hidden changes. Noise that crosses a 4-bit step, an
-element probe that times out, or a new change that makes repeated identical rows align
-differently (turning an accepted region into bands) makes an accepted change show again;
-accept it again once you've looked. What can still hide is a shade change under one step
-(e.g. `#000` to `#080808`) that doesn't cross a step boundary anywhere in the change.
-
-A shot whose pages differ in width, or in height without the rows aligning into bands, is
-never accepted: the padding past the shorter page belongs to no band or region, so no
-fingerprint covers it.
-
-`--rerun-failed` reads `results.json` in `--out`, keeps every shot that was clean or is
-accepted (against the accepted file as it is now), reruns the rest — differences, unstable
-shots, errors — and merges them back into `results.json` and `report.html` in route and width
-order. The out dir is kept rather than wiped; only a rerun shot's own old files are replaced.
-A `rerun:` line says how many shots it reran on how many routes, and how many it reused.
-`meta` describes the rerun (its clock, browser and time); a reused shot was taken under the
-earlier run's. It must repeat the previous run: different origins, routes, widths, config
-(`meta.config` hashes masks, `before` hooks and `locate` sources, hidden selectors, block
-patterns, extra CSS and storage state file names) or renderdiff version exit 2, as does a
-missing `results.json`.
-
-## How it reads
-
-The score is the share of pixels that match, per route per width. Green above 99.5%,
-amber to 97%, red below. It is a triage signal, not a verdict — open the report and
-look at the diff column.
-
-Under each score, `--progress` output and the report card say where to look:
-
-```
-  [3/8] 97.14%  /pricing @1440  (height -24px)
-        band -24px at y=196 (right)
-        aligned 100.00%
-        text: 0 added, 1 removed
-```
-
-- **Regions** are connected patches of differing pixels, on a 16px grid, largest first. On
-  a long page a missing link barely moves the score; it is still a region. Only the area
-  both sides cover is searched: padding is reported by the height delta and the bands. With
-  bands, regions come from the realigned rows, so content a band only pushed down isn't
-  one (above, the band is the whole difference, so there are none). The
-  card lists the top five with their pixel counts; up to three crops cover the bands first,
-  then the largest regions.
-- **Bands** are rows only one side has, found by aligning the two images row by row. `-24px
-  at y=196 (right)` means the right side has 24 rows there that the left lacks — signed like
-  the height delta. When rows of identical content repeat, the band's `y` can slide along
-  them, so treat it as approximate. `aligned` is the score over the rows the alignment pairs,
-  i.e. what the page would score if the bands were cut out; it only shows when there are
-  bands. Pages of different heights that share too few identical rows say `rows too
-  different to align`. A horizontal shift is never a band. Alignment works on exact row
-  matches, so it gives up when the edits total more than 2,000 rows (a single inserted or
-  removed block aligns at any height), or when sub-threshold shade noise touches every row.
-- **Elements** name what is under the first five bands and regions, up to three each, read
-  from the live pages right after the shot. Each is a CSS selector unique on its side, so
-  `--selector` takes it. `-sel "text"` exists only on the right, `+sel` only on the left;
-  `sel margin-left 24px→16px` is on both, with the computed properties that differ, left
-  first; `sel x+8` moved without a style of its own changing, so the cause is a neighbour or
-  its parent, which is listed after it when one of them changed; a bare `sel` is on both
-  sides with nothing compared changed or moved, so its own pixels did (an image's source, a
-  canvas). An element without text is only paired when its box is the same size on both
-  sides; `rightSelector` is set when the right side was found by its text under another
-  selector. A band names only what one side added, not what it pushed down, so it can name
-  nothing; what fixed chrome covers isn't named. Probing gives up after 5s, leaving the
-  elements out. A computed
-  value is a symptom: find the rule that set it. Shadow DOM and iframes aren't searched.
-- **Text** is a line diff of each side's `document.body.innerText` (the element's, with a
-  selector). Left is the changed version: *added* lines are on the left only, *removed* lines on the right only. The card
-  lists the first 20. Masked elements are left out. Unmasked text that changes per load
-  (a ticker, a clock) shows up here whenever the two sides differed at capture time, even
-  when its pixels were painted out as unstable.
-
-**Magenta means padding.** When one side is taller or wider, the shorter image is padded
-with magenta, and that padding counts against the score on purpose: a page 400px shorter
-than the one it's compared against has not reached parity. The `height ±Npx` badge on the
-row names the cause.
-
-**Errors are not failures.** A route that threw produced no measurement, so it is
-neither a pass nor a fail. It's listed separately in the report — and it still exits non-zero
-(`3`), because an unmeasured route is not a verified one.
+`--accept "<reason>"` writes every difference the run saw to `renderdiff.accepted.json` (next
+to the config, or in cwd); commit it. Later, a shot whose every difference matches an entry is
+listed on an `accepted:` line and counts neither as differing nor toward `--threshold`;
+anything new on the same page still shows. `--rerun-failed` reruns only what the last run in
+`--out` didn't find clean or accepted and merges it back; it exits 2 if the run differs from
+the previous one. Matching rules, what can still hide, and stale entries:
+[docs/accepted.md](https://github.com/tmashara/renderdiff/blob/main/docs/accepted.md).
 
 ## Output
 
 Everything lands in the out dir (`./renderdiff-out` by default):
 
-- `report.html` — the scored report.
-- `{slug}.{width}.{left,right,diff}.png` — full-page shots and the diff. `/` slugs to
+- `report.html`: the scored report.
+- `{slug}.{width}.{left,right,diff}.png`: full-page shots and the diff. `/` slugs to
   `index`, `/blog/foo` to `blog-foo`, other characters to `_`, a pair `/a::/b` to `a~b`; a
   clash gets a `-2` suffix.
-- `{slug}.{width}.c{n}.png` — up to three crops per comparison: bands (rows only one side
-  has), tallest first, then the largest regions. Each shows left and right at native scale,
-  padded by 48px and at least 320px wide, with a 1px red box around the change; on the side
-  that lacks a band's rows, a 2px red seam is inserted where they would be, hiding nothing.
-  Left is always on top (`stacked`, for wide changes) or on the left (`side`, for tall
-  ones). A crop stays within 1,568px on its long edge and 1,568 image tokens
-  (⌈w/28⌉·⌈h/28⌉) and is never scaled below 0.75×; a change too big for that keeps its top
-  rows (or left columns) and is marked `clipped`. Height padding is never cropped.
-- `results.json` — everything above as data, written on every run, errors included, one
+- `{slug}.{width}.c{n}.png`: up to three crops per comparison, left on top or on the left,
+  change boxed in red.
+- `results.json`: everything above as data, written on every run, errors included, one
   result per line, scores rounded down to four decimals (so a shot that differs never
-  reads as `1`). Its types (`Results` and friends) are exported
-  from the package.
+  reads as `1`). Its types (`Results` and friends) are exported from the package.
 
 ```jsonc
 {
@@ -424,7 +252,7 @@ Everything lands in the out dir (`./renderdiff-out` by default):
           "text": "Pricing"      // "rightSelector" when the right one differs
         }]
       }],
-      "text": { "added": [], "removed": ["Pricing"] },
+      "text": { "added": [], "removed": ["Pricing"] },   // added: left only; removed: right only
       "images": { "left": "about.1440.left.png", "right": "about.1440.right.png", "diff": "about.1440.diff.png" },
       "crops": [{
         "path": "about.1440.c1.png", "kind": "band",          // or "region"
@@ -447,107 +275,23 @@ Everything lands in the out dir (`./renderdiff-out` by default):
 
 Paths are relative to the out dir. Results are in route-then-width order.
 
-## What it does to make two loads comparable
+## Why a clean result is trustworthy
 
-- **Refuses to start** unless both origins answer a HEAD request. Two error pages diffed
-  against each other score ~100%, which is the likeliest way a tool like this lies to you.
-- **Refuses a shot** it can't trust: an HTTP status of 400 or above on either side is an
-  error naming the status. A route where *both* sides look blank — under 200 characters of
-  text and no visible images, SVG, canvas, video, iframes or form controls — errors instead
-  of quietly scoring as a match. If only one side is blank, the diff shows it.
-- **Blocks analytics, consent and A/B tooling** at the network layer on both sides —
-  GTM, GA, Segment, Intercom, Hotjar, LinkedIn, Meta, OneTrust, CookieLaw, VWO. Blocked
-  rather than hidden, because A/B tools rewrite arbitrary DOM and CSS can't pre-empt an
-  experiment you haven't seen. Blocking must stay symmetric: doing it on one side only
-  is itself a diff.
-- **Pins what varies between loads**, identically on both sides: the clock starts at one
-  instant per run (floored to the minute) on every load and then runs, `Math.random` is
-  seeded, timezone (UTC), locale (en-US), colour scheme
-  (light) and `prefers-reduced-motion` are fixed, and videos are paused at frame 0. A clock
-  that shows seconds can still tick between the two sides and may need a mask.
-- **Kills animation, transitions and caret blink**, and hides common consent banners and
-  dev toolbars.
-- **Settles the page** — makes native lazy images eager, scrolls every viewport-height
-  slice a frame at a time so script lazy loaders fire, waits for every image to decode,
-  `document.fonts.ready` and up to 3s for the network to go 250ms with nothing in flight
-  (server-sent events and beacons don't count), then re-injects the stylesheet to
-  catch late-injected chrome.
-- **Shoots until stable** — repeats the screenshot until two in a row match (at most 3; 2
-  for tiled pages). Pixels still changing between the last two shots of the same load are
-  noise from that origin: they're painted magenta on both sides, reported per comparison
-  as `unstable`, and excluded from the measurement — the score is over the remaining
-  pixels. A route more than 25% unstable errors as `page did not settle`.
-- **Isolates state** — one browser context per origin, so cookies and localStorage never
-  cross (a storage state file seeds each context on its own). Both sides of a route load at
-  the same time.
-- **Retries once** per shot; a live site can time out on a cold edge.
-- **Stitches tall pages.** A single screenshot past 16,384px can come out truncated or
-  wrapped (Chrome repeats the top of the page; recent headless Chromium does not), so taller
-  pages, and element shots taller than that, are captured as tiles through CDP and stitched
-  back together. Masks are
-  painted onto the final image from each element's bounding box, so they apply the same
-  way on both paths. Past 40,000px it errors — that's a broken layout, not a page.
+- **Refuses to start** unless both origins answer: two error pages would score ~100%.
+- **Refuses a shot** with an HTTP status ≥ 400, or where both sides look blank.
+- **Blocks analytics, consent and A/B tooling** at the network layer, on both sides.
+- **Pins what varies between loads**: clock, `Math.random`, timezone, locale, colour scheme, reduced motion, video frames.
+- **Kills animation, transitions and caret blink**, and hides common consent banners and dev toolbars.
+- **Settles the page**: lazy images, fonts and network idle before the shot.
+- **Shoots until stable**, and excludes pixels still moving as `unstable`.
+- **Isolates state** per origin, **retries once** per shot, and **stitches tall pages** past 16,384px.
 
-Every run's report ends with a "What was neutralized" section listing the actual block
-patterns, mask reasons and pinned settings in effect, so the report can't drift from the
-config.
+Each run's report ends with a "What was neutralized" section listing what was in effect.
+Full detail: [docs/how-it-works.md](https://github.com/tmashara/renderdiff/blob/main/docs/how-it-works.md).
 
-## Development
+## Contributing
 
-```bash
-npm install        # builds via the prepare script
-npm run build      # tsc → dist/
-npm run typecheck  # src + tests, no emit
-npm install -g .   # install this working copy globally
-```
-
-Source is TypeScript in `src/`, compiled to ESM in `dist/`. Import specifiers keep their
-`.ts` extension in source (`rewriteRelativeImportExtensions` rewrites them on emit), so
-`node src/cli.ts` also runs directly.
-
-## Tests
-
-```bash
-npm test           # unit tier — no browser, ~4s
-npm run test:visual  # drives Chromium over the fixture corpus, ~40s
-npm run test:all
-```
-
-Built on `node:test`, no test dependencies. Running them needs a Chromium for the visual tier:
-`npx playwright install chromium`.
-
-The suite is black-box: it spawns `node src/cli.ts` and reads results back from stdout,
-`report.html`, `results.json`, and the written PNGs. Nothing under `src/` is imported at
-runtime (only the `results.json` types), so what is asserted is what a user gets. The output
-formats it depends on are parsed in exactly one place, `tests/helpers/parse.ts`.
-
-**`tests/unit/`** — argument parsing, exit codes, route normalization, and config discovery,
-validation and precedence. All of it through `--dry-run`, which exits before the browser.
-
-**`tests/visual/`** — real captures against `tests/fixtures/`, a two-origin site served on
-ephemeral ports. Three groups:
-
-- *Equivalence* — six pairs of pages that are visually identical but built with different CSS:
-  flex against grid, floats against flex, CSS tables against grid, transform-centring against
-  `place-items`, inline-block against flex. These assert a **zero-pixel** diff, not a
-  threshold. They are the corpus's central claim: the score tracks pixels, not markup, so a
-  refactor that changed nothing visible reads as nothing changed.
-- *Controls* — an 8px shift, an extra section, one recoloured box, one changed margin. These
-  must score low. Without them a tool that returned 100% unconditionally would pass the
-  suite. They also pin the elements each change names.
-- *Guard rails* — one per defence above: the blank-page refusal (and a short sign-in page
-  that must not be refused), the 18,000px tiled capture with masks in both tiles, animation
-  stilling, the shared clock start and seeded randomness, the unstable-pixel check, lazy-image
-  settling (native and script-driven, 4,800px below the fold), consent hiding, masks,
-  network blocking, `before` hooks, storage state, and naming fixed chrome over what it
-  covers. Masks
-  and blocking each run twice, with and without their config, so the mechanism is shown doing
-  something rather than a page merely happening to match.
-
-Fixture authoring rules — integer-pixel geometry above all — are in
-[`tests/fixtures/pages/README.md`](./tests/fixtures/pages/README.md), and
-`tests/unit/fixtures.test.ts` enforces what can be enforced. Read them before adding a pair:
-a fractional box is the difference between a clean comparison and sub-pixel noise.
+Development and tests: [CONTRIBUTING.md](https://github.com/tmashara/renderdiff/blob/main/CONTRIBUTING.md).
 
 ## License
 

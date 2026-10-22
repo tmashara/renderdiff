@@ -152,7 +152,7 @@ function parseArgs(argv: string[]): Args {
 }
 
 const HELP = `
-  renderdiff — screenshot diff between two origins
+  renderdiff — check that a migration didn't change how pages render
 
   Usage
     renderdiff <left-origin> <right-origin> <route…> [options]
@@ -160,9 +160,10 @@ const HELP = `
     renderdiff http://localhost:3000 https://example.com / /about
     renderdiff http://localhost:3000 https://example.com /pricing::/plans
 
-  An argument starting with http:// or https:// is an origin: the first is left, the
-  second right (or pass --left / --right). A route is a literal path, loaded on both sides; /a::/b loads
-  /a on the left and /b on the right. No globs, no discovery.
+  An argument starting with http:// or https:// is an origin: the first is left (your
+  change), the second right (the reference); or pass --left / --right. A route is a
+  literal path, loaded on both sides; /a::/b loads /a on the left and /b on the right.
+  No globs, no discovery.
 
   With --selector, each side compares the one element it matches instead of the page;
   it must match exactly one. It applies to every route, over the config's own selectors.
@@ -178,7 +179,7 @@ const HELP = `
 
   Writes report.html, results.json and crops of each change to --out. Exits 1 if a
   route falls below --threshold, 3 if one errored (unmeasured) or the run crashed, 2 on
-  bad arguments or an origin that is down. A diff without --threshold exits 0.
+  bad arguments, bad config or an origin that is down. A diff without --threshold exits 0.
 
   Options
     --left <url>        Left origin, instead of the first positional one.
@@ -209,7 +210,7 @@ const HELP = `
   Default widths: 1440, 1152, 896, 704, 375
 
   Masks, hidden selectors, blocked URLs and route lists go in a config file; CLI flags
-  win over it. See the README, or skills/renderdiff/reference.md.
+  win over it. See https://github.com/tmashara/renderdiff#readme
 `;
 
 const usage = () => {
