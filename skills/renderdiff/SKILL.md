@@ -18,7 +18,8 @@ legitimate: [reference.md](reference.md).
 ## Loop
 
 1. **Baseline first.** Before changing code, run the unmodified build against the reference
-   (`--out renderdiff-baseline`). Differences already there are not yours.
+   with `--accept "differs before the migration"`: what already differs is recorded, not
+   yours. Accept only what you looked at, never to get green.
 2. Both origins up, with the same content and data. `--dry-run` shows the URL pairs.
 3. One route, one width. A row: score, `h±N`/`w±N` height/width delta,
    `band`, `aligned`, `N reg`, `unstable Npx` (moving pixels, unmeasured), `text`.
@@ -30,8 +31,10 @@ legitimate: [reference.md](reference.md).
    Bare `sel`: its own pixels changed (image, canvas).
 7. `Read` the crops under each row (next to results.json) for what `dom` doesn't explain.
    Left is on top or left; red box = change, red seam = missing rows.
-8. Fix or justify every band, region and text line. Re-run after each migration step, then
-   all routes at default widths; for a multi-width row, open the widest and narrowest crop.
+8. Fix or justify every band, region and text line. After each migration step,
+   `--rerun-failed` (same arguments) reruns only what isn't clean or accepted; finish with
+   all routes at default widths. For a multi-width row, open the widest and narrowest crop.
+   `accepted:` routes are known; a row saying `1 accepted` still has something new.
 
 Exit: 0 nothing below `--threshold` (**without it, a diff still exits 0**) · 1 below
 threshold · 2 bad args/config/origin down · 3 a route errored (unmeasured) or crash.

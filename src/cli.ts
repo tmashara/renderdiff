@@ -10,6 +10,8 @@
  * Per-site knobs (masks for content that drifts, extra selectors to hide, defaults for
  * the flags below) live in a `renderdiff.config.ts` / `.mjs` in the working directory.
  */
+import path from "node:path";
+import { ACCEPTED_FILE } from "./accept.ts";
 import {
   label,
   loadConfig,
@@ -34,6 +36,9 @@ interface Args extends CliOverrides {
   routes: string[];
   /** From --selector / --left-selector / --right-selector; replaces every route's own. */
   selector?: Sides;
+  /** The reason to accept this run's differences with. */
+  accept?: string;
+  rerunFailed: boolean;
 }
 
 /** `Number(raw)`, but reject anything that isn't a finite number with a flag-named error. */
@@ -49,6 +54,7 @@ function parseArgs(argv: string[]): Args {
   const a: Args = {
     dryRun: false,
     open: false,
+    rerunFailed: false,
     help: false,
     version: false,
     routes: [],
@@ -79,7 +85,11 @@ function parseArgs(argv: string[]): Args {
     else if (v === "--open") a.open = true;
     else if (v === "--progress") a.progress = true;
     else if (v === "--no-progress") a.progress = false;
-    else if (v === "--left") a.left = next();
+    else if (v === "--rerun-failed") a.rerunFailed = true;
+    else if (v === "--accept") {
+      a.accept = next().trim();
+      if (!a.accept) throw new Error("--accept needs a reason");
+    } else if (v === "--left") a.left = next();
     else if (v === "--right") a.right = next();
     else if (v === "--out") a.outDir = next();
     else if (v === "--config") a.config = next();
@@ -132,6 +142,9 @@ function parseArgs(argv: string[]): Args {
     throw new Error(`--${has}-selector needs --${lacks}-selector or --selector`);
   }
   if (left && right) a.selector = { left, right };
+  if (a.dryRun && (a.rerunFailed || a.accept !== undefined)) {
+    throw new Error(`${a.rerunFailed ? "--rerun-failed" : "--accept"} needs a run, not --dry-run`);
+  }
   if (state.both || state.left || state.right) {
     a.storageState = { left: state.left ?? state.both, right: state.right ?? state.both };
   }
@@ -160,6 +173,10 @@ const HELP = `
     npx playwright codegen --save-storage=auth.json <url>
   A before hook in the config runs on each page before it is shot, e.g. to open a menu.
 
+  --accept "<reason>" records this run's differences in renderdiff.accepted.json (next to
+  the config, or in cwd); later runs report them as accepted, and anything new still shows.
+  --rerun-failed reruns only what the previous run in --out didn't find clean or accepted.
+
   Writes report.html, results.json and crops of each change to --out. Exits 1 if a
   route falls below --threshold, 3 if one errored (unmeasured) or the run crashed, 2 on
   bad arguments, bad config or an origin that is down. A diff without --threshold exits 0.
@@ -179,6 +196,9 @@ const HELP = `
                         Start both sides with this storage state JSON. Never commit it.
     --left-storage-state <file>, --right-storage-state <file>
                         That side's storage state, over --storage-state.
+    --accept <reason>   Accept this run's differences, scoped by its routes and widths.
+    --rerun-failed      Rerun what the last run in --out didn't find clean or accepted,
+                        keeping the rest. Same origins, routes and widths as that run.
     --dry-run           Print the URL pairs and exit. No browser.
     --open              Open the report when the run finishes.
     --progress          A line per shot as it finishes. The default on a terminal;
@@ -304,6 +324,9 @@ try {
       cfg,
       open: args.open,
       progress: args.progress ?? !!process.stdout.isTTY,
+      accept: args.accept ?? null,
+      rerun: args.rerunFailed,
+      acceptedFile: path.join(configPath ? path.dirname(configPath) : process.cwd(), ACCEPTED_FILE),
     }),
   );
 } catch (e) {

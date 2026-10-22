@@ -24,6 +24,9 @@ Left is your change, right is the reference: `+` is only/more on the left, `-` o
 | `unstable Npx` | Pixels that kept changing between shots of the same load on one origin (a ticker, a carousel, a video). Painted out on both sides and excluded from the score. A large number means a big area went unmeasured: look at the magenta on the full shots. Such a route is never on the `clean:` line. |
 | `ERROR selector "…" matched N elements on left (/a), expected 1` | A selector must match exactly one element per side. Make it more specific (`>> nth=0`, an id, `data-test`), or list the route once per element. |
 | `ERROR selector "…" has no box on …` | It matched an element that isn't rendered (`display: none`, zero size). |
+| `accepted: /a /b` | Every difference on those routes matches `renderdiff.accepted.json`. Known, not verified again: say so in the verdict. |
+| `N accepted` on a row | Some of that shot's changes are accepted; the rest are new. `dom` names only the new ones. |
+| `stale accepted: /a@1440` | An accepted difference wasn't seen. It was fixed, or the page changed under it; `--accept` over that route and width prunes it. |
 | `ERROR page did not settle: Npx unstable at …` | More than 25% of the page kept changing between shots, so too little was measured to score. Mask or stop the moving part. |
 
 Report colouring (`--open`, for a human): green above 99.5%, amber to 97%, red below.
@@ -38,6 +41,7 @@ Report colouring (`--open`, for a human): green above 99.5%, amber to 97%, red b
 | "`dom` says margin, done." | It's a computed value. Confirm the source rule changed on purpose, and still open the crop when the region is large or `dom` names nothing. |
 | "The crops looked fine, done." | There are at most three: bands, then the largest regions. Check the region count, any `clipped` crop in results.json, and open the diff PNG for the rest and for any height delta: padding is never cropped. |
 | "Masking the header gets this to 100%." | Every mask is coverage surrendered. Mask only content *proven* to vary per load (clocks, star counts, rotating quotes), with a `reason`, which the report prints verbatim. |
+| "I'll `--accept` it so the run is green." | Accept only differences you opened and that exist before your change (or are intended), with a reason that says which. |
 | "I'll lower `--threshold` until it passes." | Threshold is a CI gate, not a dial for reaching green. |
 | "That route errors, I'll drop it from the list." | Shrinking the route list shrinks what you verified. Fix it, or say it's unverified. |
 | "One width is enough." | Migrations break at one width and not others. That's why there are five defaults. |
@@ -91,7 +95,16 @@ cookie script ran wedges the renderer).
 
 - **stdout is compact when piped** (what an agent sees). `--progress` prints a line per
   shot instead; `--no-progress` forces the summary on a terminal.
-- **The out dir is wiped at the start of every run.** To keep a previous run's evidence
+- **Accepted differences** (`--accept "<reason>"`) go to `renderdiff.accepted.json` next to the
+  config (or in cwd), one entry per band or region, scoped by the run's routes and widths. A
+  match ignores `y` and needs the same box, the same pixel hash and the same named elements, so
+  anything else drawn in that spot still surfaces. A shot whose widths differ, or whose heights
+  differ without aligning, is never accepted. A new change can make an accepted one re-read
+  as different (repeated rows aligning differently): look, then accept again.
+- **`--rerun-failed`** keeps the out dir and reruns only what wasn't clean or accepted. Give it
+  the same origins, routes, widths and config (hooks included) as the run it continues, or it
+  exits 2.
+- **The out dir is wiped at the start of every run** (except `--rerun-failed`). To keep a previous run's evidence
   next to a new one, pass `--out renderdiff-before` / `--out renderdiff-after`. A
   directory holding files renderdiff didn't write is refused (exit 2).
 - **Routes normalize** to no trailing slash; `/` stays `/`. Globs are rejected.

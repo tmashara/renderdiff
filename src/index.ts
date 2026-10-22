@@ -38,3 +38,4 @@ export {
 
 export { type Band, type Box, type Region, type TextDiff } from "./compare.ts";
 export { type ElementDiff } from "./locate.ts";
+export { type Accepted, type Fingerprint } from "./accept.ts";

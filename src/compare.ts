@@ -29,6 +29,10 @@ export interface Region {
   pixels: number;
   /** The elements under it; absent when not looked at. */
   elements?: ElementDiff[];
+  /** Both sides' pixels under it, hashed, for matching it against accepted ones. */
+  hash?: string;
+  /** The reason of the accepted difference it matched. */
+  accepted?: string;
 }
 
 /** Rows one side has that the other lacks, at `y` in that side's own coordinates. */
@@ -38,6 +42,10 @@ export interface Band {
   h: number;
   /** The elements in its rows; absent when not looked at. */
   elements?: ElementDiff[];
+  /** Its rows' pixels, hashed, for matching it against accepted ones. */
+  hash?: string;
+  /** The reason of the accepted difference it matched. */
+  accepted?: string;
 }
 
 /** Left is the changed version, right the reference: `added` is on left only, `removed` on right only. */
@@ -153,6 +161,7 @@ export async function compare(left: Shot, right: Shot): Promise<Diff> {
           target: found[i]!,
         })),
       ];
+  for (const s of spots) s.target.hash = pixelHash(l, r, w, [s.left, s.right]);
   // Padding is magenta against real content, so a height difference lands in
   // `diffPixels` and drags the score down. Intended: a page 400px shorter than the
   // one it's compared against has not reached parity. `heightDelta` names the cause.
@@ -462,6 +471,28 @@ function inPlace(p: ReturnType<typeof pairUp>, ha: Uint32Array, hb: Uint32Array)
     i--;
   }
   return { bands, at, rows };
+}
+
+/**
+ * FNV-1a over every pixel of the change on both sides, 4 bits a channel, as hex: shade jitter
+ * under one step survives, any other change to what is drawn there doesn't.
+ */
+function pixelHash(l: Buffer, r: Buffer, stride: number, boxes: [Box, Box]): string {
+  let hash = 0x811c9dc5;
+  for (const [raw, b] of [
+    [l, boxes[0]],
+    [r, boxes[1]],
+  ] as const) {
+    for (let y = b.y; y < b.y + b.h; y++) {
+      for (let x = b.x, o = (y * stride + x) * 4; x < b.x + b.w; x++, o += 4) {
+        hash = Math.imul(
+          hash ^ ((raw[o]! >> 4) | (raw[o + 1]! & 0xf0) | ((raw[o + 2]! >> 4) << 8)),
+          16777619,
+        );
+      }
+    }
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
 /** Columns holding anything but each row's x=0 colour, over rows `y0..y1`; the full width if none. */

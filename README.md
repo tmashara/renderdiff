@@ -96,6 +96,8 @@ renderdiff <left-origin> <right-origin> <route…> [options]
 | `--left-selector <sel>`, `--right-selector <sel>` | That side's selector, over `--selector`. One without the other side (or `--selector`) is an error. |
 | `--storage-state <file>` | Start both sides with this Playwright storage state (cookies, localStorage), e.g. signed in. Relative to cwd. Over the config's `storageState`. |
 | `--left-storage-state <file>`, `--right-storage-state <file>` | That side's storage state, over `--storage-state`. One side alone is fine. |
+| `--accept <reason>` | Record this run's differences as accepted, with a reason. See **Accepted differences and reruns**. |
+| `--rerun-failed` | Rerun only what the last run in `--out` didn't find clean or accepted, keeping the rest. |
 | `--dry-run` | Print the URL pairs and exit. No browser. |
 | `--open` | Open the report when the run finishes. |
 | `--progress` | A line per shot as it finishes, then the worst scores. The default on a terminal; piped, renderdiff prints one compact summary at the end. |
@@ -181,9 +183,30 @@ only.
 | `dom sel` | On both sides and unchanged in style or position, so its own pixels changed (an image or canvas). |
 | `crops …` | Up to 3 PNGs per comparison, bands first, relative to `results.json`. Left is on top or on the left, and the change is boxed in red. |
 | `ERROR …` | Unmeasured, which is neither a pass nor a fail. Exits 3. |
+| `accepted:` / `stale accepted:` | Shots whose every difference was accepted, and accepted entries the run no longer saw. See below. |
+| `rerun:` | With `--rerun-failed`: how many shots were rerun and how many reused. |
 
 Read text first, then `dom`, then the crops for anything `dom` doesn't explain. Full
 detail, including the `--progress` and report forms: [docs/output.md](https://github.com/tmashara/renderdiff/blob/main/docs/output.md).
+
+## Accepted differences and reruns
+
+A migration starts with differences that already exist between the untouched local build
+and production. Record them once, then change code and re-check only what's red:
+
+```
+renderdiff http://localhost:3000 https://example.com / /about --accept "differs before the migration"
+# …change code…
+renderdiff http://localhost:3000 https://example.com / /about --rerun-failed
+```
+
+`--accept "<reason>"` writes every difference the run saw to `renderdiff.accepted.json` (next
+to the config, or in cwd); commit it. Later, a shot whose every difference matches an entry is
+listed on an `accepted:` line and counts neither as differing nor toward `--threshold`;
+anything new on the same page still shows. `--rerun-failed` reruns only what the last run in
+`--out` didn't find clean or accepted and merges it back; it exits 2 if the run differs from
+the previous one. Matching rules, what can still hide, and stale entries:
+[docs/accepted.md](https://github.com/tmashara/renderdiff/blob/main/docs/accepted.md).
 
 ## Output
 
@@ -243,7 +266,9 @@ Everything lands in the out dir (`./renderdiff-out` by default):
   "summary": {
     "compared": 1, "errors": 1, "mean": 0.9714,
     "worst": { "url": "/about", "width": 1440, "score": 0.9714 },
-    "belowThreshold": 0
+    "belowThreshold": 0,          // accepted shots aside
+    "accepted": 0,                // shots whose every difference was accepted
+    "stale": []                   // accepted entries the run measured but didn't see
   }
 }
 ```

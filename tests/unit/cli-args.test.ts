@@ -54,6 +54,8 @@ describe("help and version", () => {
       "--storage-state",
       "--left-storage-state",
       "--right-storage-state",
+      "--accept",
+      "--rerun-failed",
     ]) {
       assert.ok(r.stdout.includes(flag), `--help does not mention ${flag}`);
     }
@@ -346,6 +348,18 @@ describe("storage state", () => {
     );
     assert.equal(r.code, 2, r.stderr);
     assert.match(r.stderr, /storage state file not found: .*nope\.json/);
+  });
+});
+
+describe("accept and rerun", () => {
+  test("--accept needs a reason", async () => {
+    await rejects(["--dry-run", L, R, "/a", "--accept"], "--accept needs a value");
+    await rejects(["/a", "--left", L, "--right", R, "--accept", " "], "--accept needs a reason");
+  });
+
+  test("--accept and --rerun-failed need a run, not --dry-run", async () => {
+    await rejects(["--dry-run", L, R, "/a", "--accept", "known"], "--accept needs a run");
+    await rejects(["--dry-run", L, R, "/a", "--rerun-failed"], "--rerun-failed needs a run");
   });
 });
 
