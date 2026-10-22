@@ -202,7 +202,7 @@ for (const route of ["/color", "/nav"]) {
       assert.equal(r.widthDelta, c.widthDelta);
       assert.equal(r.unstablePixels, c.unstablePixels);
       assert.deepEqual(
-        r.regions.slice(0, 5).map(({ elements, thumb, ...g }) => g),
+        r.regions.slice(0, 5).map(({ elements, hash, ...g }) => g),
         c.regions.map(({ dom, ...g }) => g),
       );
       assert.deepEqual(r.text, { added: c.added, removed: c.removed });

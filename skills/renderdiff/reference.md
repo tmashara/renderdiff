@@ -93,12 +93,14 @@ cookie script ran wedges the renderer).
 - **stdout is compact when piped** (what an agent sees). `--progress` prints a line per
   shot instead; `--no-progress` forces the summary on a terminal.
 - **Accepted differences** (`--accept "<reason>"`) go to `renderdiff.accepted.json` next to the
-  config (or in cwd), one entry per band, region or size difference, scoped by the run's routes
-  and widths. A match ignores `y` and tolerates noise, but a different value, a grown region or
-  an extra copy in the same spot still surfaces. A new change can make an accepted one re-read
+  config (or in cwd), one entry per band or region, scoped by the run's routes and widths. A
+  match ignores `y` and needs the same box, the same pixel hash and the same named elements, so
+  anything else drawn in that spot still surfaces. A shot whose widths differ, or whose heights
+  differ without aligning, is never accepted. A new change can make an accepted one re-read
   as different (repeated rows aligning differently): look, then accept again.
 - **`--rerun-failed`** keeps the out dir and reruns only what wasn't clean or accepted. Give it
-  the same origins, routes, widths and config as the run it continues, or it exits 2.
+  the same origins, routes, widths and config (hooks included) as the run it continues, or it
+  exits 2.
 - **The out dir is wiped at the start of every run** (except `--rerun-failed`). To keep a previous run's evidence
   next to a new one, pass `--out renderdiff-before` / `--out renderdiff-after`. A
   directory holding files renderdiff didn't write is refused (exit 2).

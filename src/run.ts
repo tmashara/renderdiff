@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { chromium, errors, type Browser, type Page } from "playwright";
-import { applyAccepted, readAccepted, writeAccepted } from "./accept.ts";
+import { applyAccepted, readAccepted, updateAccepted } from "./accept.ts";
 import { cancelUnstable, capture, HookError, prepare, type Shot } from "./capture.ts";
 import { compare, crops, type Band } from "./compare.ts";
 import { locate, type ElementDiff } from "./locate.ts";
@@ -101,6 +102,20 @@ const reusable = (r: RouteResult) =>
 const files = (r: RouteResult) =>
   r.status === "compared" ? [...Object.values(r.images), ...r.crops.map((c) => c.path)] : [];
 
+/** Everything that decides how a shot is taken, hook and `locate` sources included. */
+function configHash(cfg: ResolvedConfig, routes: Route[]): string {
+  const { threshold, outDir, concurrency, storageState, ...rest } = cfg;
+  const json = JSON.stringify(
+    {
+      ...rest,
+      storageState: [storageState.left, storageState.right].map((f) => f && path.basename(f)),
+      routes,
+    },
+    (_, v) => (typeof v === "function" ? String(v) : v),
+  );
+  return createHash("sha256").update(json).digest("hex").slice(0, 16);
+}
+
 /** The previous run's results when this run repeats it, else why it doesn't. */
 function previous(file: string, now: Record<string, unknown>): Results | string {
   if (!fs.existsSync(file)) return `no ${file} to rerun from; run without --rerun-failed first`;
@@ -115,6 +130,12 @@ function previous(file: string, now: Record<string, unknown>): Results | string 
     routes: [...new Set(prev.results?.map(name))],
   };
   for (const [key, value] of Object.entries(now)) {
+    if (key === "config" && value !== was[key]) {
+      return (
+        `the config (masks, hooks, hidden selectors, blocked URLs, CSS, storage state) ` +
+        `differs from the one that wrote ${file}; run without --rerun-failed to start over`
+      );
+    }
     if (JSON.stringify(value) !== JSON.stringify(was[key])) {
       return (
         `${key} ${JSON.stringify(value)} differ from the previous run's ${JSON.stringify(was[key])} ` +
@@ -154,11 +175,15 @@ export async function run({
     console.error(`✗ ${e instanceof Error ? e.message : String(e)}`);
     return 2;
   }
+  const config = configHash(cfg, routes);
   const prev = rerun
     ? previous(path.join(cfg.outDir, "results.json"), {
         version: version(),
-        ...setup,
+        left: cfg.left,
+        right: cfg.right,
+        widths: cfg.widths,
         routes: names,
+        config,
       })
     : null;
   if (typeof prev === "string") {
@@ -347,14 +372,17 @@ export async function run({
 
   let { unmatched, stale } = applyAccepted(results, accepted);
   if (accept !== null) {
-    writeAccepted(acceptedFile, [
-      ...accepted.filter((a) => !stale.includes(a)),
-      ...unmatched.map((u) => ({ ...u, reason: accept })),
-    ]);
-    console.log(
-      `accepted ${unmatched.length} difference(s), pruned ${stale.length} stale — ${acceptedFile}`,
-    );
-    ({ stale } = applyAccepted(results, readAccepted(acceptedFile)));
+    const added = unmatched.map(({ route, width, fingerprint }) => ({
+      route,
+      width,
+      reason: accept,
+      fingerprint,
+    }));
+    const pruned = stale.length;
+    if (updateAccepted(acceptedFile, stale, added)) {
+      ({ stale } = applyAccepted(results, readAccepted(acceptedFile)));
+    }
+    console.log(`accepted ${added.length} difference(s), pruned ${pruned} stale — ${acceptedFile}`);
   }
 
   const { left, right, widths, ...rest } = setup;
@@ -369,6 +397,7 @@ export async function run({
     clock: new Date(now).toISOString(),
     ...rest,
     browser: browserMeta,
+    config,
   };
   const reportPath = await writeReport(results, meta, cfg, stale);
   const resultsPath = writeResults(results, meta, cfg.outDir, stale);
@@ -455,8 +484,9 @@ async function shoot(
 function summarize(results: RouteResult[], reportPath: string, resultsPath: string) {
   const compared = results.filter((r): r is ComparedResult => r.status === "compared");
 
-  if (compared.length) {
-    const { sorted, mean, worst } = stats(compared);
+  const open = compared.filter((r) => !r.accepted);
+  if (open.length) {
+    const { sorted, mean, worst } = stats(open);
     console.log(`\nmean ${pct(mean)}   worst ${pct(worst.score)} (${name(worst)} @${worst.width})`);
     for (const r of sorted.slice(0, 10)) {
       console.log(

@@ -29,8 +29,8 @@ export interface Region {
   pixels: number;
   /** The elements under it; absent when not looked at. */
   elements?: ElementDiff[];
-  /** A coarse picture of the change on each side, for matching it against accepted ones. */
-  thumb?: string;
+  /** Both sides' pixels under it, hashed, for matching it against accepted ones. */
+  hash?: string;
   /** The reason of the accepted difference it matched. */
   accepted?: string;
 }
@@ -42,8 +42,8 @@ export interface Band {
   h: number;
   /** The elements in its rows; absent when not looked at. */
   elements?: ElementDiff[];
-  /** A coarse picture of its rows, for matching it against accepted ones. */
-  thumb?: string;
+  /** Its rows' pixels, hashed, for matching it against accepted ones. */
+  hash?: string;
   /** The reason of the accepted difference it matched. */
   accepted?: string;
 }
@@ -161,7 +161,7 @@ export async function compare(left: Shot, right: Shot): Promise<Diff> {
           target: found[i]!,
         })),
       ];
-  for (const s of spots) s.target.thumb = thumb(l, w, s.left) + thumb(r, w, s.right);
+  for (const s of spots) s.target.hash = pixelHash(l, r, w, [s.left, s.right]);
   // Padding is magenta against real content, so a height difference lands in
   // `diffPixels` and drags the score down. Intended: a page 400px shorter than the
   // one it's compared against has not reached parity. `heightDelta` names the cause.
@@ -473,34 +473,26 @@ function inPlace(p: ReturnType<typeof pairUp>, ha: Uint32Array, hb: Uint32Array)
   return { bands, at, rows };
 }
 
-const THUMB = 4;
-
 /**
- * Mean colour of each cell of a 4×4 grid over the box, 4 bits a channel, as hex: a picture of
- * the change that survives sub-threshold noise but not a recolour. "" for an insertion point.
+ * FNV-1a over every pixel of the change on both sides, 4 bits a channel, as hex: shade jitter
+ * under one step survives, any other change to what is drawn there doesn't.
  */
-function thumb(raw: Buffer, stride: number, b: Box): string {
-  if (!b.w || !b.h) return "";
-  let out = "";
-  const edge = (i: number, n: number) => Math.floor((i * n) / THUMB);
-  for (let gy = 0; gy < THUMB; gy++) {
-    for (let gx = 0; gx < THUMB; gx++) {
-      const [x0, y0] = [b.x + edge(gx, b.w), b.y + edge(gy, b.h)];
-      const [x1, y1] = [
-        Math.max(x0 + 1, b.x + edge(gx + 1, b.w)),
-        Math.max(y0 + 1, b.y + edge(gy + 1, b.h)),
-      ];
-      const sum = [0, 0, 0];
-      for (let y = y0; y < y1; y++) {
-        for (let x = x0, o = (y * stride + x) * 4; x < x1; x++, o += 4) {
-          for (let c = 0; c < 3; c++) sum[c]! += raw[o + c]!;
-        }
+function pixelHash(l: Buffer, r: Buffer, stride: number, boxes: [Box, Box]): string {
+  let hash = 0x811c9dc5;
+  for (const [raw, b] of [
+    [l, boxes[0]],
+    [r, boxes[1]],
+  ] as const) {
+    for (let y = b.y; y < b.y + b.h; y++) {
+      for (let x = b.x, o = (y * stride + x) * 4; x < b.x + b.w; x++, o += 4) {
+        hash = Math.imul(
+          hash ^ ((raw[o]! >> 4) | (raw[o + 1]! & 0xf0) | ((raw[o + 2]! >> 4) << 8)),
+          16777619,
+        );
       }
-      const n = (x1 - x0) * (y1 - y0);
-      for (const v of sum) out += (Math.round(v / n) >> 4).toString(16);
     }
   }
-  return out;
+  return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
 /** Columns holding anything but each row's x=0 colour, over rows `y0..y1`; the full width if none. */

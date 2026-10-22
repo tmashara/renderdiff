@@ -41,7 +41,7 @@ export interface ComparedResult extends BaseResult {
   images: { left: string; right: string; diff: string };
   /** At most three: bands, tallest first, then the largest regions. Not one per region. */
   crops: CropResult[];
-  /** Every band, region and size difference matched an accepted one, and none went unmeasured. */
+  /** Every band and region matched an accepted one, and no padding or unstable pixel went unmatched. */
   accepted: boolean;
 }
 
@@ -77,7 +77,10 @@ export interface RunMeta {
   right: string;
   widths: number[];
   threshold: number | null;
-  /** The instant both sides' clocks start at on every load, ISO. */
+  /**
+   * The instant both sides' clocks start at on every load of this run, ISO. A `--rerun-failed`
+   * shot reused from an earlier run was taken under that run's clock.
+   */
   clock: string;
   blockUrlPatterns: string[];
   hideSelectors: string[];
@@ -87,6 +90,8 @@ export interface RunMeta {
   browser: { name: string; version: string };
   /** The storage state file's basename per side, or null. Never its contents. */
   storageState: { left: string | null; right: string | null };
+  /** A hash of everything that decides how a shot is taken; `--rerun-failed` needs it unchanged. */
+  config: string;
 }
 
 export interface Summary {
@@ -128,7 +133,8 @@ export function writeResults(
   stale: Accepted[],
 ): string {
   const compared = results.filter((r): r is ComparedResult => r.status === "compared");
-  const { mean, worst } = compared.length ? stats(compared) : { mean: null, worst: null };
+  const open = compared.filter((r) => !r.accepted);
+  const { mean, worst } = open.length ? stats(open) : { mean: null, worst: null };
   const out: Results = {
     meta,
     results,
@@ -166,13 +172,21 @@ const band = (score: number) => (score >= 0.995 ? "good" : score >= 0.97 ? "warn
 
 function section(rows: ComparedResult[]): string {
   if (!rows.length) return "";
-  const { sorted, mean, worst } = stats(rows);
+  const { sorted } = stats(rows);
+  const open = rows.filter((r) => !r.accepted);
+  const agg = open.length ? stats(open) : null;
 
   return `
 <section>
-  <p class="agg">mean <b class="${band(mean)}">${pct(mean)}</b> &middot;
-     worst <b class="${band(worst.score)}">${pct(worst.score)}</b>
-     (${esc(name(worst))} @${worst.width}) &middot; ${sorted.length} comparison(s)</p>
+  <p class="agg">${
+    agg
+      ? `mean <b class="${band(agg.mean)}">${pct(agg.mean)}</b> &middot;
+     worst <b class="${band(agg.worst.score)}">${pct(agg.worst.score)}</b>
+     (${esc(name(agg.worst))} @${agg.worst.width}) &middot; `
+      : ""
+  }${sorted.length} comparison(s)${
+    rows.length - open.length ? `, ${rows.length - open.length} accepted` : ""
+  }</p>
   ${sorted.map(card).join("\n")}
 </section>`;
 }

@@ -7,19 +7,20 @@ import type { ComparedResult, RouteResult } from "./report.ts";
 export const ACCEPTED_FILE = "renderdiff.accepted.json";
 
 /**
- * One change, without its `y`: a change above it moves it down the page without changing it.
- * `elements` and `thumb` tell a new change in the same spot from the accepted one.
+ * One band or region, without its `y`: a change above it moves it down the page without
+ * changing it. `hash` and `elements` tell a new change in the same spot from the accepted one.
  */
 export interface Fingerprint {
-  kind: "band" | "region" | "size";
+  kind: "band" | "region";
   side?: "left" | "right";
-  /** A region's; a band's width is in its thumb, and `size` holds the width and height deltas. */
+  /** A region's box; a band's rows are in its hash. */
   x?: number;
-  w: number;
+  w?: number;
   h: number;
   /** The `dom` of each element under it, sorted; absent when they weren't looked at. */
   elements?: string[];
-  thumb?: string;
+  /** Both sides' pixels under it, 4 bits a channel. */
+  hash?: string;
 }
 
 /** A difference recorded as already there or intended, so later runs report it as accepted. */
@@ -31,40 +32,39 @@ export interface Accepted {
   fingerprint: Fingerprint;
 }
 
-type Change = { fp: Fingerprint; target: Region | Band | null };
+type Change = { fp: Fingerprint; target: Region | Band };
 
-/** Each band and region, plus the size difference, which padding hides from both. */
 function changes(r: ComparedResult): Change[] {
   const els = (g: Region | Band) =>
     g.elements && { elements: g.elements.map((e) => fmtElements([e], Infinity)).sort() };
   return [
     ...(r.bands ?? []).map((b) => ({
-      fp: { kind: "band" as const, side: b.side, w: 0, h: b.h, ...els(b), thumb: b.thumb },
+      fp: { kind: "band" as const, side: b.side, h: b.h, ...els(b), hash: b.hash },
       target: b,
     })),
     ...r.regions.map((g) => ({
-      fp: { kind: "region" as const, x: g.x, w: g.w, h: g.h, ...els(g), thumb: g.thumb },
+      fp: { kind: "region" as const, x: g.x, w: g.w, h: g.h, ...els(g), hash: g.hash },
       target: g,
     })),
-    ...(r.heightDelta || r.widthDelta
-      ? [{ fp: { kind: "size" as const, w: r.widthDelta, h: r.heightDelta }, target: null }]
-      : []),
   ];
 }
 
-/** A cell may drift by one step a channel: noise, not a change. */
-const near = (a = "", b = "") =>
-  a.length === b.length &&
-  [...a].every((c, i) => Math.abs(parseInt(c, 16) - parseInt(b[i]!, 16)) <= 1);
-
+/** `a` is the accepted entry: elements it recorded must be named again, not merely unprobed. */
 const same = (a: Fingerprint, b: Fingerprint) =>
   a.kind === b.kind &&
   a.side === b.side &&
   a.x === b.x &&
   a.w === b.w &&
   a.h === b.h &&
-  (!a.elements || !b.elements || a.elements.join("\n") === b.elements.join("\n")) &&
-  near(a.thumb, b.thumb);
+  a.hash === b.hash &&
+  (!a.elements || a.elements.join("\n") === b.elements?.join("\n"));
+
+/**
+ * Padding no band or region covers: columns past the narrower page, or rows past the shorter
+ * one when they didn't align. A shot with any, or with unstable pixels, is never accepted.
+ */
+const acceptable = (r: ComparedResult) =>
+  r.unstablePixels === 0 && r.widthDelta === 0 && (r.bands !== null || r.heightDelta === 0);
 
 export function readAccepted(file: string): Accepted[] {
   if (!fs.existsSync(file)) return [];
@@ -89,8 +89,8 @@ export function readAccepted(file: string): Accepted[] {
 
 /**
  * Mark each change an accepted entry matches, one entry per change, and a result `accepted`
- * when every change matched and nothing went unmeasured. Returns the changes nothing matched,
- * and the entries for a measured route and width that matched nothing.
+ * when every change matched and it is `acceptable`. Returns the changes of acceptable results
+ * nothing matched, and the entries for a measured route and width that matched nothing.
  */
 export function applyAccepted(results: RouteResult[], list: Accepted[]) {
   const used = new Set<Accepted>();
@@ -102,12 +102,16 @@ export function applyAccepted(results: RouteResult[], list: Accepted[]) {
     let missed = 0;
     for (const { fp, target } of cs) {
       const hit = mine.find((a) => !used.has(a) && same(a.fingerprint, fp));
-      if (hit) used.add(hit);
-      else missed = unmatched.push({ route: name(r), width: r.width, fingerprint: fp });
-      if (target && hit) target.accepted = hit.reason;
-      else if (target) delete target.accepted;
+      if (hit) {
+        used.add(hit);
+        target.accepted = hit.reason;
+      } else {
+        delete target.accepted;
+        missed++;
+        if (acceptable(r)) unmatched.push({ route: name(r), width: r.width, fingerprint: fp });
+      }
     }
-    r.accepted = cs.length > 0 && !missed && r.unstablePixels === 0;
+    r.accepted = cs.length > 0 && !missed && acceptable(r);
   }
   const measured = new Set(
     results.filter((r) => r.status === "compared").map((r) => `${name(r)}@${r.width}`),
@@ -116,8 +120,25 @@ export function applyAccepted(results: RouteResult[], list: Accepted[]) {
   return { unmatched, stale };
 }
 
-/** One entry per line, so a diff of the file reads as the differences it adds and drops. */
-export function writeAccepted(file: string, list: Accepted[]) {
+const key = (a: Accepted) => JSON.stringify([a.route, a.width, a.reason, a.fingerprint]);
+
+/**
+ * Drop `stale` and add `added` to the file as it is now, so a concurrent `--accept` isn't lost,
+ * sorted by route then width, through a rename so a crash never leaves it half written.
+ * Returns false, writing nothing, when there is nothing to change.
+ */
+export function updateAccepted(file: string, stale: Accepted[], added: Accepted[]): boolean {
+  if (!stale.length && !added.length) return false;
+  const drop = new Set(stale.map(key));
+  const kept = readAccepted(file).filter((a) => !drop.has(key(a)));
+  const have = new Set(kept.map(key));
+  const list = [...kept, ...added.filter((a) => !have.has(key(a)))].sort((a, b) =>
+    a.route < b.route ? -1 : a.route > b.route ? 1 : a.width - b.width,
+  );
+  // One entry per line, so a diff of the file reads as the differences it adds and drops.
   const rows = list.map((a) => `  ${JSON.stringify(a)}`).join(",\n");
-  fs.writeFileSync(file, rows ? `[\n${rows}\n]\n` : "[]\n");
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, rows ? `[\n${rows}\n]\n` : "[]\n");
+  fs.renameSync(tmp, file);
+  return true;
 }
