@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { Locator, Page } from "playwright";
@@ -116,11 +117,12 @@ export const DEFAULT_WIDTHS = [1440, 1152, 896, 704, 375];
 export const DEFAULT_OUT_DIR = "renderdiff-out";
 
 /**
- * Captures run in parallel. Two by default — if one side points at a live site we are
- * a guest there. No extra rate limiting needed: each worker holds at most one load per
- * origin at a time, so this is also the most concurrent loads either origin sees.
+ * Captures run in parallel: half the cores, between 2 and 8. A run is bound by waiting on
+ * pages, not CPU, and each worker holds two. No extra rate limiting needed: each worker
+ * holds at most one load per origin at a time, so this is also the most concurrent loads
+ * either origin sees — lower it when one side is someone's live site.
  */
-export const DEFAULT_CONCURRENCY = 2;
+export const DEFAULT_CONCURRENCY = Math.min(8, Math.max(2, Math.floor(os.availableParallelism() / 2)));
 
 /**
  * Third-party origins aborted at the network layer. Must stay symmetric — blocking on

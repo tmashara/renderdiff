@@ -102,8 +102,8 @@ describe("the render gate", () => {
     assert.deepEqual([res.summary.compared, res.summary.errors], [1, 1]);
   });
 
-  test("an unmeasured route is neither a pass nor a fail, but still exits 1", () => {
-    assert.equal(run.code, 1, `an errored route must exit 1${context(run)}`);
+  test("an unmeasured route is neither a pass nor a fail, but still exits 3", () => {
+    assert.equal(run.code, 3, `an errored route must exit 3${context(run)}`);
     const report = parseReport(run.report()!);
     assert.ok(
       !report.cards.some((c) => c.route === "/blank"),
@@ -117,7 +117,7 @@ describe("the render gate", () => {
 
   test("an HTTP error status is an error that names the status", async () => {
     const run = await capture(["/no-such-route"]);
-    assert.equal(run.code, 1, context(run));
+    assert.equal(run.code, 3, context(run));
     const report = parseReport(run.report()!);
     assert.equal(report.errors.length, 1, context(run));
     assert.match(report.errors[0]!.message, /HTTP 404/);
@@ -132,7 +132,7 @@ describe("the render gate", () => {
 
   test("a hidden SVG sprite does not count as rendered media", async () => {
     const run = await capture(["/sprite"]);
-    assert.equal(run.code, 1, context(run));
+    assert.equal(run.code, 3, context(run));
     const report = parseReport(run.report()!);
     assert.equal(report.errors.length, 1, context(run));
     assert.match(report.errors[0]!.message, /page did not render/);
@@ -176,7 +176,7 @@ describe("the stability check", () => {
 
   test("a page that is mostly unstable is an error, not a score", async () => {
     const run = await capture(["/unsettled"]);
-    assert.equal(run.code, 1, context(run));
+    assert.equal(run.code, 3, context(run));
     const report = parseReport(run.report()!);
     assert.equal(report.errors.length, 1, context(run));
     assert.match(report.errors[0]!.message, /page did not settle: \d+px unstable at \/unsettled/);
@@ -410,7 +410,7 @@ describe("component scope", () => {
     const run = await scoped([], [], config);
     // Not after Playwright's 30s wait.
     assert.ok(Date.now() - start < 5_000, `took ${Date.now() - start}ms${context(run)}`);
-    assert.equal(run.code, 1, context(run));
+    assert.equal(run.code, 3, context(run));
     assert.match(run.stdout, /selector "article" matched 6 elements on left \(\/flex-vs-grid\), expected 1/, context(run));
     assert.match(run.stdout, /selector "\.nope" matched 0 elements on left/, context(run));
   });
@@ -550,7 +550,7 @@ describe("before hooks", () => {
     const before = site.hits("/menu");
     // A message the transient-error retry would otherwise match.
     const run = await hooked('{ before: async () => { throw new Error("net::ERR_FAKE from the hook"); } }', ["/menu"]);
-    assert.equal(run.code, 1, context(run));
+    assert.equal(run.code, 3, context(run));
     const [r] = results(run.outDir).results;
     assert.equal(r?.status, "error", context(run));
     assert.equal(r?.status === "error" && r.error, "before hook failed on left: net::ERR_FAKE from the hook");

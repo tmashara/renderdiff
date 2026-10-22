@@ -8,7 +8,7 @@
 | Everything on the `clean:` line | Suspect before you celebrate. Confirm both sides actually rendered: two identical error pages diff as clean. |
 | `ERROR HTTP 404 at …` (or any status ≥ 400) | That side answered with an error status. Usually a route that doesn't exist on one origin, or a dev server not ready. |
 | `ERROR page did not render on either side (…)` | Both sides had under 200 chars of text and no visible images, SVG, canvas, video, iframes or form controls, so renderdiff refused to score two blanks as a match. Usually a failed asset or an app that never mounted. One blank side isn't refused; it shows up as a low score. |
-| `ERROR` rows | Unmeasured, not failed. They exit 1 because an unmeasured route isn't a verified one. Report them as unverified. |
+| `ERROR` rows | Unmeasured, not failed. They exit 3 because an unmeasured route isn't a verified one. Report them as unverified. |
 | Uniform low score, whole page shifted | Almost always a height or font-loading difference near the top pushing everything down. A `band` names where; compare left and right at that `y`. No band means the shift is horizontal or the content itself changed. |
 | `text -"x" +"y"` | Content differs: `-` lines are on the reference only, `+` on your change only. `(+N more)` means more lines; the report card or results.json lists them all. |
 | `unaligned` | The pages differ in height but share too few identical rows to align, so no bands. Either they are very different, the edits total more than 2,000 rows, or sub-threshold noise touches every row. Use the height delta and regions. |
@@ -120,4 +120,4 @@ cookie script ran wedges the renderer).
 - **Analytics, consent and A/B tooling are blocked at the network layer** on both sides,
   and animations are stilled. If something still flickers between runs, it's a candidate
   for `blockUrlPatterns`, not for a mask.
-- Keep `--concurrency` low (default 2) when the right side is someone's live site.
+- Lower `--concurrency` (default half the cores, 2–8) when the right side is someone's live site.
