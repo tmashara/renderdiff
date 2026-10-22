@@ -1,6 +1,6 @@
 {
   "name": "renderdiff",
-  "description": "The renderdiff skill: check that a change didn't alter how pages render.",
+  "description": "renderdiff: prove a framework migration, CSS refactor or template rewrite didn't change how your site renders.",
   "owner": {
     "name": "Timur Mashara"
   },
@@ -8,7 +8,7 @@
     {
       "name": "renderdiff",
       "source": "./",
-      "description": "Screenshot-diff two origins and judge the result by reading the diffs, not just the score."
+      "description": "Visual-parity loop for coding agents doing website migrations: screenshot-diff your branch against production at several widths and explain every change down to the DOM element and CSS property."
     }
   ]
 }

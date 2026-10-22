@@ -1,10 +1,13 @@
 # renderdiff reference
 
+Left is your change, right is the reference: `+` is only/more on the left, `-` only/more on the right.
+
 ## Triage
 
 | What you see | What it means |
 | --- | --- |
 | `h±N` | One side is taller (`+`: left). The shorter shot is padded with magenta, and the padding counts against the score on purpose. |
+| `w±N` | One side is wider (`+`: left), usually horizontal overflow. The narrower shot is padded with magenta. |
 | Everything on the `clean:` line | Suspect before you celebrate. Confirm both sides actually rendered: two identical error pages diff as clean. |
 | `ERROR HTTP 404 at …` (or any status ≥ 400) | That side answered with an error status. Usually a route that doesn't exist on one origin, or a dev server not ready. |
 | `ERROR page did not render on either side (…)` | Both sides had under 200 chars of text and no visible images, SVG, canvas, video, iframes or form controls, so renderdiff refused to score two blanks as a match. Usually a failed asset or an app that never mounted. One blank side isn't refused; it shows up as a low score. |

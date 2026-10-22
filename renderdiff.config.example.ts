@@ -6,7 +6,9 @@
 import type { RenderdiffConfig } from "renderdiff";
 
 export default {
-  // The two origins. The tool has no notion of which is "prod" — it just diffs them.
+  // left: the build you changed (usually localhost). right: the reference you must match
+  // (usually production). The +/- signs in the output and text.added/removed in
+  // results.json are written from left's point of view.
   left: "http://localhost:3000",
   right: "https://example.com",
 
