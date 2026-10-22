@@ -105,10 +105,7 @@ const toRaw = (png: Buffer, w: number, h: number) =>
 export async function compare(left: Shot, right: Shot): Promise<Diff> {
   // Real PNG dimensions, not the `scrollHeight` we measured: that can disagree with
   // what Chromium actually painted.
-  const [lm, rm] = await Promise.all([
-    sharp(left.png).metadata(),
-    sharp(right.png).metadata(),
-  ]);
+  const [lm, rm] = await Promise.all([sharp(left.png).metadata(), sharp(right.png).metadata()]);
   const lw = lm.width!,
     lh = lm.height!,
     rw = rm.width!,
@@ -117,10 +114,7 @@ export async function compare(left: Shot, right: Shot): Promise<Diff> {
   const w = Math.max(lw, rw);
   const h = Math.max(lh, rh);
 
-  const [l, r] = await Promise.all([
-    toRaw(left.png, w, h),
-    toRaw(right.png, w, h),
-  ]);
+  const [l, r] = await Promise.all([toRaw(left.png, w, h), toRaw(right.png, w, h)]);
 
   const text = textDiff(left.text, right.text);
   const out = Buffer.alloc(w * h * 4);
@@ -169,11 +163,7 @@ export async function compare(left: Shot, right: Shot): Promise<Diff> {
  * Myers' O((N+M)·D) diff: the matched index pairs of a shortest edit script, in order.
  * Null once the edit distance passes `maxD`, unless the edit is one pure insertion or deletion.
  */
-function myers<T>(
-  a: ArrayLike<T>,
-  b: ArrayLike<T>,
-  maxD = MAX_EDIT,
-): [number, number][] | null {
+function myers<T>(a: ArrayLike<T>, b: ArrayLike<T>, maxD = MAX_EDIT): [number, number][] | null {
   const n = a.length,
     m = b.length;
   let p = 0,
@@ -198,7 +188,7 @@ function myers<T>(
           ? v[off + k + 1]!
           : v[off + k - 1]! + 1;
       let y = x - k;
-      while (x < n && y < m && a[x] === b[y]) x++, y++;
+      while (x < n && y < m && a[x] === b[y]) (x++, y++);
       v[off + k] = x;
       if (x >= n && y >= m) return backtrack(trace, n, m, d);
     }
@@ -378,7 +368,11 @@ function align(l: Buffer, r: Buffer, w: number, cw: number, lh: number, rh: numb
       const { x, w: bw } = inkX(b.side === "left" ? l : r, w, cw, b.y, b.y + b.h);
       const here = { x, y: b.y, w: bw, h: b.h };
       const seam = { x, y: at[i]!, w: bw, h: 0 };
-      return { kind: "band", left: b.side === "left" ? here : seam, right: b.side === "right" ? here : seam };
+      return {
+        kind: "band",
+        left: b.side === "left" ? here : seam,
+        right: b.side === "right" ? here : seam,
+      };
     })
     .sort((a, b) => b.left.h + b.right.h - (a.left.h + a.right.h));
   if (!bands.length || !rows.length) return { bands, alignedScore: null, regions: null, spots };
@@ -408,7 +402,11 @@ function align(l: Buffer, r: Buffer, w: number, cw: number, lh: number, rh: numb
     return { y, h: rows[g.y + g.h - 1]![s] + 1 - y };
   };
   for (const { pixels, ...g } of found) {
-    spots.push({ kind: "region", left: { ...g, ...side(g as Region, 0) }, right: { ...g, ...side(g as Region, 1) } });
+    spots.push({
+      kind: "region",
+      left: { ...g, ...side(g as Region, 0) },
+      right: { ...g, ...side(g as Region, 1) },
+    });
   }
   return {
     bands,
@@ -438,7 +436,8 @@ function inPlace(p: ReturnType<typeof pairUp>, ha: Uint32Array, hb: Uint32Array)
     const inBand = (side: Band["side"], y: number) =>
       [a, b].some((n) => n.side === side && y >= n.y && y < n.y + n.h);
     // Matched rows always hash alike, so test the straight pairing about to replace them.
-    if (!span.every(([ly, ry]) => inBand("left", ly) || inBand("right", ry) || ha[ly] === hb[ry])) continue;
+    if (!span.every(([ly, ry]) => inBand("left", ly) || inBand("right", ry) || ha[ly] === hb[ry]))
+      continue;
     rows = [...rows.filter(([ly]) => ly < ls), ...span, ...rows.filter(([ly]) => ly >= le)];
     bands = bands.filter((_, j) => j !== i && j !== i + 1);
     at = at.filter((_, j) => j !== i && j !== i + 1);
@@ -479,8 +478,8 @@ function pairUp(ca: Uint8Array, cb: Uint8Array) {
   for (const [px, py] of [...ka.map((i, n) => [i, kb[n]!] as const), [lh, rh] as const]) {
     const k = Math.min(px - x, py - y);
     for (let j = 0; j < k; j++) rows.push([x + j, y + j]);
-    if (px - x > k) bands.push({ side: "left", y: x + k, h: px - x - k }), at.push(py);
-    if (py - y > k) bands.push({ side: "right", y: y + k, h: py - y - k }), at.push(px);
+    if (px - x > k) (bands.push({ side: "left", y: x + k, h: px - x - k }), at.push(py));
+    if (py - y > k) (bands.push({ side: "right", y: y + k, h: py - y - k }), at.push(px));
     if (px < lh) rows.push([px, py]);
     x = px + 1;
     y = py + 1;
@@ -547,7 +546,9 @@ export async function crops(left: Buffer, right: Buffer, spots: Spot[]): Promise
       let x0 = Math.max(0, Math.min(cw - want, Math.round(bx + bw / 2 - want / 2)));
       let width = want;
       const top = boxes.map((b, i) => Math.max(0, Math.min(b.y, heights[i]! - 1) - CROP_PAD));
-      const tall = boxes.map((b, i) => Math.min(heights[i]!, b.y + b.h + CROP_PAD) - top[i]! + (b.h ? 0 : SEAM));
+      const tall = boxes.map(
+        (b, i) => Math.min(heights[i]!, b.y + b.h + CROP_PAD) - top[i]! + (b.h ? 0 : SEAM),
+      );
       const stacked = width >= Math.max(...tall);
       let clipped = false;
       // Too wide even at MIN_SCALE: keep the left columns, starting at the change.
@@ -571,12 +572,29 @@ export async function crops(left: Buffer, right: Buffer, spots: Spot[]): Promise
       let png = await sharp({ create: { width: W, height: H, channels: 4, background: "#808080" } })
         .composite([
           { input: panels[0]!, left: 0, top: 0 },
-          { input: panels[1]!, ...(stacked ? { left: 0, top: tall[0]! + CROP_GAP } : { left: width + CROP_GAP, top: 0 }) },
+          {
+            input: panels[1]!,
+            ...(stacked
+              ? { left: 0, top: tall[0]! + CROP_GAP }
+              : { left: width + CROP_GAP, top: 0 }),
+          },
         ])
         .png()
         .toBuffer();
-      if (scale < 1) png = await sharp(png).resize(Math.floor(W * scale), Math.floor(H * scale)).png().toBuffer();
-      return { png, kind: g.kind, left: g.left, right: g.right, layout: stacked ? "stacked" : "side", scale: Math.round(scale * 100) / 100, clipped };
+      if (scale < 1)
+        png = await sharp(png)
+          .resize(Math.floor(W * scale), Math.floor(H * scale))
+          .png()
+          .toBuffer();
+      return {
+        png,
+        kind: g.kind,
+        left: g.left,
+        right: g.right,
+        layout: stacked ? "stacked" : "side",
+        scale: Math.round(scale * 100) / 100,
+        clipped,
+      };
     }),
   );
 }
@@ -588,14 +606,32 @@ async function panel(png: Buffer, b: Box, x0: number, top: number, width: number
     // Rows above the seam, the seam, then rows from `b.y` down: nothing on the page is hidden.
     const above = Math.min(height, b.y - top);
     const below = Math.min(height - above - SEAM, (await sharp(png).metadata()).height! - b.y);
-    if (above > 0) layers.push({ input: await sharp(png).extract({ left: x0, top, width, height: above }).toBuffer(), left: 0, top: 0 });
+    if (above > 0)
+      layers.push({
+        input: await sharp(png).extract({ left: x0, top, width, height: above }).toBuffer(),
+        left: 0,
+        top: 0,
+      });
     if (above + SEAM <= height) {
-      layers.push({ input: { create: { width, height: SEAM, channels: 4, background: "#ff0000" } }, left: 0, top: above });
+      layers.push({
+        input: { create: { width, height: SEAM, channels: 4, background: "#ff0000" } },
+        left: 0,
+        top: above,
+      });
     }
-    if (below > 0) layers.push({ input: await sharp(png).extract({ left: x0, top: b.y, width, height: below }).toBuffer(), left: 0, top: above + SEAM });
+    if (below > 0)
+      layers.push({
+        input: await sharp(png).extract({ left: x0, top: b.y, width, height: below }).toBuffer(),
+        left: 0,
+        top: above + SEAM,
+      });
   } else {
     const h = Math.min(height, (await sharp(png).metadata()).height! - top);
-    layers.push({ input: await sharp(png).extract({ left: x0, top, width, height: h }).toBuffer(), left: 0, top: 0 });
+    layers.push({
+      input: await sharp(png).extract({ left: x0, top, width, height: h }).toBuffer(),
+      left: 0,
+      top: 0,
+    });
     // One pixel outside the change, so the outline covers none of it.
     const [rx, ry] = [b.x - x0 - 1, b.y - top - 1];
     const svg =
@@ -603,5 +639,8 @@ async function panel(png: Buffer, b: Box, x0: number, top: number, width: number
       `<rect x="${rx + 0.5}" y="${ry + 0.5}" width="${b.w + 1}" height="${b.h + 1}" fill="none" stroke="#ff0000" stroke-width="1" shape-rendering="crispEdges"/></svg>`;
     layers.push({ input: Buffer.from(svg), left: 0, top: 0 });
   }
-  return sharp({ create: { width, height, channels: 4, background: "#808080" } }).composite(layers).png().toBuffer();
+  return sharp({ create: { width, height, channels: 4, background: "#808080" } })
+    .composite(layers)
+    .png()
+    .toBuffer();
 }

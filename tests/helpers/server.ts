@@ -53,10 +53,7 @@ async function pageHtml(pathname: string, side: Side): Promise<string | null> {
 
   const gen = path.join(dir, "page.ts");
   if (fs.existsSync(gen)) {
-    const mod = (await import(pathToFileURL(gen).href)) as Record<
-      string,
-      () => string
-    >;
+    const mod = (await import(pathToFileURL(gen).href)) as Record<string, () => string>;
     const fn = mod[side];
     if (typeof fn !== "function") {
       throw new Error(`${gen} does not export ${side}()`);
@@ -69,9 +66,7 @@ async function pageHtml(pathname: string, side: Side): Promise<string | null> {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Serve a file from `fixtures/shared/`. Path-traversal guarded — it is still a server. */
-async function sharedFile(
-  pathname: string,
-): Promise<{ body: Buffer; type: string } | null> {
+async function sharedFile(pathname: string): Promise<{ body: Buffer; type: string } | null> {
   const rel = pathname.slice("/shared/".length);
   const file = path.resolve(SHARED_DIR, rel);
   if (!file.startsWith(SHARED_DIR + path.sep) || !fs.existsSync(file)) {
@@ -119,7 +114,7 @@ function handler(side: Side, hits: Map<string, number>): http.RequestListener {
         if (html === null) return send(404, "text/html; charset=utf-8", "no such route");
         return send(200, "text/html; charset=utf-8", html);
       } catch (e) {
-        send(500, "text/plain", e instanceof Error ? e.stack ?? e.message : String(e));
+        send(500, "text/plain", e instanceof Error ? (e.stack ?? e.message) : String(e));
       }
     })();
   };

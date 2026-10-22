@@ -102,11 +102,7 @@ for (const width of WIDTHS) {
     const c = card(report, "/taller", width);
     // The right side has one more 240px band plus a 32px gap. Left is the shorter image, so
     // the delta is negative and left is the side that gets magenta padding.
-    assert.equal(
-      c.heightDelta,
-      -272,
-      `expected the left side to be 272px shorter${context(run)}`,
-    );
+    assert.equal(c.heightDelta, -272, `expected the left side to be 272px shorter${context(run)}`);
     assert.equal(c.widthDelta, 0);
     // Measured 81.32% @1440, 83.18% @375. Padding counts against the score on purpose.
     assert.ok(c.score < 0.9, `expected < 0.9, got ${c.score}${context(run)}`);
@@ -135,9 +131,7 @@ for (const width of WIDTHS) {
     assert.equal(r.regions.length, 1, context(run));
     // Swatch three of the first strip, 208×160 (343 wide at 375), snapped out to the 16px grid.
     const swatch =
-      width === 1440
-        ? { x: 736, y: 168, w: 208, h: 160 }
-        : { x: 16, y: 576, w: 343, h: 160 };
+      width === 1440 ? { x: 736, y: 168, w: 208, h: 160 } : { x: 16, y: 576, w: 343, h: 160 };
     const g = r.regions[0]!;
     assert.ok(g.x <= swatch.x && g.y <= swatch.y, `${JSON.stringify(g)}${context(run)}`);
     assert.ok(g.x + g.w >= swatch.x + swatch.w && g.y + g.h >= swatch.y + swatch.h);
@@ -174,7 +168,11 @@ for (const width of WIDTHS) {
   test(`nav @${width} names the missing link and the 24px it took`, () => {
     const r = result(results(run.outDir), "/nav", width);
     assert.equal(r.heightDelta, -24, context(run));
-    assert.deepEqual(r.bands?.map((b) => [b.side, b.h]), [["right", 24]], context(run));
+    assert.deepEqual(
+      r.bands?.map((b) => [b.side, b.h]),
+      [["right", 24]],
+      context(run),
+    );
     // The link's blank top rows match the line above, so the band may slide a few rows.
     // Measured: y=196 @1440, 236 @375.
     assert.ok(Math.abs(r.bands![0]!.y - PRICING[width]!) <= 8, `band at y=${r.bands![0]!.y}`);
@@ -201,7 +199,10 @@ for (const route of ["/color", "/nav"]) {
       assert.deepEqual(r.regions.slice(0, 5), c.regions);
       assert.deepEqual(r.text, { added: c.added, removed: c.removed });
       assert.deepEqual(Object.values(r.images), c.images);
-      assert.deepEqual(r.crops.map((x) => x.path), c.crops);
+      assert.deepEqual(
+        r.crops.map((x) => x.path),
+        c.crops,
+      );
     });
   }
 }
@@ -215,12 +216,19 @@ test("results.json carries the run meta and a summary that matches the report", 
   assert.ok(meta.blockUrlPatterns.length && meta.hideSelectors.length);
   assert.equal(rows.length, CONTROLS.length * WIDTHS.length);
   for (const r of rows) {
-    if (r.status === "compared") assert.ok(r.score < 1 && r.score * 1e4 === Math.round(r.score * 1e4), `${r.url}@${r.width}: ${r.score}`);
+    if (r.status === "compared")
+      assert.ok(
+        r.score < 1 && r.score * 1e4 === Math.round(r.score * 1e4),
+        `${r.url}@${r.width}: ${r.score}`,
+      );
   }
   assert.equal(summary.compared, report.cards.length);
   assert.equal(summary.errors, 0);
   assert.equal(summary.belowThreshold, 0);
-  assert.equal(Number((summary.worst!.score * 100).toFixed(2)) / 100, Math.min(...report.cards.map((c) => c.score)));
+  assert.equal(
+    Number((summary.worst!.score * 100).toFixed(2)) / 100,
+    Math.min(...report.cards.map((c) => c.score)),
+  );
 });
 
 test("piped stdout is one compact summary: no clean routes, widths collapsed, a verdict", () => {
@@ -235,21 +243,33 @@ test("piped stdout is one compact summary: no clean routes, widths collapsed, a 
     shots: CONTROLS.length * WIDTHS.length,
     total: CONTROLS.length * WIDTHS.length,
     errors: 0,
-    worst: { score: Number((worst.score * 100).toFixed(2)) / 100, route: worst.url, width: worst.width },
+    worst: {
+      score: Number((worst.score * 100).toFixed(2)) / 100,
+      route: worst.url,
+      width: worst.width,
+    },
     below: null,
     results: run.file("results.json"),
   });
   // Both widths agree on everything but the score, so they share one row.
   const nav = routes.get("/nav")!;
-  assert.deepEqual(nav.rows.map((r) => r.widths), [WIDTHS], context(run));
-  assert.match(nav.rows[0]!.text, /^[\d.]+%–[\d.]+%  h-24  band -24@y~\d+  aligned 100\.00%  .*text -"Pricing"$/);
+  assert.deepEqual(
+    nav.rows.map((r) => r.widths),
+    [WIDTHS],
+    context(run),
+  );
+  assert.match(
+    nav.rows[0]!.text,
+    /^[\d.]+%–[\d.]+%  h-24  band -24@y~\d+  aligned 100\.00%  .*text -"Pricing"$/,
+  );
   assert.doesNotMatch(run.stdout, /\[\d+\/\d+\]|^Report:/m, "no per-shot lines when piped");
   for (const [route, { rows }] of routes) {
     for (const r of rows) {
       const want = r.widths.flatMap((w) => result(res, route, w).crops.map((c) => c.path));
       assert.ok(want.length, `${route}: no crops to list${context(run)}`);
       assert.deepEqual(r.crops, want, context(run));
-      for (const c of r.crops) assert.ok(fs.existsSync(path.join(path.dirname(verdict.results), c)), c);
+      for (const c of r.crops)
+        assert.ok(fs.existsSync(path.join(path.dirname(verdict.results), c)), c);
     }
   }
 });
@@ -278,7 +298,10 @@ test("every crop fits Claude's image budget, at most three per comparison", asyn
       assert.equal(c.path, `${r.url.slice(1)}.${r.width}.c${i + 1}.png`);
       const m = await sharp(run.file(c.path)).metadata();
       assert.ok(Math.max(m.width!, m.height!) <= 1568, `${c.path} is ${m.width}×${m.height}`);
-      assert.ok(tokens(m.width!, m.height!) <= 1568, `${c.path} is ${tokens(m.width!, m.height!)} tokens`);
+      assert.ok(
+        tokens(m.width!, m.height!) <= 1568,
+        `${c.path} is ${tokens(m.width!, m.height!)} tokens`,
+      );
       assert.ok(c.scale >= 0.75 && c.scale <= 1, `${c.path} at ${c.scale}`);
       seen++;
     }
@@ -302,7 +325,10 @@ test("/taller @1440 crops the extra band, left over right at native scale", () =
   const r = result(results(run.outDir), "/taller", 1440);
   assert.equal(r.crops.length, 1, context(run));
   const [c] = r.crops;
-  assert.deepEqual([c!.kind, c!.right.h, c!.left.h, c!.layout, c!.scale], ["band", 272, 0, "stacked", 1]);
+  assert.deepEqual(
+    [c!.kind, c!.right.h, c!.left.h, c!.layout, c!.scale],
+    ["band", 272, 0, "stacked", 1],
+  );
 });
 
 for (const width of WIDTHS) {
@@ -311,7 +337,10 @@ for (const width of WIDTHS) {
     assert.equal(r.crops.length, 1, context(run));
     const [c] = r.crops;
     const { pixels, ...box } = r.regions[0]!;
-    assert.deepEqual([c!.kind, c!.left, c!.right, c!.scale, c!.clipped], ["region", box, box, 1, false]);
+    assert.deepEqual(
+      [c!.kind, c!.left, c!.right, c!.scale, c!.clipped],
+      ["region", box, box, 1, false],
+    );
   });
 }
 

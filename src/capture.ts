@@ -55,11 +55,7 @@ export class HookError extends Error {}
  * Install network blocking and tracking, the fake clock and seeded randomness. Once per
  * page, before any navigation.
  */
-export async function prepare(
-  page: Page,
-  cfg: ResolvedConfig,
-  now: number,
-): Promise<void> {
+export async function prepare(page: Page, cfg: ResolvedConfig, now: number): Promise<void> {
   const net = { open: new Set<Request>(), last: Date.now() };
   network.set(page, net);
   page.on("request", (r) => {
@@ -117,7 +113,9 @@ export async function capture(
     try {
       await route.before(page, { side, route: label(route), width });
     } catch (e) {
-      throw new HookError(`before hook failed on ${side}: ${e instanceof Error ? e.message : String(e)}`);
+      throw new HookError(
+        `before hook failed on ${side}: ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
   }
   await page.addStyleTag({ content: cfg.neutralizeCss });
@@ -126,8 +124,7 @@ export async function capture(
   // frame each, since a scroll inside one synchronous loop never paints.
   await page.evaluate(async (maxHeight) => {
     // The fake clock drives rAF too, so add wall time for a real paint per slice.
-    const frame = () =>
-      new Promise((r) => requestAnimationFrame(() => setTimeout(r, 32)));
+    const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 32)));
     Array.from(document.images).forEach((img) => (img.loading = "eager"));
     document.querySelectorAll("video").forEach((v) => {
       v.pause();
@@ -173,20 +170,23 @@ export async function capture(
       ),
     );
   }
-  const { scrollHeight, innerText, pageText, media } = await (el ?? page.locator(":root")).evaluate((root) => {
-    const body = document.body ?? document.documentElement;
-    return {
-      scrollHeight: document.documentElement.scrollHeight,
-      innerText: ((root === document.documentElement ? body : root) as HTMLElement).innerText || "",
-      pageText: body.innerText?.length ?? 0,
-      media: Array.from(
-        document.querySelectorAll("img, svg, canvas, video, iframe, input, textarea, select"),
-      ).some((e) => {
-        const r = e.getBoundingClientRect();
-        return r.width * r.height >= 1024;
-      }),
-    };
-  });
+  const { scrollHeight, innerText, pageText, media } = await (el ?? page.locator(":root")).evaluate(
+    (root) => {
+      const body = document.body ?? document.documentElement;
+      return {
+        scrollHeight: document.documentElement.scrollHeight,
+        innerText:
+          ((root === document.documentElement ? body : root) as HTMLElement).innerText || "",
+        pageText: body.innerText?.length ?? 0,
+        media: Array.from(
+          document.querySelectorAll("img, svg, canvas, video, iframe, input, textarea, select"),
+        ).some((e) => {
+          const r = e.getBoundingClientRect();
+          return r.width * r.height >= 1024;
+        }),
+      };
+    },
+  );
   // Reverse order, so an element two masks share gets its original value back.
   for (let i = masks.length - 1; i >= 0; i--) {
     await masks[i]!.evaluateAll(
@@ -230,9 +230,7 @@ export async function capture(
   }
   const boxes = (
     await Promise.all(
-      (await Promise.all(masks.map((l) => l.all())))
-        .flat()
-        .map((m) => m.boundingBox()),
+      (await Promise.all(masks.map((l) => l.all()))).flat().map((m) => m.boundingBox()),
     )
   )
     .filter((b) => b !== null)
@@ -389,9 +387,7 @@ async function captureTiled(page: Page, box: Box): Promise<Buffer> {
         background: MASK_COLOR,
       },
     })
-      .composite(
-        tiles.map((input, i) => ({ input, left: 0, top: i * TILE_HEIGHT })),
-      )
+      .composite(tiles.map((input, i) => ({ input, left: 0, top: i * TILE_HEIGHT })))
       .png()
       .toBuffer();
   } finally {

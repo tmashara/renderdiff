@@ -94,10 +94,10 @@ describe("discovery", () => {
 
   test("--config at a missing path exits 2 rather than falling back", async () => {
     const cwd = cwdWith({ "renderdiff.config.mjs": "ok.mjs" });
-    const r = await runCli(
-      ["--dry-run", "/a", "--left", L, "--right", R, "--config", "nope.mjs"],
-      { cwd, noOut: true },
-    );
+    const r = await runCli(["--dry-run", "/a", "--left", L, "--right", R, "--config", "nope.mjs"], {
+      cwd,
+      noOut: true,
+    });
     assert.equal(r.code, 2);
     assert.match(r.stderr, /config file not found: .*nope\.mjs/);
   });
@@ -108,7 +108,10 @@ describe("validation", () => {
   // way the loader shrugs at becomes a confusing failure much later, or worse, a quiet one.
   const cases: Array<[fixture: string, needle: RegExp]> = [
     ["bad-left.mjs", /`left` must be a string/],
-    ["bad-routes.mjs", /`routes\[0\]` must be a string or an object \{ left, right\?, selector\?, before\? \}/],
+    [
+      "bad-routes.mjs",
+      /`routes\[0\]` must be a string or an object \{ left, right\?, selector\?, before\? \}/,
+    ],
     ["bad-widths.mjs", /`widths` must be an array of positive numbers/],
     ["bad-threshold.mjs", /`threshold` must be a number between 0 and 1/],
     ["bad-concurrency.mjs", /`concurrency` must be a positive integer/],
@@ -134,7 +137,10 @@ describe("validation", () => {
   const inline: Array<[config: string, needle: RegExp]> = [
     ['{ routes: "/a" }', /`routes` must be an array/],
     ['{ routes: [{ right: "/b" }] }', /`routes\[0\]\.left` must be a non-empty string/],
-    ['{ routes: ["/a", { left: "/a", right: 2 }] }', /`routes\[1\]\.right` must be a non-empty string/],
+    [
+      '{ routes: ["/a", { left: "/a", right: 2 }] }',
+      /`routes\[1\]\.right` must be a non-empty string/,
+    ],
     ['{ routes: [{ left: "/a", path: "/b" }] }', /`routes\[0\]\.path` is not a route key/],
     ['{ routes: [{ left: "" }] }', /`routes\[0\]\.left` must be a non-empty string/],
     ['{ routes: [{ left: "/a", right: "" }] }', /`routes\[0\]\.right` must be a non-empty string/],
@@ -148,7 +154,10 @@ describe("validation", () => {
       /`masks\[0\]` needs exactly one of `selector` or `locate`/,
     ],
     ['{ masks: [{ reason: "x", selector: 1 }] }', /`masks\[0\]\.selector` must be a string/],
-    ['{ routes: [{ left: "/a", selector: 1 }] }', /`routes\[0\]\.selector` must be a non-empty string or \{ left, right \}/],
+    [
+      '{ routes: [{ left: "/a", selector: 1 }] }',
+      /`routes\[0\]\.selector` must be a non-empty string or \{ left, right \}/,
+    ],
     ['{ routes: [{ left: "/a", selector: "" }] }', /`routes\[0\]\.selector` must be/],
     [
       '{ routes: [{ left: "/a", selector: "xpath=//h1 | //h2" }, { left: "/a", selector: { left: "xpath=//h1", right: "//h2" } }] }',
@@ -161,8 +170,11 @@ describe("validation", () => {
       /two routes both read as \/a; they have different before hooks — merge them into one route/,
     ],
     ['{ routes: [{ left: "/a", before: {} }] }', /`routes\[0\]\.before` must be a function/],
-    ['{ storageState: 1 }', /`storageState` must be a non-empty path/],
-    ['{ storageState: { left: "a.json", center: "b.json" } }', /`storageState` must be a non-empty path/],
+    ["{ storageState: 1 }", /`storageState` must be a non-empty path/],
+    [
+      '{ storageState: { left: "a.json", center: "b.json" } }',
+      /`storageState` must be a non-empty path/,
+    ],
   ];
   for (const [config, needle] of inline) {
     test(`${config} exits 2 and names the problem`, async () => {
@@ -176,12 +188,24 @@ describe("validation", () => {
 
   test("a config storageState resolves from the config file's directory, not cwd", async () => {
     const dir = tempDir("renderdiff-cfg-");
-    fs.writeFileSync(path.join(dir, "c.mjs"), 'export default { storageState: { right: "auth.json" } };\n');
-    const r = await runCli(["--dry-run", "/a", "--left", L, "--right", R, "--config", path.join(dir, "c.mjs")], { noOut: true });
+    fs.writeFileSync(
+      path.join(dir, "c.mjs"),
+      'export default { storageState: { right: "auth.json" } };\n',
+    );
+    const r = await runCli(
+      ["--dry-run", "/a", "--left", L, "--right", R, "--config", path.join(dir, "c.mjs")],
+      { noOut: true },
+    );
     assert.equal(r.code, 2, r.stderr);
-    assert.ok(r.stderr.includes(`storage state file not found: ${path.join(dir, "auth.json")}`), r.stderr);
+    assert.ok(
+      r.stderr.includes(`storage state file not found: ${path.join(dir, "auth.json")}`),
+      r.stderr,
+    );
     fs.writeFileSync(path.join(dir, "auth.json"), '{"cookies":[],"origins":[]}');
-    const ok = await runCli(["--dry-run", "/a", "--left", L, "--right", R, "--config", path.join(dir, "c.mjs")], { noOut: true });
+    const ok = await runCli(
+      ["--dry-run", "/a", "--left", L, "--right", R, "--config", path.join(dir, "c.mjs")],
+      { noOut: true },
+    );
     assert.equal(ok.code, 0, ok.stderr);
   });
 
@@ -194,7 +218,10 @@ describe("validation", () => {
     const r = await runCli(["--dry-run", "--left", L, "--right", R], { cwd, noOut: true });
     assert.equal(r.code, 0, r.stderr);
     assert.match(r.stdout, /^Routes: 3$/m);
-    assert.match(r.stdout, /^  \/a::\/plans +http:\/\/left\.test\/a  \|  http:\/\/right\.test\/plans$/m);
+    assert.match(
+      r.stdout,
+      /^  \/a::\/plans +http:\/\/left\.test\/a  \|  http:\/\/right\.test\/plans$/m,
+    );
     assert.match(r.stdout, /^  \/c +http:\/\/left\.test\/c  \|  http:\/\/right\.test\/c$/m);
     assert.match(r.stdout, /^  \/d::\/e +http:\/\/left\.test\/d  \|  http:\/\/right\.test\/e$/m);
   });
@@ -211,7 +238,10 @@ describe("validation", () => {
     assert.match(r.stdout, /right\.test\/a  \[\.card\]$/m);
     assert.match(r.stdout, /right\.test\/a  \[\.x \| \.y\]$/m);
     assert.match(r.stdout, /right\.test\/a$/m);
-    const cli = await runCli(["--dry-run", "--left", L, "--right", R, "--selector", "h1"], { cwd, noOut: true });
+    const cli = await runCli(["--dry-run", "--left", L, "--right", R, "--selector", "h1"], {
+      cwd,
+      noOut: true,
+    });
     assert.equal(cli.code, 0, cli.stderr);
     assert.match(cli.stdout, /^Routes: 1$/m);
     assert.match(cli.stdout, /right\.test\/a  \[h1\]$/m);
