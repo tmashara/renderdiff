@@ -70,9 +70,9 @@ describe("help and version", () => {
   });
 
   test("--version prints the package version", async () => {
-    const pkg = JSON.parse(
-      fs.readFileSync(path.join(REPO_ROOT, "package.json"), "utf8"),
-    ) as { version: string };
+    const pkg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, "package.json"), "utf8")) as {
+      version: string;
+    };
     const r = await runCli(["--version"], { noOut: true });
     assert.equal(r.code, 0);
     assert.equal(r.stdout.trim(), pkg.version);
@@ -149,10 +149,7 @@ describe("flag validation", () => {
     ));
 
   test("--threshold rejects below 0", () =>
-    rejects(
-      ["/a", "--left", L, "--right", R, "--threshold", "-0.5"],
-      "--threshold needs a value",
-    ));
+    rejects(["/a", "--left", L, "--right", R, "--threshold", "-0.5"], "--threshold needs a value"));
 
   test("--threshold accepts the boundaries", async () => {
     for (const t of ["0", "1", "0.975"]) {
@@ -239,7 +236,10 @@ describe("route pairs", () => {
   test("a pair loads its own path on each side", async () => {
     const r = await dry(["/pricing::/plans/"]);
     assert.equal(r.code, 0, r.stderr);
-    assert.match(r.stdout, /^  \/pricing::\/plans +http:\/\/left\.test\/pricing  \|  http:\/\/right\.test\/plans$/m);
+    assert.match(
+      r.stdout,
+      /^  \/pricing::\/plans +http:\/\/left\.test\/pricing  \|  http:\/\/right\.test\/plans$/m,
+    );
   });
 
   test("a pair with identical sides is the plain route", async () => {
@@ -288,7 +288,10 @@ describe("selectors", () => {
   });
 
   test("one side's selector alone exits 2", () =>
-    rejects(["--dry-run", L, R, "/a", "--left-selector", ".a"], "--left-selector needs --right-selector or --selector"));
+    rejects(
+      ["--dry-run", L, R, "/a", "--left-selector", ".a"],
+      "--left-selector needs --right-selector or --selector",
+    ));
 
   test("an empty selector exits 2", () =>
     rejects(["--dry-run", L, R, "/a", "--selector="], "--selector needs a value"));
@@ -320,18 +323,27 @@ describe("storage state", () => {
     fs.writeFileSync(path.join(cwd, "empty.json"), "{}");
     const r = await runCli(["/", DEAD, DEAD, "--storage-state", "bad.json"], { cwd });
     assert.equal(r.code, 2, r.stderr);
-    assert.match(r.stderr, /storage state file is not a Playwright storage state \(cookies\/origins must be arrays\): .*bad\.json/);
-    const ok = await runCli(["--dry-run", "/", L, R, "--storage-state", "empty.json"], { cwd, noOut: true });
+    assert.match(
+      r.stderr,
+      /storage state file is not a Playwright storage state \(cookies\/origins must be arrays\): .*bad\.json/,
+    );
+    const ok = await runCli(["--dry-run", "/", L, R, "--storage-state", "empty.json"], {
+      cwd,
+      noOut: true,
+    });
     assert.equal(ok.code, 0, ok.stderr);
   });
 
   test("a per-side file overrides --storage-state on its side", async () => {
     const cwd = tempDir("renderdiff-cwd-");
     fs.writeFileSync(path.join(cwd, "a.json"), "{}");
-    const r = await runCli(["--dry-run", "/", L, R, "--storage-state", "a.json", "--left-storage-state", "nope.json"], {
-      cwd,
-      noOut: true,
-    });
+    const r = await runCli(
+      ["--dry-run", "/", L, R, "--storage-state", "a.json", "--left-storage-state", "nope.json"],
+      {
+        cwd,
+        noOut: true,
+      },
+    );
     assert.equal(r.code, 2, r.stderr);
     assert.match(r.stderr, /storage state file not found: .*nope\.json/);
   });

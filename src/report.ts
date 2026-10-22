@@ -113,17 +113,9 @@ export function stats(rows: ComparedResult[]) {
 const round = (key: string, v: unknown) =>
   typeof v === "number" && /^(score|alignedScore|mean)$/.test(key) ? floor4(v) : v;
 
-export function writeResults(
-  results: RouteResult[],
-  meta: RunMeta,
-  outDir: string,
-): string {
-  const compared = results.filter(
-    (r): r is ComparedResult => r.status === "compared",
-  );
-  const { mean, worst } = compared.length
-    ? stats(compared)
-    : { mean: null, worst: null };
+export function writeResults(results: RouteResult[], meta: RunMeta, outDir: string): string {
+  const compared = results.filter((r): r is ComparedResult => r.status === "compared");
+  const { mean, worst } = compared.length ? stats(compared) : { mean: null, worst: null };
   const out: Results = {
     meta,
     results,
@@ -133,9 +125,7 @@ export function writeResults(
       mean,
       worst: worst && { url: worst.url, width: worst.width, score: worst.score },
       belowThreshold:
-        meta.threshold === null
-          ? 0
-          : compared.filter((r) => r.score < meta.threshold!).length,
+        meta.threshold === null ? 0 : compared.filter((r) => r.score < meta.threshold!).length,
     },
   };
   const rows = results.map((r) => `    ${JSON.stringify(r, round)}`).join(",\n");
@@ -151,16 +141,11 @@ export function writeResults(
 }
 
 const esc = (s: string) =>
-  s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 /** Green above 99.5%, amber to 97%, red below. Tuned to be read, not to be precise. */
 
-const band = (score: number) =>
-  score >= 0.995 ? "good" : score >= 0.97 ? "warn" : "bad";
+const band = (score: number) => (score >= 0.995 ? "good" : score >= 0.97 ? "warn" : "bad");
 
 function section(rows: ComparedResult[]): string {
   if (!rows.length) return "";
@@ -192,7 +177,10 @@ function findings(r: ComparedResult): string {
   if (r.crops.length) {
     items.push(
       `<div class="crops">${r.crops
-        .map((c) => `<a class="crop" href="${c.path}" target="_blank" title="${c.kind}, left ${c.layout === "stacked" ? "on top" : "on the left"}"><img loading="lazy" src="${c.path}"></a>`)
+        .map(
+          (c) =>
+            `<a class="crop" href="${c.path}" target="_blank" title="${c.kind}, left ${c.layout === "stacked" ? "on top" : "on the left"}"><img loading="lazy" src="${c.path}"></a>`,
+        )
         .join("")}</div>`,
     );
   }
@@ -244,9 +232,7 @@ export async function writeReport(
   meta: RunMeta,
   cfg: ResolvedConfig,
 ): Promise<string> {
-  const compared = results.filter(
-    (r): r is ComparedResult => r.status === "compared",
-  );
+  const compared = results.filter((r): r is ComparedResult => r.status === "compared");
   const errors = results.filter((r): r is ErrorResult => r.status === "error");
 
   const html = `<!doctype html>
@@ -293,12 +279,12 @@ export async function writeReport(
 <h1>Visual diff</h1>
 <p class="meta">
   left <code>${esc(meta.left)}</code> vs right <code>${esc(meta.right)}</code><br>
-  ${esc(meta.generatedAt)} &middot; ${esc(meta.browser.name)} ${esc(meta.browser.version)}${
-    (["left", "right"] as const)
-      .filter((s) => meta.storageState[s])
-      .map((s) => ` &middot; ${s} storage state <code>${esc(meta.storageState[s]!)}</code>`)
-      .join("")
-  }
+  ${esc(meta.generatedAt)} &middot; ${esc(meta.browser.name)} ${esc(meta.browser.version)}${(
+    ["left", "right"] as const
+  )
+    .filter((s) => meta.storageState[s])
+    .map((s) => ` &middot; ${s} storage state <code>${esc(meta.storageState[s]!)}</code>`)
+    .join("")}
 </p>
 
 ${section(compared)}

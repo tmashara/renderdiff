@@ -53,7 +53,9 @@ const slugSelector = (s: string) => s.toLowerCase().replace(/[^a-z0-9-]/g, "_");
 const stem = (r: Route) =>
   (
     (r.left === r.right ? slug(r.left) : `${slug(r.left)}~${slug(r.right)}`) +
-    (r.selector ? `@${[...new Set([r.selector.left, r.selector.right])].map(slugSelector).join("~")}` : "")
+    (r.selector
+      ? `@${[...new Set([r.selector.left, r.selector.right])].map(slugSelector).join("~")}`
+      : "")
   ).slice(0, 200);
 
 /** Route name -> file stem, unique across the run. Suffixes follow route order, so reruns agree. */
@@ -92,8 +94,7 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
   fs.mkdirSync(cfg.outDir, { recursive: true });
 
   const jobs: Job[] = [];
-  for (const route of routes)
-    for (const width of cfg.widths) jobs.push({ route, width });
+  for (const route of routes) for (const width of cfg.widths) jobs.push({ route, width });
 
   const stems = slugs(routes);
   const results: RouteResult[] = [];
@@ -105,8 +106,14 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
 
   const worker = async () => {
     // One context per origin so cookies/localStorage never cross between them.
-    const leftCtx = await browser.newContext({ ...CONTEXT_OPTIONS, storageState: cfg.storageState.left ?? undefined });
-    const rightCtx = await browser.newContext({ ...CONTEXT_OPTIONS, storageState: cfg.storageState.right ?? undefined });
+    const leftCtx = await browser.newContext({
+      ...CONTEXT_OPTIONS,
+      storageState: cfg.storageState.left ?? undefined,
+    });
+    const rightCtx = await browser.newContext({
+      ...CONTEXT_OPTIONS,
+      storageState: cfg.storageState.right ?? undefined,
+    });
     const leftPage = await leftCtx.newPage();
     const rightPage = await rightCtx.newPage();
     await prepare(leftPage, cfg, now);
@@ -143,9 +150,7 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
 
         const { diffPng, spots, ...metrics } = await compare(leftShot, rightShot);
         if (unstablePixels > MAX_UNSTABLE_SHARE * metrics.totalPixels) {
-          throw new Error(
-            `page did not settle: ${unstablePixels}px unstable at ${key}`,
-          );
+          throw new Error(`page did not settle: ${unstablePixels}px unstable at ${key}`);
         }
         const measured = metrics.totalPixels - unstablePixels;
         metrics.score = measured > 0 ? 1 - metrics.diffPixels / measured : 0;
@@ -191,12 +196,8 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
         if (!progress) continue;
         console.log(
           `  [${done}/${jobs.length}] ${pct(metrics.score)}  ${tag}` +
-            (metrics.heightDelta
-              ? `  (height ${signed(metrics.heightDelta)}px)`
-              : "") +
-            (unstablePixels
-              ? `  (unstable ${unstablePixels.toLocaleString("en-US")}px)`
-              : "") +
+            (metrics.heightDelta ? `  (height ${signed(metrics.heightDelta)}px)` : "") +
+            (unstablePixels ? `  (unstable ${unstablePixels.toLocaleString("en-US")}px)` : "") +
             details.map((d) => `\n        ${d}`).join(""),
         );
       } catch (e) {
@@ -216,9 +217,7 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
   };
 
   if (progress) {
-    console.log(
-      `Capturing ${jobs.length} pair(s) with ${cfg.concurrency} worker(s)...\n`,
-    );
+    console.log(`Capturing ${jobs.length} pair(s) with ${cfg.concurrency} worker(s)...\n`);
   }
   await Promise.all(Array.from({ length: cfg.concurrency }, worker));
   const browserMeta = { name: channel ?? "chromium", version: browser.version() };
@@ -279,7 +278,9 @@ async function launch() {
   } catch (e) {
     try {
       const browser = await chromium.launch({ channel: "chrome" });
-      console.log(`Bundled Chromium failed to launch; using the system Chrome ${browser.version()}.`);
+      console.log(
+        `Bundled Chromium failed to launch; using the system Chrome ${browser.version()}.`,
+      );
       return { browser, channel: "chrome" };
     } catch {
       const msg = e instanceof Error ? e.message : String(e);
@@ -316,15 +317,11 @@ async function shoot(
 }
 
 function summarize(results: RouteResult[], reportPath: string, resultsPath: string) {
-  const compared = results.filter(
-    (r): r is ComparedResult => r.status === "compared",
-  );
+  const compared = results.filter((r): r is ComparedResult => r.status === "compared");
 
   if (compared.length) {
     const { sorted, mean, worst } = stats(compared);
-    console.log(
-      `\nmean ${pct(mean)}   worst ${pct(worst.score)} (${name(worst)} @${worst.width})`,
-    );
+    console.log(`\nmean ${pct(mean)}   worst ${pct(worst.score)} (${name(worst)} @${worst.width})`);
     for (const r of sorted.slice(0, 10)) {
       console.log(
         `    ${pct(r.score).padStart(7)}  ${name(r)}@${r.width}` +
@@ -389,7 +386,8 @@ export function compact(
       if (paths.length) out.push(`    crops ${paths.join(" ")}`);
     }
     const failed = new Map<string, number[]>();
-    for (const r of rows) if (r.status === "error") failed.set(r.error, [...(failed.get(r.error) ?? []), r.width]);
+    for (const r of rows)
+      if (r.status === "error") failed.set(r.error, [...(failed.get(r.error) ?? []), r.width]);
     for (const [error, widths] of failed) out.push(`  @${widths.join(",")}  ERROR ${error}`);
   }
   if (clean.length) out.unshift(`clean: ${clean.join(" ")}`);
@@ -401,7 +399,9 @@ export function compact(
     `renderdiff: ${differ} of ${routes.length} routes differ (${shots} of ${results.length} shots), ` +
       `${errors} error${errors === 1 ? "" : "s"}` +
       (worst ? `, worst ${pct(worst.score)} ${name(worst)}@${worst.width}` : "") +
-      (threshold === null ? "" : `, ${compared.filter((r) => r.score < threshold).length} below ${pct(threshold)}`) +
+      (threshold === null
+        ? ""
+        : `, ${compared.filter((r) => r.score < threshold).length} below ${pct(threshold)}`) +
       ` — ${resultsPath}`,
   );
   return out.join("\n");
@@ -420,7 +420,10 @@ function row(g: ComparedResult[]): string {
   const y = (b: Band) => `@y${g.length > 1 ? "~" : ""}${b.y}`;
   const text = [...r.text.added.map((t) => `+"${t}"`), ...r.text.removed.map((t) => `-"${t}"`)];
   return [
-    span(g.map((x) => x.score), pct),
+    span(
+      g.map((x) => x.score),
+      pct,
+    ),
     r.heightDelta ? `h${signed(r.heightDelta)}` : "",
     r.widthDelta ? `w${signed(r.widthDelta)}` : "",
     r.bands === null ? "unaligned" : "",

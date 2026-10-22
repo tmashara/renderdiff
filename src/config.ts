@@ -93,7 +93,10 @@ export function parseRoutes(specs: RouteSpec[], selector?: Sides, before?: Hook)
     };
     const same = out.get(name(route));
     // JSON drops a function but keeps a null, so `before` is compared on its own below.
-    if (same && JSON.stringify({ ...same, before: 0 }) !== JSON.stringify({ ...route, before: 0 })) {
+    if (
+      same &&
+      JSON.stringify({ ...same, before: 0 }) !== JSON.stringify({ ...route, before: 0 })
+    ) {
       throw new Error(`two routes both read as ${name(route)}; change one of their selectors`);
     }
     if (same && same.before !== route.before) {
@@ -122,7 +125,10 @@ export const DEFAULT_OUT_DIR = "renderdiff-out";
  * holds at most one load per origin at a time, so this is also the most concurrent loads
  * either origin sees — lower it when one side is someone's live site.
  */
-export const DEFAULT_CONCURRENCY = Math.min(8, Math.max(2, Math.floor(os.availableParallelism() / 2)));
+export const DEFAULT_CONCURRENCY = Math.min(
+  8,
+  Math.max(2, Math.floor(os.availableParallelism() / 2)),
+);
 
 /**
  * Third-party origins aborted at the network layer. Must stay symmetric — blocking on
@@ -349,8 +355,7 @@ export async function loadConfig(
   const s = c.storageState;
   if (s === undefined) return { config: c, path: file };
   const at = (p?: string) => p && path.resolve(path.dirname(file), p);
-  const storageState =
-    typeof s === "string" ? at(s)! : { left: at(s.left), right: at(s.right) };
+  const storageState = typeof s === "string" ? at(s)! : { left: at(s.left), right: at(s.right) };
   return { config: { ...c, storageState }, path: file };
 }
 
@@ -375,8 +380,12 @@ function validate(c: Record<string, unknown>, file: string) {
     s !== undefined &&
     !(typeof s === "string" && s) &&
     !(
-      typeof s === "object" && s !== null && Object.keys(s).length &&
-      Object.entries(s).every(([k, v]) => ["left", "right"].includes(k) && typeof v === "string" && v)
+      typeof s === "object" &&
+      s !== null &&
+      Object.keys(s).length &&
+      Object.entries(s).every(
+        ([k, v]) => ["left", "right"].includes(k) && typeof v === "string" && v,
+      )
     )
   ) {
     bad("storageState", "a non-empty path, or { left?, right? } of non-empty paths");
@@ -396,13 +405,15 @@ function validate(c: Record<string, unknown>, file: string) {
           );
         }
       }
-      if (o.before !== undefined && typeof o.before !== "function") bad(`routes[${i}].before`, hook);
+      if (o.before !== undefined && typeof o.before !== "function")
+        bad(`routes[${i}].before`, hook);
       const sel = o.selector as Record<string, unknown> | undefined;
       if (
         sel !== undefined &&
         !(typeof sel === "string" && sel) &&
         !(
-          typeof sel === "object" && sel !== null &&
+          typeof sel === "object" &&
+          sel !== null &&
           Object.keys(sel).sort().join() === "left,right" &&
           [sel.left, sel.right].every((v) => typeof v === "string" && v)
         )
@@ -447,7 +458,7 @@ function validate(c: Record<string, unknown>, file: string) {
         bad(`masks[${i}].urlPath`, "a string");
       }
       if (typeof o.reason !== "string") bad(`masks[${i}].reason`, "a string");
-      if (("selector" in o) === ("locate" in o)) {
+      if ("selector" in o === "locate" in o) {
         throw new Error(`${file}: \`masks[${i}]\` needs exactly one of \`selector\` or \`locate\``);
       }
       if (o.selector !== undefined && typeof o.selector !== "string") {
@@ -473,10 +484,7 @@ export interface CliOverrides {
 }
 
 /** Merge built-in defaults, the config file, and CLI flags into one resolved config. */
-export function resolveConfig(
-  file: RenderdiffConfig,
-  cli: CliOverrides,
-): ResolvedConfig {
+export function resolveConfig(file: RenderdiffConfig, cli: CliOverrides): ResolvedConfig {
   const left = cli.left ?? file.left;
   const right = cli.right ?? file.right;
 
@@ -496,30 +504,19 @@ export function resolveConfig(
       ? { left: file.storageState, right: file.storageState }
       : file.storageState;
 
-  const hideSelectors = [
-    ...DEFAULT_HIDE_SELECTORS,
-    ...(file.hideSelectors ?? []),
-  ];
+  const hideSelectors = [...DEFAULT_HIDE_SELECTORS, ...(file.hideSelectors ?? [])];
 
   return {
     left: left.replace(/\/+$/, ""),
     right: right.replace(/\/+$/, ""),
     widths: cli.widths ?? file.widths ?? [...DEFAULT_WIDTHS],
     threshold: cli.threshold ?? file.threshold ?? null,
-    outDir: path.resolve(
-      process.cwd(),
-      cli.outDir ?? file.outDir ?? DEFAULT_OUT_DIR,
-    ),
+    outDir: path.resolve(process.cwd(), cli.outDir ?? file.outDir ?? DEFAULT_OUT_DIR),
     concurrency: cli.concurrency ?? file.concurrency ?? DEFAULT_CONCURRENCY,
-    blockUrlPatterns: [
-      ...DEFAULT_BLOCK_URL_PATTERNS,
-      ...(file.blockUrlPatterns ?? []),
-    ],
+    blockUrlPatterns: [...DEFAULT_BLOCK_URL_PATTERNS, ...(file.blockUrlPatterns ?? [])],
     hideSelectors,
     neutralizeCss:
-      STILL_CSS +
-      `${hideSelectors.join(",")}{display:none!important}\n` +
-      (file.extraCss ?? ""),
+      STILL_CSS + `${hideSelectors.join(",")}{display:none!important}\n` + (file.extraCss ?? ""),
     masks: (file.masks ?? []).map((m) =>
       m.urlPath === undefined ? m : { ...m, urlPath: normalize(m.urlPath) },
     ),

@@ -104,10 +104,7 @@ describe("every route", () => {
 describe("equivalence pairs", () => {
   for (const dir of EQUIVALENCE) {
     test(`${dir} serves identical text on both sides`, async () => {
-      const [left, right] = await Promise.all([
-        sideHtml(dir, "left"),
-        sideHtml(dir, "right"),
-      ]);
+      const [left, right] = await Promise.all([sideHtml(dir, "left"), sideHtml(dir, "right")]);
       // Tags, class names and the inline stylesheet drop out; prose does not. If this fails,
       // one side was edited and the pair is no longer testing layout equivalence.
       assert.equal(
@@ -119,16 +116,17 @@ describe("equivalence pairs", () => {
 
     test(`${dir} actually differs in CSS`, async () => {
       const style = (html: string) =>
-        [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)]
-          .map((m) => m[1])
-          .join("\n");
-      const [left, right] = await Promise.all([
-        sideHtml(dir, "left"),
-        sideHtml(dir, "right"),
-      ]);
+        [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join("\n");
+      const [left, right] = await Promise.all([sideHtml(dir, "left"), sideHtml(dir, "right")]);
       assert.notEqual(
-        style(left).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\s+/g, " ").trim(),
-        style(right).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\s+/g, " ").trim(),
+        style(left)
+          .replace(/\/\*[\s\S]*?\*\//g, "")
+          .replace(/\s+/g, " ")
+          .trim(),
+        style(right)
+          .replace(/\/\*[\s\S]*?\*\//g, "")
+          .replace(/\s+/g, " ")
+          .trim(),
         `${dir}: both sides use the same CSS, so the pair proves nothing`,
       );
     });
