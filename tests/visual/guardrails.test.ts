@@ -879,7 +879,7 @@ describe("element attribution", () => {
       const band = result(results(run.outDir), "/inserted", width).bands!.find(
         (b) => b.side === "left",
       )!;
-      // The right's first block sits where the inserted one does, under the same selector, but is 100px, not 80.
+      // The right's first block sits where the inserted one does, under the same selector, but is 400px, not 80.
       assert.deepEqual(
         band.elements?.map((e) => [e.side, e.left?.h, e.right]),
         [["left", 80, null]],
