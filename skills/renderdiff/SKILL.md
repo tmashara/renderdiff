@@ -16,8 +16,7 @@ To check one component rather than the page, `--selector "<playwright selector>"
 element per side, else the route errors with the count.
 A state behind a click (open menu, a modal both sides show) takes a config `before` hook;
 a page behind a login takes `--storage-state auth.json`. When either is legitimate: reference.md.
-First run on a machine: `npx playwright install chromium`. Until renderdiff is on npm, install it with
-`npm install -g github:tmashara/renderdiff` and run `renderdiff …`. Flags: `--help`.
+First run on a machine: `npx playwright install chromium`. Flags: `--help`.
 Triage, rationalizations, config and gotchas: [reference.md](reference.md).
 
 ## Verdict (all four, in order)

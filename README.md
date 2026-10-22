@@ -76,9 +76,6 @@ For other agents (Codex, Cursor and so on), with [skills](https://skills.sh):
 npx skills add tmashara/renderdiff
 ```
 
-Until renderdiff is on npm, `npx renderdiff@latest` won't resolve; install the CLI with
-`npm install -g github:tmashara/renderdiff`.
-
 ## Usage
 
 ```
@@ -339,7 +336,7 @@ Everything lands in the out dir (`./renderdiff-out` by default):
 ```jsonc
 {
   "meta": {
-    "tool": "renderdiff", "version": "0.1.0", "generatedAt": "…",
+    "tool": "renderdiff", "version": "0.2.0", "generatedAt": "…",
     "left": "http://localhost:3000", "right": "https://example.com",
     "widths": [1440, 375], "threshold": null,
     "clock": "…",                // the instant both sides' clocks start at

@@ -1,6 +1,6 @@
 {
   "name": "renderdiff",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Screenshot diff between two origins — captures routes at several viewport widths, pixel-diffs them, writes a scored HTML report.",
   "type": "module",
   "license": "MIT",
