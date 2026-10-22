@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import type { Accepted } from "./accept.ts";
 import type { Band, Box, Region, TextDiff } from "./compare.ts";
 import { CONTEXT_OPTIONS, name, type ResolvedConfig, type Sides } from "./config.ts";
 import type { ElementDiff } from "./locate.ts";
@@ -40,6 +41,8 @@ export interface ComparedResult extends BaseResult {
   images: { left: string; right: string; diff: string };
   /** At most three: bands, tallest first, then the largest regions. Not one per region. */
   crops: CropResult[];
+  /** Every band, region and size difference matched an accepted one, and none went unmeasured. */
+  accepted: boolean;
 }
 
 /** A crop of one change: left and right panels, a 1px red box round it, or a 2px red seam. */
@@ -92,8 +95,12 @@ export interface Summary {
   /** Null when nothing was compared. */
   mean: number | null;
   worst: { url: string; width: number; score: number } | null;
-  /** Comparisons under `meta.threshold`; 0 when no threshold was set. */
+  /** Comparisons under `meta.threshold`, accepted ones aside; 0 when no threshold was set. */
   belowThreshold: number;
+  /** Comparisons whose every difference was accepted. */
+  accepted: number;
+  /** Accepted differences for a measured route and width that weren't seen: prune them. */
+  stale: Accepted[];
 }
 
 /** The shape of `results.json`, written to the out dir on every run. */
@@ -114,7 +121,12 @@ export function stats(rows: ComparedResult[]) {
 const round = (key: string, v: unknown) =>
   typeof v === "number" && /^(score|alignedScore|mean)$/.test(key) ? floor4(v) : v;
 
-export function writeResults(results: RouteResult[], meta: RunMeta, outDir: string): string {
+export function writeResults(
+  results: RouteResult[],
+  meta: RunMeta,
+  outDir: string,
+  stale: Accepted[],
+): string {
   const compared = results.filter((r): r is ComparedResult => r.status === "compared");
   const { mean, worst } = compared.length ? stats(compared) : { mean: null, worst: null };
   const out: Results = {
@@ -126,7 +138,11 @@ export function writeResults(results: RouteResult[], meta: RunMeta, outDir: stri
       mean,
       worst: worst && { url: worst.url, width: worst.width, score: worst.score },
       belowThreshold:
-        meta.threshold === null ? 0 : compared.filter((r) => r.score < meta.threshold!).length,
+        meta.threshold === null
+          ? 0
+          : compared.filter((r) => !r.accepted && r.score < meta.threshold!).length,
+      accepted: compared.filter((r) => r.accepted).length,
+      stale,
     },
   };
   const rows = results.map((r) => `    ${JSON.stringify(r, round)}`).join(",\n");
@@ -210,6 +226,11 @@ function findings(r: ComparedResult): string {
   return items.length ? `<div class="findings">${items.join("")}</div>` : "";
 }
 
+const reasons = (r: ComparedResult) =>
+  [
+    ...new Set([...(r.bands ?? []), ...r.regions].flatMap((g) => (g.accepted ? [g.accepted] : []))),
+  ].join("; ");
+
 function card(r: ComparedResult): string {
   const imgs = r.images;
   return `
@@ -219,6 +240,7 @@ function card(r: ComparedResult): string {
     <code>${esc(name(r))}</code>
     <span class="w">@${r.width}px</span>
     ${r.hook ? `<span class="hook">before hook</span>` : ""}
+    ${r.accepted ? `<span class="accepted">accepted: ${esc(reasons(r))}</span>` : ""}
     ${r.heightDelta ? `<span class="delta">height ${signed(r.heightDelta)}px</span>` : ""}
     ${r.widthDelta ? `<span class="delta">width ${signed(r.widthDelta)}px</span>` : ""}
     ${r.unstablePixels ? `<span class="unstable">${r.unstablePixels.toLocaleString("en-US")} px unstable</span>` : ""}
@@ -238,6 +260,7 @@ export async function writeReport(
   results: RouteResult[],
   meta: RunMeta,
   cfg: ResolvedConfig,
+  stale: Accepted[],
 ): Promise<string> {
   const compared = results.filter((r): r is ComparedResult => r.status === "compared");
   const errors = results.filter((r): r is ErrorResult => r.status === "error");
@@ -262,7 +285,7 @@ export async function writeReport(
           margin:0 0 1rem; padding:.75rem 1rem 1rem; }
   .card header { display:flex; align-items:center; gap:.75rem; flex-wrap:wrap; margin-bottom:.75rem }
   .score { font-weight:700; font-variant-numeric:tabular-nums; min-width:4.5rem }
-  .w, .px, .delta, .unstable, .aligned, .hook { color:var(--mut); font-size:12px }
+  .w, .px, .delta, .unstable, .aligned, .hook, .accepted { color:var(--mut); font-size:12px }
   .findings { font-size:12px; color:var(--mut); margin:0 0 .75rem }
   .findings p { margin:.25rem 0 0 }
   .findings ul { margin:.25rem 0; font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace }
@@ -301,6 +324,14 @@ ${
     ? `<section><h2 class="bad">Errors</h2>
 <p class="blurb">These produced no measurement, so they are neither a pass nor a fail.</p>
 <ul>${errors.map((r) => `<li><code>${esc(name(r))}</code> @${r.width}px — ${esc(r.error)}</li>`).join("")}</ul></section>`
+    : ""
+}
+
+${
+  stale.length
+    ? `<section><h2>Stale accepted differences</h2>
+<p class="blurb">Accepted, but not seen on this run: prune them from the accepted file.</p>
+<ul>${stale.map((a) => `<li><code>${esc(a.route)}</code> @${a.width}px — ${esc(a.reason)}</li>`).join("")}</ul></section>`
     : ""
 }
 

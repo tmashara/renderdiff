@@ -45,11 +45,18 @@ export function result(
 export interface Summary {
   /** Routes on the `clean:` line; a selector route is `/a [sel]`, as is its key in `routes`. */
   clean: string[];
-  /** Each differing route: widths that were clean, then one row per collapsed width group. */
+  /** Routes on the `accepted:` line: every width clean or accepted. */
+  accepted: string[];
+  /** `route@width` of each stale accepted difference, from the `stale accepted:` line. */
+  stale: string[];
+  /** The `rerun:` line of a `--rerun-failed` run, else null. */
+  rerun: { shots: number; routes: number; reused: number; untouched: number } | null;
+  /** Each differing route: widths that were clean or accepted, then one row per collapsed width group. */
   routes: Map<
     string,
     {
       clean: number[];
+      accepted: number[];
       rows: { widths: number[]; text: string; dom: string | null; crops: string[] }[];
       errors: { widths: number[]; message: string }[];
     }
@@ -77,13 +84,25 @@ export function parseSummary(stdout: string): Summary {
   const v = lines.map((l) => VERDICT.exec(l)).find(Boolean);
   if (!v) throw new Error(`no verdict line in:\n${stdout}`);
   // A selector can hold spaces, so a route ends where the next `/` starts or the line ends.
-  const clean = /^clean: (.*)$/m.exec(stdout)?.[1]!.match(/\/\S*(?: \[.*?\])?(?= \/|$)/g) ?? [];
+  const listed = (label: string) =>
+    new RegExp(`^${label}: (.*)$`, "m").exec(stdout)?.[1]!.match(/\/\S*(?: \[.*?\])?(?= \/|$)/g) ??
+    [];
+  const stale = /^stale accepted: (.*) — .*$/m.exec(stdout)?.[1]!.split(" ") ?? [];
+  const rerun =
+    /^rerun: (\d+) shot\(s\) on (\d+) route\(s\), (\d+) reused, (\d+) route\(s\) untouched$/m.exec(
+      stdout,
+    );
   const routes: Summary["routes"] = new Map();
   let at: ReturnType<Summary["routes"]["get"]>;
   for (const line of lines) {
     let m;
-    if ((m = /^(\/\S*(?: \[.*\])?)(?:  clean @([\d,]+))?$/.exec(line))) {
-      at = { clean: m[2] ? m[2].split(",").map(Number) : [], rows: [], errors: [] };
+    if ((m = /^(\/\S*(?: \[.*\])?)(?:  clean @([\d,]+))?(?:  accepted @([\d,]+))?$/.exec(line))) {
+      at = {
+        clean: m[2] ? m[2].split(",").map(Number) : [],
+        accepted: m[3] ? m[3].split(",").map(Number) : [],
+        rows: [],
+        errors: [],
+      };
       routes.set(m[1]!, at);
     } else if (at && (m = /^  @([\d,]+)  ERROR (.*)$/.exec(line))) {
       at.errors.push({ widths: m[1]!.split(",").map(Number), message: m[2]! });
@@ -96,7 +115,15 @@ export function parseSummary(stdout: string): Summary {
     }
   }
   return {
-    clean,
+    clean: listed("clean"),
+    accepted: listed("accepted"),
+    stale,
+    rerun: rerun && {
+      shots: Number(rerun[1]),
+      routes: Number(rerun[2]),
+      reused: Number(rerun[3]),
+      untouched: Number(rerun[4]),
+    },
     routes,
     verdict: {
       differ: Number(v[1]),
@@ -238,6 +265,8 @@ export interface ReportCard {
   crops: string[];
   /** The card carries the "before hook" badge. */
   hook: boolean;
+  /** The accepted badge's reasons, or null. */
+  accepted: string | null;
 }
 
 export interface ReportErrorRow {
@@ -249,6 +278,8 @@ export interface ReportErrorRow {
 export interface Report {
   cards: ReportCard[];
   errors: ReportErrorRow[];
+  /** The stale accepted differences section; `message` is the reason. */
+  stale: ReportErrorRow[];
   /** Block globs listed in the "What was neutralized" disclosure. */
   blockPatterns: string[];
   /** Mask `reason` strings listed in the same disclosure. */
@@ -264,6 +295,8 @@ const unesc = (s: string) =>
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&amp;/g, "&");
+
+const unescOr = (s: string | undefined) => (s === undefined ? null : unesc(s));
 
 function between(html: string, start: string, end: string): string {
   const i = html.indexOf(start);
@@ -323,14 +356,18 @@ export function parseReport(html: string): Report {
       images: [...card.matchAll(/<a href="([^"]+)"/g)].map((m) => m[1]!),
       crops: [...card.matchAll(/<a class="crop" href="([^"]+)"/g)].map((m) => m[1]!),
       hook: card.includes('<span class="hook">before hook</span>'),
+      accepted: unescOr(/<span class="accepted">accepted: ([^<]*)<\/span>/.exec(card)?.[1]),
     });
   }
 
-  const errors: ReportErrorRow[] = [];
-  const errorSection = between(html, '<h2 class="bad">Errors</h2>', "</section>");
-  for (const m of errorSection.matchAll(/<li><code>([^<]*)<\/code> @(\d+)px — ([\s\S]*?)<\/li>/g)) {
-    errors.push({ route: unesc(m[1]!), width: Number(m[2]), message: m[3]! });
-  }
+  const listed = (section: string) =>
+    [...section.matchAll(/<li><code>([^<]*)<\/code> @(\d+)px — ([\s\S]*?)<\/li>/g)].map((m) => ({
+      route: unesc(m[1]!),
+      width: Number(m[2]),
+      message: m[3]!,
+    }));
+  const errors = listed(between(html, '<h2 class="bad">Errors</h2>', "</section>"));
+  const stale = listed(between(html, "<h2>Stale accepted differences</h2>", "</section>"));
 
   const neutralized = between(html, "<details>", "</details>");
   const blockPatterns = [...neutralized.matchAll(/<li><code>([^<]*)<\/code><\/li>/g)].map(
@@ -338,7 +375,7 @@ export function parseReport(html: string): Report {
   );
   const maskReasons = [...neutralized.matchAll(/<li>((?!<code>)[^<]*)<\/li>/g)].map((m) => m[1]!);
 
-  return { cards, errors, blockPatterns, maskReasons, neutralized };
+  return { cards, errors, stale, blockPatterns, maskReasons, neutralized };
 }
 
 /** The report card for one comparison. Throws with context when absent. */

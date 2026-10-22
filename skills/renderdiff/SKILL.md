@@ -53,5 +53,11 @@ Exit: 0 nothing below `--threshold` and no errors — without `--threshold` a di
 so read the summary · 1 below `--threshold` · 2 bad args/config/origin down · 3 a route errored or the run crashed.
 `ERROR` = unmeasured, report it as unverified. Everything clean? Confirm both sides actually rendered.
 
+**Migration loop.** Record what already differs on the untouched build, with a reason:
+`--accept "differs before the migration"`. After each change, `--rerun-failed` (same
+arguments) reruns only what isn't clean or accepted. `accepted:` routes are known; a row that
+says `1 accepted` still has something new. Accept only what you looked at, never to get green.
+Details: reference.md.
+
 **Before you mask, lower the threshold, drop a route or skip widths,** read the
 Rationalizations table in [reference.md](reference.md).

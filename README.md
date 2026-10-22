@@ -97,6 +97,8 @@ renderdiff <left-origin> <right-origin> <route…> [options]
 | `--left-selector <sel>`, `--right-selector <sel>` | That side's selector, over `--selector`. One without the other side (or `--selector`) is an error. |
 | `--storage-state <file>` | Start both sides with this Playwright storage state (cookies, localStorage), e.g. signed in. Relative to cwd. Over the config's `storageState`. |
 | `--left-storage-state <file>`, `--right-storage-state <file>` | That side's storage state, over `--storage-state`. One side alone is fine. |
+| `--accept <reason>` | Record this run's differences as accepted, with a reason. See **Accepted differences and reruns**. |
+| `--rerun-failed` | Rerun only what the last run in `--out` didn't find clean or accepted, keeping the rest. |
 | `--dry-run` | Print the URL pairs and exit. No browser. |
 | `--open` | Open the report when the run finishes. |
 | `--progress` | A line per shot as it finishes, then the worst scores. The default on a terminal; piped, renderdiff prints one compact summary at the end. |
@@ -253,6 +255,58 @@ See [`renderdiff.config.example.ts`](./renderdiff.config.example.ts) for every f
 with `satisfies RenderdiffConfig` is for editor types only; Node erases it, so the file loads
 without renderdiff installed in that project.
 
+## Accepted differences and reruns
+
+A migration starts with differences that already exist between the untouched local build
+and production. Record them once, then change code and re-check only what's red:
+
+```
+renderdiff http://localhost:3000 https://example.com / /about --accept "differs before the migration"
+# …change code…
+renderdiff http://localhost:3000 https://example.com / /about --rerun-failed
+```
+
+`--accept "<reason>"` runs as usual, then writes every difference it saw that isn't accepted
+yet to `renderdiff.accepted.json`, next to the config file (or in cwd without one), each with
+the reason. Scope it the way you scope any run: pass only the routes and `--width`s to accept.
+Commit the file; it is one entry per line, so its diff reads as what was accepted.
+
+A shot whose every difference matches an accepted one is `accepted`: it is listed on an
+`accepted:` line like `clean:`, doesn't count as differing or toward `--threshold`, and has
+`"accepted": true` in `results.json` and a badge in the report. Anything else on the page
+still shows: a row with some changes accepted says `1 accepted`, and its `dom` line skips
+them. A shot with unstable pixels is never accepted, since part of it went unmeasured.
+Accepted entries for a route and width the run measured but didn't see are **stale**: they
+print on a `stale accepted:` line, sit in `summary.stale` and the report, and the next
+`--accept` over that route and width prunes them.
+
+Each entry is one change: a band, a region, or the page's size difference, keyed by route
+(as the summary names it) and width, with a fingerprint. Two changes match when they have
+the same kind and side, the same `x`, width and height (regions sit on the 16px grid, bands
+are exact rows), the same `dom` elements with the same changed values (when both runs named
+them), and each side's pixels look alike: a 4×4 grid of mean colours that may drift one step
+in sixteen per channel. That makes a match:
+
+- robust to sub-threshold noise (pixelmatch's tolerance, the grid and the colour step), to a
+  change above it moving it down the page (`y` is left out), and to unrelated changes
+  elsewhere (they are their own changes, and stay unaccepted);
+- strict about the spot itself: a different colour or value there, a change touching it (the
+  region grows), or a second identical change (an entry matches once) all surface.
+
+The cost is false alarms, never hidden changes, except one: a change inside an accepted
+region too small to move its mean colours and touching no element `dom` names. A new change
+that makes repeated identical rows align differently can also turn an accepted region into
+bands, so it shows again; accept it again once you've looked.
+
+`--rerun-failed` reads `results.json` in `--out`, keeps every shot that was clean or is
+accepted (against the accepted file as it is now), reruns the rest — differences, unstable
+shots, errors — and merges them back into `results.json` and `report.html` in route and width
+order. The out dir is kept rather than wiped; only a rerun shot's own old files are replaced.
+A `rerun:` line says how many shots it reran on how many routes, and how many it reused. It
+must repeat the previous run: different origins, routes, widths, masks, hidden selectors,
+block patterns, storage state or renderdiff version exit 2, as does a missing
+`results.json`.
+
 ## How it reads
 
 The score is the share of pixels that match, per route per width. Green above 99.5%,
@@ -377,7 +431,9 @@ Everything lands in the out dir (`./renderdiff-out` by default):
   "summary": {
     "compared": 1, "errors": 1, "mean": 0.9714,
     "worst": { "url": "/about", "width": 1440, "score": 0.9714 },
-    "belowThreshold": 0
+    "belowThreshold": 0,          // accepted shots aside
+    "accepted": 0,                // shots whose every difference was accepted
+    "stale": []                   // accepted entries the run measured but didn't see
   }
 }
 ```

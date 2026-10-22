@@ -46,6 +46,8 @@ export interface CliOptions {
   cwd?: string;
   /** Skip appending `--out`. Only for runs that never reach the browser (`--dry-run`). */
   noOut?: boolean;
+  /** Reuse an out dir from an earlier run, e.g. for `--rerun-failed`. Must be a `CliResult.outDir`. */
+  outDir?: string;
   timeoutMs?: number;
   /** Extra environment variables for the subprocess. */
   env?: Record<string, string>;
@@ -66,7 +68,7 @@ export interface CliResult {
 
 export function runCli(args: string[], opts: CliOptions = {}): Promise<CliResult> {
   const cwd = opts.cwd ?? tempDir("renderdiff-cwd-");
-  const outDir = path.join(tempDir("renderdiff-out-"), "out");
+  const outDir = opts.outDir ?? path.join(tempDir("renderdiff-out-"), "out");
   const argv = opts.noOut ? [...args] : [...args, "--out", outDir];
 
   return new Promise((resolve, reject) => {

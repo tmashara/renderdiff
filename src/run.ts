@@ -2,7 +2,8 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { chromium, errors, type Page } from "playwright";
+import { chromium, errors, type Browser, type Page } from "playwright";
+import { applyAccepted, readAccepted, writeAccepted } from "./accept.ts";
 import { cancelUnstable, capture, HookError, prepare, type Shot } from "./capture.ts";
 import { compare, crops, type Band } from "./compare.ts";
 import { locate, type ElementDiff } from "./locate.ts";
@@ -23,6 +24,7 @@ import {
   writeResults,
   type ComparedResult,
   type ErrorResult,
+  type Results,
   type RouteResult,
 } from "./report.ts";
 
@@ -43,6 +45,11 @@ interface RunOpts {
   open: boolean;
   /** A line per shot as it lands; otherwise one compact summary at the end. */
   progress: boolean;
+  /** Accept every difference not yet accepted, with this reason. */
+  accept: string | null;
+  /** Rerun only what the previous results.json in the out dir didn't find clean or accepted. */
+  rerun: boolean;
+  acceptedFile: string;
 }
 
 const slug = (url: string) =>
@@ -88,29 +95,106 @@ function wipeable(dir: string): boolean {
   return fs.statSync(dir).isDirectory() && fs.readdirSync(dir).every(ours);
 }
 
-export async function run({ routes, cfg, open, progress }: RunOpts): Promise<number> {
-  if (!wipeable(cfg.outDir)) {
+const reusable = (r: RouteResult) =>
+  r.status === "compared" && ((r.diffPixels === 0 && r.unstablePixels === 0) || r.accepted);
+
+const files = (r: RouteResult) =>
+  r.status === "compared" ? [...Object.values(r.images), ...r.crops.map((c) => c.path)] : [];
+
+/** The previous run's results when this run repeats it, else why it doesn't. */
+function previous(file: string, now: Record<string, unknown>): Results | string {
+  if (!fs.existsSync(file)) return `no ${file} to rerun from; run without --rerun-failed first`;
+  let prev: Results;
+  try {
+    prev = JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return `${file} is not valid JSON; run without --rerun-failed`;
+  }
+  const was: Record<string, unknown> = {
+    ...prev.meta,
+    routes: [...new Set(prev.results?.map(name))],
+  };
+  for (const [key, value] of Object.entries(now)) {
+    if (JSON.stringify(value) !== JSON.stringify(was[key])) {
+      return (
+        `${key} ${JSON.stringify(value)} differ from the previous run's ${JSON.stringify(was[key])} ` +
+        `in ${file}; run without --rerun-failed to start over`
+      );
+    }
+  }
+  return prev;
+}
+
+export async function run({
+  routes,
+  cfg,
+  open,
+  progress,
+  accept,
+  rerun,
+  acceptedFile,
+}: RunOpts): Promise<number> {
+  const names = routes.map(name);
+  const setup = {
+    left: cfg.left,
+    right: cfg.right,
+    widths: cfg.widths,
+    blockUrlPatterns: cfg.blockUrlPatterns,
+    hideSelectors: cfg.hideSelectors,
+    masks: cfg.masks.map(({ urlPath, reason }) => ({ urlPath, reason })),
+    storageState: {
+      left: cfg.storageState.left && path.basename(cfg.storageState.left),
+      right: cfg.storageState.right && path.basename(cfg.storageState.right),
+    },
+  };
+  let accepted;
+  try {
+    accepted = readAccepted(acceptedFile);
+  } catch (e) {
+    console.error(`✗ ${e instanceof Error ? e.message : String(e)}`);
+    return 2;
+  }
+  const prev = rerun
+    ? previous(path.join(cfg.outDir, "results.json"), {
+        version: version(),
+        ...setup,
+        routes: names,
+      })
+    : null;
+  if (typeof prev === "string") {
+    console.error(`✗ --rerun-failed: ${prev}`);
+    return 2;
+  }
+  if (!prev && !wipeable(cfg.outDir)) {
     console.error(
       `✗ output directory ${cfg.outDir} holds files renderdiff didn't write — ` +
         `refusing to wipe it. Pass --out with a new or empty directory.`,
     );
     return 2;
   }
-  fs.rmSync(cfg.outDir, { recursive: true, force: true });
+  if (!prev) fs.rmSync(cfg.outDir, { recursive: true, force: true });
   fs.mkdirSync(cfg.outDir, { recursive: true });
 
+  if (prev) applyAccepted(prev.results, accepted);
+  const before = new Map(prev?.results.map((r) => [`${name(r)}@${r.width}`, r]));
+  const results: RouteResult[] = [];
   const jobs: Job[] = [];
-  for (const route of routes) for (const width of cfg.widths) jobs.push({ route, width });
+  for (const route of routes) {
+    for (const width of cfg.widths) {
+      const had = before.get(`${name(route)}@${width}`);
+      if (had && reusable(had)) results.push(had);
+      else jobs.push({ route, width });
+    }
+  }
 
   const stems = slugs(routes);
-  const results: RouteResult[] = [];
-  const { browser, channel } = await launch();
+  const launched = jobs.length ? await launch() : null;
   const queue = [...jobs];
   let done = 0;
   // Whole minute, so an HH:MM display reads the same on both sides.
   const now = Math.floor(Date.now() / 60_000) * 60_000;
 
-  const worker = async () => {
+  const worker = async (browser: Browser) => {
     // One context per origin so cookies/localStorage never cross between them.
     const leftCtx = await browser.newContext({
       ...CONTEXT_OPTIONS,
@@ -195,6 +279,7 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
           unstablePixels,
           images,
           crops: cropped,
+          accepted: false,
         });
         const { regions, bands, alignedScore, text } = metrics;
         const dom = elementsOf(metrics);
@@ -238,37 +323,68 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
   if (progress) {
     console.log(`Capturing ${jobs.length} pair(s) with ${cfg.concurrency} worker(s)...\n`);
   }
-  await Promise.all(Array.from({ length: cfg.concurrency }, worker));
-  const browserMeta = { name: channel ?? "chromium", version: browser.version() };
-  await browser.close();
+  if (launched) {
+    await Promise.all(Array.from({ length: cfg.concurrency }, () => worker(launched.browser)));
+    await launched.browser.close();
+  }
+  const browserMeta = launched
+    ? { name: launched.channel ?? "chromium", version: launched.browser.version() }
+    : prev!.meta.browser;
+
+  // A rerun overwrites a shot's files in place; drop the ones it no longer writes, ours only.
+  const kept = new Set(results.flatMap(files));
+  for (const { route, width } of jobs) {
+    const had = before.get(`${name(route)}@${width}`);
+    for (const f of had ? files(had) : []) {
+      if (!kept.has(f) && ours(f)) fs.rmSync(path.join(cfg.outDir, f), { force: true });
+    }
+  }
 
   // Workers finish out of order; job order keeps results.json stable across runs.
-  const names = routes.map(name);
   const order = (r: RouteResult) =>
     names.indexOf(name(r)) * cfg.widths.length + cfg.widths.indexOf(r.width);
   results.sort((a, b) => order(a) - order(b));
 
+  let { unmatched, stale } = applyAccepted(results, accepted);
+  if (accept !== null) {
+    writeAccepted(acceptedFile, [
+      ...accepted.filter((a) => !stale.includes(a)),
+      ...unmatched.map((u) => ({ ...u, reason: accept })),
+    ]);
+    console.log(
+      `accepted ${unmatched.length} difference(s), pruned ${stale.length} stale — ${acceptedFile}`,
+    );
+    ({ stale } = applyAccepted(results, readAccepted(acceptedFile)));
+  }
+
+  const { left, right, widths, ...rest } = setup;
   const meta = {
     tool: "renderdiff" as const,
     version: version(),
     generatedAt: new Date().toISOString(),
-    left: cfg.left,
-    right: cfg.right,
-    widths: cfg.widths,
+    left,
+    right,
+    widths,
     threshold: cfg.threshold,
     clock: new Date(now).toISOString(),
-    blockUrlPatterns: cfg.blockUrlPatterns,
-    hideSelectors: cfg.hideSelectors,
-    masks: cfg.masks.map(({ urlPath, reason }) => ({ urlPath, reason })),
+    ...rest,
     browser: browserMeta,
-    storageState: {
-      left: cfg.storageState.left && path.basename(cfg.storageState.left),
-      right: cfg.storageState.right && path.basename(cfg.storageState.right),
-    },
   };
-  const reportPath = await writeReport(results, meta, cfg);
-  const resultsPath = writeResults(results, meta, cfg.outDir);
+  const reportPath = await writeReport(results, meta, cfg, stale);
+  const resultsPath = writeResults(results, meta, cfg.outDir, stale);
 
+  if (prev) {
+    const rerunRoutes = new Set(jobs.map((j) => name(j.route))).size;
+    console.log(
+      `rerun: ${jobs.length} shot(s) on ${rerunRoutes} route(s), ` +
+        `${results.length - jobs.length} reused, ${names.length - rerunRoutes} route(s) untouched`,
+    );
+  }
+  if (stale.length) {
+    console.log(
+      `stale accepted: ${stale.map((a) => `${a.route}@${a.width}`).join(" ")} — ${acceptedFile}`,
+    );
+  }
   if (progress) summarize(results, reportPath, resultsPath);
   else console.log(compact(results, names, resultsPath, cfg.threshold));
 
@@ -279,7 +395,8 @@ export async function run({ routes, cfg, open, progress }: RunOpts): Promise<num
 
   // A measured failure outranks an unmeasured route, so an error can't hide a threshold failure.
   const below = results.filter(
-    (r) => r.status === "compared" && cfg.threshold !== null && r.score < cfg.threshold,
+    (r) =>
+      r.status === "compared" && !r.accepted && cfg.threshold !== null && r.score < cfg.threshold,
   );
   if (below.length) {
     console.error(`\n✗ ${below.length} route(s) below ${pct(cfg.threshold!)}.`);
@@ -349,6 +466,13 @@ function summarize(results: RouteResult[], reportPath: string, resultsPath: stri
     }
   }
 
+  const accepted = compared.filter((r) => r.accepted);
+  if (accepted.length) {
+    console.log(
+      `\nAccepted (${accepted.length}): ${accepted.map((r) => `${name(r)}@${r.width}`).join(" ")}`,
+    );
+  }
+
   const errors = results.filter((r): r is ErrorResult => r.status === "error");
   if (errors.length) {
     console.log(`\nErrors (${errors.length}):`);
@@ -362,13 +486,13 @@ function summarize(results: RouteResult[], reportPath: string, resultsPath: stri
 /** At most this many elements per summary line. */
 const DOM_ELEMENTS = 3;
 
-/** Located elements in crop order, bands tallest first then regions, one per selector. */
+/** Located elements in crop order, bands tallest first then regions, one per selector; none accepted. */
 function elementsOf(r: {
-  regions: { elements?: ElementDiff[] }[];
-  bands: (Band & { elements?: ElementDiff[] })[] | null;
+  regions: { elements?: ElementDiff[]; accepted?: string }[];
+  bands: Band[] | null;
 }): ElementDiff[] {
-  const all = [...[...(r.bands ?? [])].sort((a, b) => b.h - a.h), ...r.regions].flatMap(
-    (g) => g.elements ?? [],
+  const all = [...[...(r.bands ?? [])].sort((a, b) => b.h - a.h), ...r.regions].flatMap((g) =>
+    g.accepted ? [] : (g.elements ?? []),
   );
   return all
     .filter((e, i) => all.findIndex((o) => o.selector === e.selector) === i)
@@ -391,19 +515,29 @@ export function compact(
 ): string {
   const out: string[] = [];
   const clean: string[] = [];
+  const accepted: string[] = [];
   let differ = 0;
   for (const route of routes) {
     const rows = results.filter((r) => name(r) === route);
     const ok = rows.filter((r): r is ComparedResult => r.status === "compared");
     // Unstable pixels went unmeasured, so a shot with any is not clean, only unchanged.
     const same = ok.filter((r) => r.diffPixels === 0 && r.unstablePixels === 0);
-    const changed = ok.filter((r) => !same.includes(r));
+    const acc = ok.filter((r) => r.accepted);
+    const changed = ok.filter((r) => !same.includes(r) && !r.accepted);
     if (same.length === rows.length) {
       clean.push(route);
       continue;
     }
+    if (same.length + acc.length === rows.length) {
+      accepted.push(route);
+      continue;
+    }
     if (changed.some((r) => r.diffPixels > 0)) differ++;
-    out.push(route + (same.length ? `  clean @${same.map((r) => r.width).join(",")}` : ""));
+    out.push(
+      route +
+        (same.length ? `  clean @${same.map((r) => r.width).join(",")}` : "") +
+        (acc.length ? `  accepted @${acc.map((r) => r.width).join(",")}` : ""),
+    );
     const groups = new Map<string, ComparedResult[]>();
     for (const r of changed) {
       const key = JSON.stringify([
@@ -428,10 +562,12 @@ export function compact(
       if (r.status === "error") failed.set(r.error, [...(failed.get(r.error) ?? []), r.width]);
     for (const [error, widths] of failed) out.push(`  @${widths.join(",")}  ERROR ${error}`);
   }
+  if (accepted.length) out.unshift(`accepted: ${accepted.join(" ")}`);
   if (clean.length) out.unshift(`clean: ${clean.join(" ")}`);
-  const compared = results.filter((r): r is ComparedResult => r.status === "compared");
+  const all = results.filter((r): r is ComparedResult => r.status === "compared");
+  const compared = all.filter((r) => !r.accepted);
   const shots = compared.filter((r) => r.diffPixels > 0).length;
-  const errors = results.length - compared.length;
+  const errors = results.length - all.length;
   const worst = compared.length ? stats(compared).worst : null;
   out.push(
     `renderdiff: ${differ} of ${routes.length} routes differ (${shots} of ${results.length} shots), ` +
@@ -453,6 +589,9 @@ function row(g: ComparedResult[]): string {
     return lo === hi ? f(lo) : `${f(lo)}–${f(hi)}`;
   };
   const regions = g.map((x) => x.regions.length);
+  const accepted = g.map(
+    (x) => [...(x.bands ?? []), ...x.regions].filter((c) => c.accepted).length,
+  );
   const unstable = Math.max(...g.map((x) => x.unstablePixels));
   // Band y varies with width; a collapsed row shows the first one's, marked approximate.
   const y = (b: Band) => `@y${g.length > 1 ? "~" : ""}${b.y}`;
@@ -469,6 +608,7 @@ function row(g: ComparedResult[]): string {
     r.alignedScore !== null ? `aligned ${pct(r.alignedScore)}` : "",
     Math.max(...regions) ? `${span(regions, String)} reg` : "",
     unstable ? `unstable ${unstable.toLocaleString("en-US")}px` : "",
+    Math.max(...accepted) ? `${span(accepted, String)} accepted` : "",
     text.length
       ? `text ${text.slice(0, TEXT_LINES).join(" ")}` +
         (text.length > TEXT_LINES ? ` (+${text.length - TEXT_LINES} more)` : "")
