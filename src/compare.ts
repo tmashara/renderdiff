@@ -188,7 +188,10 @@ function myers<T>(a: ArrayLike<T>, b: ArrayLike<T>, maxD = MAX_EDIT): [number, n
           ? v[off + k + 1]!
           : v[off + k - 1]! + 1;
       let y = x - k;
-      while (x < n && y < m && a[x] === b[y]) (x++, y++);
+      while (x < n && y < m && a[x] === b[y]) {
+        x++;
+        y++;
+      }
       v[off + k] = x;
       if (x >= n && y >= m) return backtrack(trace, n, m, d);
     }
@@ -478,8 +481,14 @@ function pairUp(ca: Uint8Array, cb: Uint8Array) {
   for (const [px, py] of [...ka.map((i, n) => [i, kb[n]!] as const), [lh, rh] as const]) {
     const k = Math.min(px - x, py - y);
     for (let j = 0; j < k; j++) rows.push([x + j, y + j]);
-    if (px - x > k) (bands.push({ side: "left", y: x + k, h: px - x - k }), at.push(py));
-    if (py - y > k) (bands.push({ side: "right", y: y + k, h: py - y - k }), at.push(px));
+    if (px - x > k) {
+      bands.push({ side: "left", y: x + k, h: px - x - k });
+      at.push(py);
+    }
+    if (py - y > k) {
+      bands.push({ side: "right", y: y + k, h: py - y - k });
+      at.push(px);
+    }
     if (px < lh) rows.push([px, py]);
     x = px + 1;
     y = py + 1;
