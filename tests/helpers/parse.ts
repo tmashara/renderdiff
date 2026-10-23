@@ -57,7 +57,13 @@ export interface Summary {
     {
       clean: number[];
       accepted: number[];
-      rows: { widths: number[]; text: string; dom: string | null; crops: string[] }[];
+      rows: {
+        widths: number[];
+        text: string;
+        failed: string | null;
+        dom: string | null;
+        crops: string[];
+      }[];
       errors: { widths: number[]; message: string }[];
     }
   >;
@@ -107,7 +113,15 @@ export function parseSummary(stdout: string): Summary {
     } else if (at && (m = /^  @([\d,]+)  ERROR (.*)$/.exec(line))) {
       at.errors.push({ widths: m[1]!.split(",").map(Number), message: m[2]! });
     } else if (at && (m = /^  @([\d,]+)  (.*)$/.exec(line))) {
-      at.rows.push({ widths: m[1]!.split(",").map(Number), text: m[2]!, dom: null, crops: [] });
+      at.rows.push({
+        widths: m[1]!.split(",").map(Number),
+        text: m[2]!,
+        failed: null,
+        dom: null,
+        crops: [],
+      });
+    } else if (at?.rows.length && (m = /^    failed (.*)$/.exec(line))) {
+      at.rows.at(-1)!.failed = m[1]!;
     } else if (at?.rows.length && (m = /^    dom (.*)$/.exec(line))) {
       at.rows.at(-1)!.dom = m[1]!;
     } else if (at?.rows.length && (m = /^    crops (.*)$/.exec(line))) {

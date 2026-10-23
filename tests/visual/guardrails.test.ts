@@ -1056,6 +1056,38 @@ describe("image filenames", () => {
   });
 });
 
+describe("failed assets", () => {
+  test("a stylesheet and a font face that 404 are named per side; a blocked one is not", async () => {
+    const run = await capture(["/broken-asset"], { config: path.join(CONFIGS, "block-asset.mjs") });
+    const r = result(results(run.outDir), "/broken-asset", 1440);
+    for (const [side, origin] of [
+      ["left", site.left],
+      ["right", site.right],
+    ] as const) {
+      assert.deepEqual(
+        r.failed[side],
+        [`stylesheet ${origin}/shared/missing.css`, "font Gone"],
+        `${side}${context(run)}`,
+      );
+    }
+    const [row] = parseSummary(run.stdout).routes.get("/broken-asset")!.rows;
+    assert.match(
+      row!.failed ?? "",
+      /^left: stylesheet .*missing\.css, font Gone; right: /,
+      context(run),
+    );
+  });
+
+  test("a shot whose pixels match but whose assets failed is not clean", async () => {
+    const run = await capture(["/broken-asset"], { selector: "h1" });
+    const summary = parseSummary(run.stdout);
+    assert.deepEqual(summary.clean, [], context(run));
+    const [row] = summary.routes.get("/broken-asset [h1]")!.rows;
+    assert.match(row!.text, /^100\.00%/, context(run));
+    assert.match(row!.failed ?? "", /font Gone/, context(run));
+  });
+});
+
 describe("retries", () => {
   test("a page that did not render is not retried", async () => {
     const before = site.hits("/blank");

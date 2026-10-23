@@ -4,7 +4,7 @@ import type { Accepted } from "./accept.ts";
 import type { Band, Box, Region, TextDiff } from "./compare.ts";
 import { CONTEXT_OPTIONS, name, type ResolvedConfig, type Sides } from "./config.ts";
 import type { ElementDiff } from "./locate.ts";
-import { floor4, fmtBand, fmtElements, fmtRegion, pct, signed } from "./format.ts";
+import { floor4, fmtBand, fmtElements, fmtFailed, fmtRegion, pct, signed } from "./format.ts";
 
 interface BaseResult {
   /** The route: `/a`, or `/a::/b` for a pair. */
@@ -43,6 +43,8 @@ export interface ComparedResult extends BaseResult {
   crops: CropResult[];
   /** Every band and region matched an accepted one, and no padding or unstable pixel went unmatched. */
   accepted: boolean;
+  /** Stylesheets and font faces that failed to load per side, e.g. `font Inter 700`. */
+  failed: { left: string[]; right: string[] };
 }
 
 /** A crop of one change: left and right panels, a 1px red box round it, or a 2px red seam. */
@@ -200,6 +202,8 @@ const dom = (els: ElementDiff[] | undefined) =>
 
 function findings(r: ComparedResult): string {
   const items: string[] = [];
+  const failed = fmtFailed(r.failed);
+  if (failed) items.push(`<p class="failed">failed to load: ${esc(failed)}</p>`);
   if (r.regions.length) {
     items.push(
       `<p>${r.regions.length} region(s)</p><ul class="regions">${r.regions

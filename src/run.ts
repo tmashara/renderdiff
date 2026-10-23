@@ -18,7 +18,7 @@ import {
   type ResolvedConfig,
   type Route,
 } from "./config.ts";
-import { fmtBand, fmtElements, fmtRegion, pct, signed } from "./format.ts";
+import { fmtBand, fmtElements, fmtFailed, fmtRegion, pct, signed } from "./format.ts";
 import {
   stats,
   writeReport,
@@ -96,8 +96,12 @@ function wipeable(dir: string): boolean {
   return fs.statSync(dir).isDirectory() && fs.readdirSync(dir).every(ours);
 }
 
+/** A stylesheet or font face failed on a side; older results.json files lack the field. */
+const broken = (r: ComparedResult) => !!(r.failed?.left.length || r.failed?.right.length);
+
 const reusable = (r: RouteResult) =>
-  r.status === "compared" && ((r.diffPixels === 0 && r.unstablePixels === 0) || r.accepted);
+  r.status === "compared" &&
+  ((r.diffPixels === 0 && r.unstablePixels === 0 && !broken(r)) || r.accepted);
 
 const files = (r: RouteResult) =>
   r.status === "compared" ? [...Object.values(r.images), ...r.crops.map((c) => c.path)] : [];
@@ -305,11 +309,14 @@ export async function run({
           images,
           crops: cropped,
           accepted: false,
+          failed: { left: leftShot.failed, right: rightShot.failed },
         });
         const { regions, bands, alignedScore, text } = metrics;
         const dom = elementsOf(metrics);
+        const assets = fmtFailed({ left: leftShot.failed, right: rightShot.failed });
         const details = [
           sel,
+          assets ? `failed ${assets}` : "",
           regions.length
             ? `${regions.length} region${regions.length > 1 ? "s" : ""}, largest ${fmtRegion(regions[0]!)}`
             : "",
@@ -550,8 +557,9 @@ export function compact(
   for (const route of routes) {
     const rows = results.filter((r) => name(r) === route);
     const ok = rows.filter((r): r is ComparedResult => r.status === "compared");
-    // Unstable pixels went unmeasured, so a shot with any is not clean, only unchanged.
-    const same = ok.filter((r) => r.diffPixels === 0 && r.unstablePixels === 0);
+    // Unstable pixels went unmeasured and a failed asset rendered a fallback, so a shot with
+    // either is not clean, only unchanged.
+    const same = ok.filter((r) => r.diffPixels === 0 && r.unstablePixels === 0 && !broken(r));
     const acc = ok.filter((r) => r.accepted);
     const changed = ok.filter((r) => !same.includes(r) && !r.accepted);
     if (same.length === rows.length) {
@@ -581,6 +589,11 @@ export function compact(
     }
     for (const g of groups.values()) {
       out.push(`  @${g.map((r) => r.width).join(",")}  ${row(g)}`);
+      const failed = fmtFailed({
+        left: [...new Set(g.flatMap((r) => r.failed?.left ?? []))],
+        right: [...new Set(g.flatMap((r) => r.failed?.right ?? []))],
+      });
+      if (failed) out.push(`    failed ${failed}`);
       const dom = elementsOf(g[0]!);
       if (dom.length)
         out.push(`    dom ${g.length > 1 ? `@${g[0]!.width} ` : ""}${fmtElements(dom)}`);

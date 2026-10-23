@@ -5,6 +5,11 @@ import type { ElementDiff } from "./locate.ts";
 export const floor4 = (n: number) => Math.floor(n * 1e4 + 1e-7) / 1e4;
 export const pct = (n: number) => `${(floor4(n) * 100).toFixed(2)}%`;
 export const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`);
+/** `left: font Inter 700; right: …`, the sides with assets that failed to load; empty when none did. */
+export const fmtFailed = (f: { left: string[]; right: string[] } | undefined) =>
+  (["left", "right"] as const)
+    .flatMap((s) => (f?.[s].length ? [`${s}: ${f[s].join(", ")}`] : []))
+    .join("; ");
 export const fmtRegion = (r: { x: number; y: number; w: number; h: number }) =>
   `${r.w}×${r.h} at (${r.x},${r.y})`;
 /** Signed like the height delta: + when left has the extra rows, − when right does. */

@@ -1,6 +1,7 @@
 ---
 name: renderdiff
 description: Visual-parity check for website migrations. Use when a framework migration, CSS or design-system refactor, template rewrite, CMS move or dependency/build upgrade should not change how pages look, to prove it by screenshot-diffing a local build against production (or any reference) across viewport widths. Also for "did I break the layout", visual regression checks, pixel diffs of two URLs, or running the renderdiff CLI.
+allowed-tools: Bash(npx renderdiff:*), Bash(npx renderdiff@latest:*), Bash(renderdiff:*), Read
 ---
 
 # renderdiff
@@ -21,9 +22,15 @@ legitimate: [reference.md](reference.md).
    with `--accept "differs before the migration"`: what already differs is recorded, not
    yours. Accept only what you looked at, never to get green.
 2. Both origins up, with the same content and data. `--dry-run` shows the URL pairs.
+   Upgrading a dependency or build? The cleanest reference is the pre-upgrade commit in a
+   `git worktree` on another port: same data, fonts and CDN, so every diff is yours. Serve
+   a production build: dev overlays and debug bars exist only on your side (Next's and
+   Astro's are hidden; others go in `hideSelectors`). Routes: one per template or layout,
+   from the sitemap or router; skip search results, pagination and admin.
 3. One route, one width. A row: score, `h±N`/`w±N` height/width delta,
    `band`, `aligned`, `N reg`, `unstable Npx` (moving pixels, unmeasured), `text`.
-4. `text` first: `-"x"` is missing from your change, `+"x"` only in yours.
+4. `failed` first: a stylesheet or font one side didn't load explains the whole row; fix
+   that and rerun. Then `text`: `-"x"` is missing from your change, `+"x"` only in yours.
 5. `band -24@y196`: 24 rows only the reference has. `aligned 100.00%`: the band is the
    whole difference. `unaligned`: see reference.md.
 6. `dom` before crops. `sel prop l→r`: computed value, left first; find the *rule*.

@@ -176,6 +176,7 @@ only.
 | `unaligned` | Heights differ but too few rows match to find bands. Use the height delta and regions. |
 | `3 reg` | Regions: connected patches of differing pixels. A missing link barely moves the score, but it is still a region. |
 | `unstable 1,204px` | Pixels that kept changing between shots of the same load (a ticker, a carousel). Excluded from the score, so the route is never clean. |
+| `failed left: font Inter 700` | A stylesheet or font face that side failed to load (blocked URLs aside). Fix that first: a fallback font changes every line of text. |
 | `text -"Pricing"` | A line of visible text only the reference has (`+`: only your change). Up to three, then `(+N more)`. |
 | `dom sel prop a→b` | Element on both sides whose computed `prop` differs, left value first. |
 | `dom +sel` / `-sel` | Element only on the left / only on the right. |
@@ -253,6 +254,7 @@ Everything lands in the out dir (`./renderdiff-out` by default):
         }]
       }],
       "text": { "added": [], "removed": ["Pricing"] },   // added: left only; removed: right only
+      "failed": { "left": [], "right": [] },   // stylesheets and font faces that didn't load: "font Inter 700", "stylesheet https://…"
       "images": { "left": "about.1440.left.png", "right": "about.1440.right.png", "diff": "about.1440.diff.png" },
       "crops": [{
         "path": "about.1440.c1.png", "kind": "band",          // or "region"

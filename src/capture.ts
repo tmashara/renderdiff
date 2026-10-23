@@ -18,6 +18,8 @@ export interface Shot {
   text: string[];
   /** Page px of the shot's top-left: the element's for a selector route, else 0,0. */
   origin: { x: number; y: number };
+  /** Stylesheets and font faces that failed to load, e.g. `font Inter 700 italic`, `stylesheet https://…`. */
+  failed: string[];
 }
 
 /**
@@ -37,8 +39,8 @@ const TILE_HEIGHT = 16_000;
  */
 const MAX_PAGE_HEIGHT = 40_000;
 
-/** Requests still open per page, and when the last one opened or closed. */
-const network = new WeakMap<Page, { open: Set<Request>; last: number }>();
+/** Requests still open per page, when the last one opened or closed, and stylesheets that failed. */
+const network = new WeakMap<Page, { open: Set<Request>; last: number; failed: Set<string> }>();
 
 /** Never finish, so they would hold network idle open until its timeout. */
 const STREAMS = new Set(["eventsource", "websocket", "ping"]);
@@ -58,7 +60,12 @@ export class HookError extends Error {}
  * page, before any navigation.
  */
 export async function prepare(page: Page, cfg: ResolvedConfig, now: number): Promise<void> {
-  const net = { open: new Set<Request>(), last: Date.now() };
+  const net = { open: new Set<Request>(), last: Date.now(), failed: new Set<string>() };
+  const blocked = new WeakSet<Request>();
+  const sheet = (r: Request) => {
+    if (r.resourceType() === "stylesheet" && !blocked.has(r))
+      net.failed.add(`stylesheet ${r.url()}`);
+  };
   network.set(page, net);
   page.on("request", (r) => {
     if (STREAMS.has(r.resourceType())) return;
@@ -69,7 +76,14 @@ export async function prepare(page: Page, cfg: ResolvedConfig, now: number): Pro
     if (net.open.delete(r)) net.last = Date.now();
   };
   page.on("requestfinished", done);
-  page.on("requestfailed", done);
+  page.on("requestfailed", (r) => {
+    done(r);
+    // Aborted: cancelled by the page or by the next navigation, not a load that failed.
+    if (r.failure()?.errorText !== "net::ERR_ABORTED") sheet(r);
+  });
+  page.on("response", (r) => {
+    if (r.status() >= 400) sheet(r.request());
+  });
   // A request the old document left open never finishes or fails, so it can't hold the next load.
   page.on("framenavigated", (f) => {
     if (f !== page.mainFrame()) return;
@@ -77,7 +91,10 @@ export async function prepare(page: Page, cfg: ResolvedConfig, now: number): Pro
     net.last = Date.now();
   });
   for (const pattern of cfg.blockUrlPatterns) {
-    await page.route(pattern, (route) => route.abort());
+    await page.route(pattern, (route) => {
+      blocked.add(route.request());
+      return route.abort();
+    });
   }
   // Time flows, so Date-based debounce and busy-waits work; `capture` rewinds it per load.
   await page.clock.install({ time: now });
@@ -104,6 +121,8 @@ export async function capture(
 ): Promise<Shot> {
   await page.setViewportSize({ width, height: 900 });
   await page.clock.setSystemTime(now);
+  // Here, not on framenavigated, which a pushState during hydration fires too.
+  network.get(page)!.failed.clear();
   const res = await page.goto(url, {
     waitUntil: "domcontentloaded",
     timeout: 45_000,
@@ -145,8 +164,19 @@ export async function capture(
     );
     await Promise.race([decoded, new Promise((r) => setTimeout(r, 5_000))]);
   }, MAX_PAGE_HEIGHT);
-  await page.evaluate(() => document.fonts.ready);
+  // fonts.ready also resolves when a face fails, so the failures are read off it below.
+  const fonts = await page.evaluate(async () => {
+    await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 5_000))]);
+    const failed: string[] = [];
+    document.fonts.forEach((f) => {
+      if (f.status !== "error") return;
+      const variant = [f.weight, f.style].filter((v) => v !== "normal" && v !== "400");
+      failed.push(["font", f.family, ...variant].join(" "));
+    });
+    return failed;
+  });
   await networkIdle(page, 250, 3_000);
+  const failed = [...new Set([...network.get(page)!.failed, ...fonts])];
   await page.addStyleTag({ content: cfg.neutralizeCss }); // anything injected late
 
   const selector = route.selector?.[side];
@@ -254,8 +284,9 @@ export async function capture(
   for (let n = 2; ; n++) {
     await page.waitForTimeout(50);
     const png = await shoot();
-    if (png.equals(prev)) return { png, unstable: null, blank, text, origin };
-    if (n === tries) return { png, unstable: await differing(prev, png), blank, text, origin };
+    if (png.equals(prev)) return { png, unstable: null, blank, text, origin, failed };
+    if (n === tries)
+      return { png, unstable: await differing(prev, png), blank, text, origin, failed };
     prev = png;
   }
 }

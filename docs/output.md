@@ -29,11 +29,12 @@ score and text; the score and region count are then shown as ranges, and `unstab
 largest. Bands are `+` for rows only the left has and `-` for rows only the right has, at
 `y`, with `~` when the widths put it in different places. Up to three text-diff lines
 follow (`-"x"` only on the right, `+"x"` only on the left, `(+N more)` past that). Under a
-row, `dom` names up to three elements behind the changes (`@w` when the row covers several
+row, `failed` lists stylesheets and font faces a side failed to load (fix those first),
+`dom` names up to three elements behind the changes (`@w` when the row covers several
 widths: the first one's), and `crops` lists that row's crop files, relative to the
 directory `results.json` is in. Errors print in full, grouped across the widths that share
-a message. Clean means not one pixel differs and none went unmeasured as unstable; a route
-with unstable pixels gets its own row. With `--threshold`, the verdict line ends
+a message. Clean means not one pixel differs, none went unmeasured as unstable and no
+stylesheet or font failed; a route with unstable pixels or a failed asset gets its own row. With `--threshold`, the verdict line ends
 `, B below 97.00%`. `--progress` gets the per-shot output when piped, `--no-progress` the
 summary on a terminal.
 
@@ -63,6 +64,7 @@ because an unmeasured route is not a verified one.
 | Text | `text: 0 added, 1 removed` | `text -"Pricing"` | `text: { added: [], removed: ["Pricing"] }` |
 | Regions | (on the report card) | `3 reg` | `regions: [...]` |
 | Unstable | `(unstable 1,204px)` | `unstable 1,204px` | `unstablePixels: 1204` |
+| Failed assets | `failed left: font Inter 700` | `failed left: font Inter 700` | `failed: { left: ["font Inter 700"], right: [] }` |
 
 Under each score, `--progress` output and the report card say where to look:
 
