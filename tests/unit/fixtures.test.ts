@@ -151,6 +151,7 @@ describe("authoring rules", () => {
 
   test("every referenced shared asset exists", async () => {
     for (const dir of ALL) {
+      if (dir === "broken-asset") continue;
       for (const side of ["left", "right"] as const) {
         const html = await sideHtml(dir, side);
         for (const m of html.matchAll(/(?:src|href)="\/shared\/([^"]+)"/g)) {
@@ -165,6 +166,8 @@ describe("authoring rules", () => {
     const css = fs.readFileSync(path.join(FIXTURES, "shared", "base.css"), "utf8");
     assert.doesNotMatch(css, /@font-face|fonts\.googleapis|@import/);
     for (const dir of ALL) {
+      // Its font face 404s on purpose, so it never loads.
+      if (dir === "broken-asset") continue;
       for (const side of ["left", "right"] as const) {
         assert.doesNotMatch(
           await sideHtml(dir, side),

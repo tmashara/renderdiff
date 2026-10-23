@@ -18,7 +18,7 @@ import {
   type ResolvedConfig,
   type Route,
 } from "./config.ts";
-import { fmtBand, fmtElements, fmtRegion, pct, signed } from "./format.ts";
+import { fmtBand, fmtElements, fmtFailed, fmtRegion, pct, signed } from "./format.ts";
 import {
   stats,
   writeReport,
@@ -305,11 +305,14 @@ export async function run({
           images,
           crops: cropped,
           accepted: false,
+          failed: { left: leftShot.failed, right: rightShot.failed },
         });
         const { regions, bands, alignedScore, text } = metrics;
         const dom = elementsOf(metrics);
+        const assets = fmtFailed({ left: leftShot.failed, right: rightShot.failed });
         const details = [
           sel,
+          assets ? `failed ${assets}` : "",
           regions.length
             ? `${regions.length} region${regions.length > 1 ? "s" : ""}, largest ${fmtRegion(regions[0]!)}`
             : "",
@@ -581,6 +584,11 @@ export function compact(
     }
     for (const g of groups.values()) {
       out.push(`  @${g.map((r) => r.width).join(",")}  ${row(g)}`);
+      const failed = fmtFailed({
+        left: [...new Set(g.flatMap((r) => r.failed?.left ?? []))],
+        right: [...new Set(g.flatMap((r) => r.failed?.right ?? []))],
+      });
+      if (failed) out.push(`    failed ${failed}`);
       const dom = elementsOf(g[0]!);
       if (dom.length)
         out.push(`    dom ${g.length > 1 ? `@${g[0]!.width} ` : ""}${fmtElements(dom)}`);

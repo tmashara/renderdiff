@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Broken assets</title>
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/missing.css">
+<link rel="stylesheet" href="/shared/blocked.css">
+<style>
+/* GUARD RAIL for failed assets. Both sides link a stylesheet that 404s, one a config blocks,
+   and a font face that 404s; only the 404s are reported, per side. The block differs so the
+   route has a row to carry them. */
+@font-face { font-family: "Gone"; src: url("/shared/gone.woff2") format("woff2"); }
+h1 { font-family: "Gone", ui-monospace, SFMono-Regular, Menlo, monospace; }
+.box { width: 208px; height: 160px; background: var(--accent); }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Broken assets</h1>
+<p class="lede">This pair is deliberately different. The block below is red on the left and blue on the right, and both sides ask for a stylesheet and a font that are not there.</p>
+<div class="box"></div>
+<section class="notes">
+<h2>Notes</h2>
+<p>A font that never loads falls back silently, and the diff then reads as a typography change. Naming the missing font tells the reader where to look first.</p>
+</section>
+</div>
+</body>
+</html>

@@ -1056,6 +1056,29 @@ describe("image filenames", () => {
   });
 });
 
+describe("failed assets", () => {
+  test("a stylesheet and a font face that 404 are named per side; a blocked one is not", async () => {
+    const run = await capture(["/broken-asset"], { config: path.join(CONFIGS, "block-asset.mjs") });
+    const r = result(results(run.outDir), "/broken-asset", 1440);
+    for (const [side, origin] of [
+      ["left", site.left],
+      ["right", site.right],
+    ] as const) {
+      assert.deepEqual(
+        r.failed[side],
+        [`stylesheet ${origin}/shared/missing.css`, "font Gone"],
+        `${side}${context(run)}`,
+      );
+    }
+    const [row] = parseSummary(run.stdout).routes.get("/broken-asset")!.rows;
+    assert.match(
+      row!.failed ?? "",
+      /^left: stylesheet .*missing\.css, font Gone; right: /,
+      context(run),
+    );
+  });
+});
+
 describe("retries", () => {
   test("a page that did not render is not retried", async () => {
     const before = site.hits("/blank");

@@ -23,9 +23,10 @@ honestly. This is what renderdiff does to make sure of that.
   dev toolbars.
 - **Settles the page** — makes native lazy images eager, scrolls every viewport-height
   slice a frame at a time so script lazy loaders fire, waits for every image to decode,
-  `document.fonts.ready` and up to 3s for the network to go 250ms with nothing in flight
+  `document.fonts.ready` (at most 5s) and up to 3s for the network to go 250ms with nothing in flight
   (server-sent events and beacons don't count), then re-injects the stylesheet to
-  catch late-injected chrome.
+  catch late-injected chrome. Stylesheets that failed or answered ≥ 400 (blocked URLs
+  aside) and font faces that failed are recorded per side as `failed`.
 - **Shoots until stable** — repeats the screenshot until two in a row match (at most 3; 2
   for tiled pages). Pixels still changing between the last two shots of the same load are
   noise from that origin: they're painted magenta on both sides, reported per comparison
