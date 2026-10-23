@@ -26,7 +26,8 @@ honestly. This is what renderdiff does to make sure of that.
   `document.fonts.ready` (at most 5s) and up to 3s for the network to go 250ms with nothing in flight
   (server-sent events and beacons don't count), then re-injects the stylesheet to
   catch late-injected chrome. Stylesheets that failed or answered ≥ 400 (blocked URLs
-  aside) and font faces that failed are recorded per side as `failed`.
+  aside) and font faces that failed (blocked font files included) are recorded per side as
+  `failed`, and keep the route off the `clean:` line.
 - **Shoots until stable** — repeats the screenshot until two in a row match (at most 3; 2
   for tiled pages). Pixels still changing between the last two shots of the same load are
   noise from that origin: they're painted magenta on both sides, reported per comparison

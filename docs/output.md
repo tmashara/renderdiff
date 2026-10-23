@@ -33,8 +33,8 @@ row, `failed` lists stylesheets and font faces a side failed to load (fix those 
 `dom` names up to three elements behind the changes (`@w` when the row covers several
 widths: the first one's), and `crops` lists that row's crop files, relative to the
 directory `results.json` is in. Errors print in full, grouped across the widths that share
-a message. Clean means not one pixel differs and none went unmeasured as unstable; a route
-with unstable pixels gets its own row. With `--threshold`, the verdict line ends
+a message. Clean means not one pixel differs, none went unmeasured as unstable and no
+stylesheet or font failed; a route with unstable pixels or a failed asset gets its own row. With `--threshold`, the verdict line ends
 `, B below 97.00%`. `--progress` gets the per-shot output when piped, `--no-progress` the
 summary on a terminal.
 

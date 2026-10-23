@@ -64,7 +64,7 @@ export async function prepare(page: Page, cfg: ResolvedConfig, now: number): Pro
   const blocked = new WeakSet<Request>();
   const sheet = (r: Request) => {
     if (r.resourceType() === "stylesheet" && !blocked.has(r))
-      net.failed.add(`stylesheet ${r.url().split("?")[0]}`);
+      net.failed.add(`stylesheet ${r.url()}`);
   };
   network.set(page, net);
   page.on("request", (r) => {
@@ -78,7 +78,8 @@ export async function prepare(page: Page, cfg: ResolvedConfig, now: number): Pro
   page.on("requestfinished", done);
   page.on("requestfailed", (r) => {
     done(r);
-    sheet(r);
+    // Aborted: cancelled by the page or by the next navigation, not a load that failed.
+    if (r.failure()?.errorText !== "net::ERR_ABORTED") sheet(r);
   });
   page.on("response", (r) => {
     if (r.status() >= 400) sheet(r.request());
@@ -87,7 +88,6 @@ export async function prepare(page: Page, cfg: ResolvedConfig, now: number): Pro
   page.on("framenavigated", (f) => {
     if (f !== page.mainFrame()) return;
     net.open.clear();
-    net.failed.clear();
     net.last = Date.now();
   });
   for (const pattern of cfg.blockUrlPatterns) {
@@ -121,6 +121,8 @@ export async function capture(
 ): Promise<Shot> {
   await page.setViewportSize({ width, height: 900 });
   await page.clock.setSystemTime(now);
+  // Here, not on framenavigated, which a pushState during hydration fires too.
+  network.get(page)!.failed.clear();
   const res = await page.goto(url, {
     waitUntil: "domcontentloaded",
     timeout: 45_000,

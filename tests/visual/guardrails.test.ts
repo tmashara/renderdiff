@@ -1077,6 +1077,15 @@ describe("failed assets", () => {
       context(run),
     );
   });
+
+  test("a shot whose pixels match but whose assets failed is not clean", async () => {
+    const run = await capture(["/broken-asset"], { selector: "h1" });
+    const summary = parseSummary(run.stdout);
+    assert.deepEqual(summary.clean, [], context(run));
+    const [row] = summary.routes.get("/broken-asset [h1]")!.rows;
+    assert.match(row!.text, /^100\.00%/, context(run));
+    assert.match(row!.failed ?? "", /font Gone/, context(run));
+  });
 });
 
 describe("retries", () => {
