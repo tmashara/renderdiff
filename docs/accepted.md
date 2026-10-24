@@ -42,6 +42,10 @@ differently (turning an accepted region into bands) makes an accepted change sho
 accept it again once you've looked. What can still hide is a shade change under one step
 (e.g. `#000` to `#080808`) that doesn't cross a step boundary anywhere in the change.
 
+Accept on the platform that checks. The pixel hash is not portable: macOS and Linux render
+the same page with different fonts and anti-aliasing, so entries accepted on a Mac mostly come
+back stale on a Linux CI runner. For CI, accept in CI ([github-action.md](github-action.md)).
+
 A shot whose pages differ in width, or in height without the rows aligning into bands, is
 never accepted: the padding past the shorter page belongs to no band or region, so no
 fingerprint covers it.

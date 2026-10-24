@@ -1,0 +1,66 @@
+name: Action
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  self-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - id: site
+        run: |
+          node tests/helpers/serve.ts > "$RUNNER_TEMP/origins" &
+          until grep -q '^right=' "$RUNNER_TEMP/origins"; do sleep 1; done
+          cat "$RUNNER_TEMP/origins" >> "$GITHUB_OUTPUT"
+
+      - id: clean
+        uses: ./
+        with:
+          left: ${{ steps.site.outputs.left }}
+          right: ${{ steps.site.outputs.right }}
+          routes: / /flex-vs-grid
+          widths: 1440,375
+          threshold: "0.999"
+          artifact-name: clean
+
+      - id: differ
+        continue-on-error: true
+        uses: ./
+        with:
+          left: ${{ steps.site.outputs.left }}
+          right: ${{ steps.site.outputs.right }}
+          routes: |
+            /color
+            /tint
+          widths: "1440"
+          threshold: "0.999"
+          out: differ-out
+          artifact-name: differ
+
+      - id: accept
+        uses: ./
+        with:
+          left: ${{ steps.site.outputs.left }}
+          right: ${{ steps.site.outputs.right }}
+          routes: /color
+          widths: "1440"
+          accept: self-test
+          out: accept-out
+          artifact-name: accept
+
+      - env:
+          CLEAN: ${{ steps.clean.outputs.exit-code }}
+          DIFFER: ${{ steps.differ.outputs.exit-code }}
+          OUTCOME: ${{ steps.differ.outcome }}
+        run: |
+          test "$CLEAN" = 0
+          test "$DIFFER" = 1
+          test "$OUTCOME" = failure
+          test -f differ-out/results.json
+          test -f accept-out/renderdiff.accepted.json

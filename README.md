@@ -70,6 +70,12 @@ Install the skill so the agent runs the loop and reports a verdict, not a bare s
 npx skills add tmashara/renderdiff              # Codex, Cursor, others (skills.sh)
 ```
 
+### In CI
+
+`uses: tmashara/renderdiff@v0` checks a preview deployment or a build in the job against
+production on every pull request, with the result in the job summary:
+[docs/github-action.md](https://github.com/tmashara/renderdiff/blob/main/docs/github-action.md).
+
 ### Requirements
 
 Node >= 22.18 and Chromium (`npx playwright install chromium`). `npm install -g renderdiff`
