@@ -1,0 +1,156 @@
+name: renderdiff visual parity
+description: Screenshot-diff a preview or local build against production and fail the job on a visual change.
+author: Timur Mashara
+branding:
+  icon: eye
+  color: purple
+
+inputs:
+  left:
+    description: Your change, e.g. the preview deployment URL or http://localhost:3000.
+    required: true
+  right:
+    description: The reference, e.g. https://example.com.
+    required: true
+  routes:
+    description: Routes separated by spaces or newlines, e.g. "/ /about /pricing::/plans". Optional when the config lists them.
+    default: ""
+  config:
+    description: Path to a renderdiff config file. Default renderdiff.config.{ts,mts,js,mjs} in the workspace.
+    default: ""
+  widths:
+    description: Viewport widths separated by spaces or commas. Default renderdiff's five.
+    default: ""
+  threshold:
+    description: Fail when any comparison scores below this (0..1). Without it only errors fail the job.
+    default: ""
+  concurrency:
+    description: Parallel workers, which is also the most loads production sees at once.
+    default: ""
+  storage-state:
+    description: Contents of a Playwright storage-state JSON for both sides, from a secret.
+    default: ""
+  accept:
+    description: Record this run's differences as accepted, with this reason. Commit the renderdiff.accepted.json from the artifact.
+    default: ""
+  wait-timeout:
+    description: Seconds to wait for left to answer before running.
+    default: "300"
+  out:
+    description: Output directory.
+    default: renderdiff-out
+  artifact-name:
+    description: Name of the uploaded artifact with the report, results.json and crops.
+    default: renderdiff
+
+outputs:
+  exit-code:
+    description: renderdiff's exit code. 0 pass, 1 below threshold, 2 bad input or origin down, 3 a route errored.
+    value: ${{ steps.run.outputs.exit-code }}
+  results:
+    description: Path to results.json.
+    value: ${{ steps.run.outputs.results }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v5
+      with:
+        node-version: 22
+
+    - id: pw
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: echo "version=$(node -p 'require("./package-lock.json").packages["node_modules/playwright"].version')" >> "$GITHUB_OUTPUT"
+
+    - uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: renderdiff-chromium-${{ runner.os }}-${{ runner.arch }}-${{ steps.pw.outputs.version }}
+
+    - shell: bash
+      working-directory: ${{ github.action_path }}
+      run: |
+        npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+        npx playwright install --with-deps chromium
+
+    - shell: bash
+      env:
+        LEFT: ${{ inputs.left }}
+        TIMEOUT: ${{ inputs.wait-timeout }}
+      run: |
+        end=$((SECONDS + TIMEOUT))
+        until code=$(curl -s -o /dev/null -w '%{http_code}' "$LEFT") && [ "$code" -gt 0 ] && [ "$code" -lt 500 ]; do
+          if [ "$SECONDS" -ge "$end" ]; then echo "::error::$LEFT did not answer within ${TIMEOUT}s"; exit 2; fi
+          sleep 5
+        done
+
+    - id: run
+      shell: bash
+      env:
+        CLI: ${{ github.action_path }}/src/cli.ts
+        LEFT: ${{ inputs.left }}
+        RIGHT: ${{ inputs.right }}
+        ROUTES: ${{ inputs.routes }}
+        CONFIG: ${{ inputs.config }}
+        WIDTHS: ${{ inputs.widths }}
+        THRESHOLD: ${{ inputs.threshold }}
+        CONCURRENCY: ${{ inputs.concurrency }}
+        STORAGE_STATE: ${{ inputs.storage-state }}
+        ACCEPT: ${{ inputs.accept }}
+        OUT: ${{ inputs.out }}
+      run: |
+        args=(--left "$LEFT" --right "$RIGHT" --out "$OUT" --no-progress)
+        read -ra routes <<< "$(echo "$ROUTES" | tr '\n' ' ')"
+        args+=("${routes[@]}")
+        for w in ${WIDTHS//,/ }; do args+=(--width "$w"); done
+        [ -n "$CONFIG" ] && args+=(--config "$CONFIG")
+        [ -n "$THRESHOLD" ] && args+=(--threshold "$THRESHOLD")
+        [ -n "$CONCURRENCY" ] && args+=(--concurrency "$CONCURRENCY")
+        [ -n "$ACCEPT" ] && args+=(--accept "$ACCEPT")
+        if [ -n "$STORAGE_STATE" ]; then
+          state="$RUNNER_TEMP/renderdiff-state.json"
+          (umask 077; printf '%s' "$STORAGE_STATE" > "$state")
+          args+=(--storage-state "$state")
+        fi
+
+        set +e
+        node "$CLI" "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/renderdiff.txt"
+        code=${PIPESTATUS[0]}
+        set -e
+        rm -f "${state:-}"
+
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        echo "results=$OUT/results.json" >> "$GITHUB_OUTPUT"
+        accepted="$(dirname "${CONFIG:-./_}")/renderdiff.accepted.json"
+        if [ -n "$ACCEPT" ] && [ -f "$accepted" ] && [ -d "$OUT" ]; then cp "$accepted" "$OUT/"; fi
+
+        case $code in
+          0) verdict="✅ No visual change" ;;
+          1) verdict="❌ Below threshold" ;;
+          2) verdict="⚠️ Bad input or an origin is down" ;;
+          *) verdict="⚠️ A route errored or the run crashed" ;;
+        esac
+        {
+          echo "### renderdiff: $verdict"
+          echo
+          echo "\`$LEFT\` (your change) vs \`$RIGHT\` (reference). Report, results.json and crops are in the \`${{ inputs.artifact-name }}\` artifact."
+          echo
+          echo '```text'
+          head -c 900000 "$RUNNER_TEMP/renderdiff.txt"
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - if: always() && steps.run.outcome == 'success'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.out }}
+        if-no-files-found: ignore
+        retention-days: 14
+
+    - if: steps.run.outputs.exit-code != '0'
+      shell: bash
+      env:
+        CODE: ${{ steps.run.outputs.exit-code }}
+      run: exit "$CODE"
