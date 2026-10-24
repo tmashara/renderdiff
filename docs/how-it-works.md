@@ -49,10 +49,15 @@ honestly. This is what renderdiff does to make sure of that.
   the run, and was made with the same right origin, right storage state, blocked URLs, pinned
   context options, renderdiff version and browser. Otherwise the right side loads live and is
   recorded again, replacing any older recording; with `--rerun-failed` it covers only the
-  rerun shots. A request the recording lacks goes to the network. Error responses aren't
-  recorded, nor are shots that errored or failed an asset, so an error is never replayed. A shot
-  measured against a replay is marked `rightReplayedFrom`, and `--rerun-failed` reuses it only
-  in a run that would replay it too. The run says when it replayed (`right:` line,
+  rerun shots. Only responses from 200 to 399 are recorded, one per method, URL and request
+  body, so an error or a cancelled request is never replayed; a shot that errored or failed an
+  asset doesn't count toward coverage. A request the recording lacks goes to the network, and
+  the shot lists it as failed (`N request(s) not in the recording, loaded live`), so a half-live
+  reference is never clean. Service workers are blocked on both sides while `--cache-right` is
+  on, since a HAR can't see what they serve. The recording holds the right side's cookies and
+  auth headers: it's written 0600 with a `.gitignore` beside it. A shot measured against a
+  replay is marked `rightReplayedFrom`, and `--rerun-failed` reuses it only in a run that would
+  replay it too. The run says when it replayed (`right:` line,
   `meta.rightReplayedFrom`), because a recording can't see a deploy to the reference.
 - **Stitches tall pages.** A single screenshot past 16,384px can come out truncated or
   wrapped (Chrome repeats the top of the page; recent headless Chromium does not), so taller

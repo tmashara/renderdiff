@@ -59,12 +59,32 @@ describe("replayable", () => {
     assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")).log.entries, [entry("/a")]);
   });
 
+  test("a cancelled request (-1) is dropped, and a good copy of the same URL stays", () => {
+    const { file } = record([a], now, [[entry("/a.css", -1)], [entry("/a.css")]]);
+    assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")).log.entries, [entry("/a.css")]);
+  });
+
+  test("POSTs to one URL with different bodies are all kept", () => {
+    const post = (text: string) => ({
+      request: { method: "POST", url: "/api", postData: { text } },
+      response: { status: 200 },
+    });
+    const { file } = record([a], now, [[post("a"), post("b"), post("a")]]);
+    assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")).log.entries, [post("a"), post("b")]);
+  });
+
+  test("the recording is private to the user and ignored by git", () => {
+    const { file } = record([a], now);
+    assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+    assert.equal(fs.readFileSync(path.join(path.dirname(file), ".gitignore"), "utf8"), "*\n");
+  });
+
   test("a new recording replaces every other one beside it", () => {
     const dir = tempDir();
     fs.writeFileSync(path.join(dir, "right-old.har"), "{}");
     fs.writeFileSync(path.join(dir, "right-old.har.json"), "{}");
     record([a], now, undefined, dir);
-    assert.deepEqual(fs.readdirSync(dir).sort(), ["right-x.har", "right-x.har.json"]);
+    assert.deepEqual(fs.readdirSync(dir).sort(), [".gitignore", "right-x.har", "right-x.har.json"]);
   });
 
   test("a shot it lacks, an expired or future recording, or none at all loads live", () => {

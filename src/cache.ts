@@ -25,7 +25,7 @@ export function cacheFile(cfg: ResolvedConfig, browser: { name: string; version:
 }
 
 interface Entry {
-  request: { method: string; url: string };
+  request: { method: string; url: string; postData?: { text?: string } };
   response: { status: number };
 }
 
@@ -54,12 +54,13 @@ export function saveRecording(file: string, parts: string[], shots: string[], re
     if (!hars.length || !shots.length) return;
     const seen = new Set<string>();
     const har = hars[0]!;
-    // Replay serves the first match, so a one-off error would answer every later load.
+    // Errors would answer every later load; a cancelled request (-1) replays as a hang.
     har.log.entries = hars
       .flatMap((h) => h.log.entries)
       .filter((e) => {
-        const key = `${e.request.method} ${e.request.url}`;
-        if (e.response.status >= 400 || seen.has(key)) return false;
+        const key = JSON.stringify([e.request.method, e.request.url, e.request.postData?.text]);
+        const ok = e.response.status >= 200 && e.response.status < 400;
+        if (!ok || seen.has(key)) return false;
         seen.add(key);
         return true;
       });
@@ -67,9 +68,11 @@ export function saveRecording(file: string, parts: string[], shots: string[], re
     for (const f of fs.readdirSync(dir)) {
       if (f.startsWith("right-")) fs.rmSync(path.join(dir, f), { force: true });
     }
-    fs.writeFileSync(file, JSON.stringify(har));
+    // It holds the right side's cookies and auth headers.
+    fs.writeFileSync(path.join(dir, ".gitignore"), "*\n");
+    fs.writeFileSync(file, JSON.stringify(har), { mode: 0o600 });
     // Written last: without it the recording is never replayed.
-    fs.writeFileSync(`${file}.json`, JSON.stringify({ recordedAt, shots }));
+    fs.writeFileSync(`${file}.json`, JSON.stringify({ recordedAt, shots }), { mode: 0o600 });
   } finally {
     for (const p of parts) fs.rmSync(p, { force: true });
   }
