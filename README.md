@@ -2,6 +2,8 @@
 
 **Did my migration change how the site renders? A visual-parity check for coding agents.**
 
+![renderdiff output for a page missing a nav link, next to the crop it wrote](https://raw.githubusercontent.com/tmashara/renderdiff/main/docs/img/hero.png)
+
 renderdiff screenshots the same routes on two running copies of a site (your branch on
 localhost, and production) at five viewport widths and pixel-diffs each pair. For every
 change it tells you where on the page it is, which DOM element and CSS property is behind
@@ -226,7 +228,7 @@ Everything lands in the out dir (`./renderdiff-out` by default):
 ```jsonc
 {
   "meta": {
-    "tool": "renderdiff", "version": "0.3.0", "generatedAt": "…",
+    "tool": "renderdiff", "version": "0.3.1", "generatedAt": "…",
     "left": "http://localhost:3000", "right": "https://example.com",
     "widths": [1440, 375], "threshold": null,
     "clock": "…",                // the instant both sides' clocks start at
