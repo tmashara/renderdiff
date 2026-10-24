@@ -16,7 +16,7 @@ jobs:
       - id: site
         run: |
           node tests/helpers/serve.ts > "$RUNNER_TEMP/origins" &
-          until grep -q '^right=' "$RUNNER_TEMP/origins"; do sleep 1; done
+          timeout 30 bash -c 'until grep -q "^right=" "$0"; do sleep 1; done' "$RUNNER_TEMP/origins"
           cat "$RUNNER_TEMP/origins" >> "$GITHUB_OUTPUT"
 
       - id: clean
@@ -54,7 +54,18 @@ jobs:
           out: accept-out
           artifact-name: accept
 
+      - id: down
+        continue-on-error: true
+        uses: ./
+        with:
+          left: http://127.0.0.1:9
+          right: ${{ steps.site.outputs.right }}
+          routes: /
+          wait-timeout: "1"
+          artifact-name: down
+
       - env:
+          DOWN: ${{ steps.down.outputs.exit-code }}
           CLEAN: ${{ steps.clean.outputs.exit-code }}
           DIFFER: ${{ steps.differ.outputs.exit-code }}
           OUTCOME: ${{ steps.differ.outcome }}
@@ -62,5 +73,6 @@ jobs:
           test "$CLEAN" = 0
           test "$DIFFER" = 1
           test "$OUTCOME" = failure
-          test -f differ-out/results.json
-          test -f accept-out/renderdiff.accepted.json
+          test "$DOWN" = 2
+          node -e 'const r = require("./differ-out/results.json").results; for (const p of ["/color", "/tint"]) if (!(r.find((x) => x.url === p)?.score < 0.999)) throw p'
+          grep -q '"/color"' accept-out/renderdiff.accepted.json

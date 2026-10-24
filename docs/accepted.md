@@ -45,6 +45,9 @@ accept it again once you've looked. What can still hide is a shade change under 
 Accept on the platform that checks. The pixel hash is not portable: macOS and Linux render
 the same page with different fonts and anti-aliasing, so entries accepted on a Mac mostly come
 back stale on a Linux CI runner. For CI, accept in CI ([github-action.md](github-action.md)).
+The same goes for renderdiff upgrades that change what counts as a changed pixel (0.3.2
+lowered the threshold): accepted regions can come back with a new box, so re-accept once
+you've looked.
 
 A shot whose pages differ in width, or in height without the rows aligning into bands, is
 never accepted: the padding past the shorter page belongs to no band or region, so no

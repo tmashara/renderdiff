@@ -27,17 +27,22 @@ exits non-zero.
 | `widths` | Spaces or commas. Default renderdiff's five. |
 | `threshold` | Fail below this score. Without it, only errors (exit 2 or 3) fail the job. |
 | `concurrency` | Parallel workers, which is also the most page loads production sees at once. Default 2 on a hosted runner. |
-| `storage-state` | Contents of a Playwright storage-state JSON, from a secret. Written to a 0600 temp file and deleted after the run. |
+| `storage-state` | Contents of a Playwright storage-state JSON, from a secret. Written to a 0600 file in the runner's temp dir and deleted when renderdiff exits. |
 | `accept` | Record this run's differences as accepted, with this reason. See below. |
-| `wait-timeout` | Seconds to wait for `left` to answer (any status under 500). Default 300. |
-| `out` | Output directory. Default `renderdiff-out`. |
-| `artifact-name` | Default `renderdiff`. Set it when one job runs the action twice. |
+| `wait-timeout` | Whole seconds to wait for `left` to answer (any status under 500). Default 300. Past it, `exit-code` is 2. |
+| `out` | Output directory, over the config's `outDir`. Default `renderdiff-out`. |
+| `artifact-name` | Default `renderdiff`. |
+
+To run the action twice in one job, give each run its own `out` and `artifact-name`; in a
+matrix, put the matrix value in `artifact-name`. The action sets up Node 24, which later
+steps in the job then use.
 
 Outputs: `exit-code` (0 pass, 1 below threshold, 2 bad input or an origin down, 3 a route
 errored) and `results` (the path to `results.json`).
 
-A Vercel preview behind Deployment Protection serves its login page to the runner, and
-renderdiff will diff that. Turn protection off for previews or use a bypass first.
+A Vercel preview behind Deployment Protection answers the runner with its login page: a
+401 makes every route an error, a login page served as 200 gets diffed. Turn protection off
+for previews, or use a bypass, first.
 
 ## Recipes
 
@@ -49,7 +54,9 @@ Vercel and Netlify report each preview as a GitHub deployment:
 on: deployment_status
 jobs:
   renderdiff:
-    if: github.event.deployment_status.state == 'success'
+    if: >-
+      github.event.deployment_status.state == 'success' &&
+      github.event.deployment_status.environment != 'Production'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -60,7 +67,8 @@ jobs:
           threshold: "0.999"
 ```
 
-The checkout is for a committed config and `renderdiff.accepted.json`.
+The second condition skips production's own deployment, which would compare production to
+itself. The checkout is for a committed config and `renderdiff.accepted.json`.
 
 ### A build in the job vs production
 
