@@ -5,7 +5,7 @@ on:
     tags: ["v*.*.*"]
 
 permissions:
-  contents: write
+  contents: read
   id-token: write
 
 jobs:
@@ -21,4 +21,13 @@ jobs:
       - run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
       - run: npm test
       - run: npm publish --provenance --access public
+
+  move-v0:
+    needs: publish
+    if: startsWith(github.ref_name, 'v0.') && !contains(github.ref_name, '-')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
       - run: git tag -f v0 && git push -f origin v0

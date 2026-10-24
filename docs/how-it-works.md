@@ -33,6 +33,11 @@ honestly. This is what renderdiff does to make sure of that.
   noise from that origin: they're painted magenta on both sides, reported per comparison
   as `unstable`, and excluded from the measurement — the score is over the remaining
   pixels. A route more than 25% unstable errors as `page did not settle`.
+- **Counts a pixel as changed** when pixelmatch's YIQ colour distance is over threshold
+  0.05 (a delta of about 88), with anti-aliased pixels left out. Its default of 0.1 passed
+  Tailwind v3 → v4 `pink-500` as identical; a recolour still smaller than that passes. The
+  same sensitivity sees content moved by half a pixel: a `translate(-50%)` that lands on
+  `.5` swapped for grid centring shows as a thin region, not clean.
 - **Isolates state** — one browser context per origin, so cookies and localStorage never
   cross (a storage state file seeds each context on its own). Both sides of a route load at
   the same time.

@@ -37,7 +37,7 @@ inputs:
     description: Seconds to wait for left to answer before running.
     default: "300"
   out:
-    description: Output directory.
+    description: Output directory. Overrides the config's outDir.
     default: renderdiff-out
   artifact-name:
     description: Name of the uploaded artifact with the report, results.json and crops.
@@ -56,7 +56,8 @@ runs:
   steps:
     - uses: actions/setup-node@v5
       with:
-        node-version: 22
+        node-version: 24
+        package-manager-cache: false
 
     - id: pw
       shell: bash
@@ -65,29 +66,21 @@ runs:
 
     - uses: actions/cache@v4
       with:
-        path: ~/.cache/ms-playwright
+        path: ${{ runner.tool_cache }}/renderdiff-ms-playwright
         key: renderdiff-chromium-${{ runner.os }}-${{ runner.arch }}-${{ steps.pw.outputs.version }}
 
     - shell: bash
       working-directory: ${{ github.action_path }}
+      env:
+        PLAYWRIGHT_BROWSERS_PATH: ${{ runner.tool_cache }}/renderdiff-ms-playwright
       run: |
         npm ci --omit=dev --ignore-scripts --no-audit --no-fund
         npx playwright install --with-deps chromium
 
-    - shell: bash
-      env:
-        LEFT: ${{ inputs.left }}
-        TIMEOUT: ${{ inputs.wait-timeout }}
-      run: |
-        end=$((SECONDS + TIMEOUT))
-        until code=$(curl -s -o /dev/null -w '%{http_code}' "$LEFT") && [ "$code" -gt 0 ] && [ "$code" -lt 500 ]; do
-          if [ "$SECONDS" -ge "$end" ]; then echo "::error::$LEFT did not answer within ${TIMEOUT}s"; exit 2; fi
-          sleep 5
-        done
-
     - id: run
       shell: bash
       env:
+        PLAYWRIGHT_BROWSERS_PATH: ${{ runner.tool_cache }}/renderdiff-ms-playwright
         CLI: ${{ github.action_path }}/src/cli.ts
         LEFT: ${{ inputs.left }}
         RIGHT: ${{ inputs.right }}
@@ -98,32 +91,55 @@ runs:
         CONCURRENCY: ${{ inputs.concurrency }}
         STORAGE_STATE: ${{ inputs.storage-state }}
         ACCEPT: ${{ inputs.accept }}
+        TIMEOUT: ${{ inputs.wait-timeout }}
         OUT: ${{ inputs.out }}
+        ARTIFACT: ${{ inputs.artifact-name }}
       run: |
-        args=(--left "$LEFT" --right "$RIGHT" --out "$OUT" --no-progress)
-        read -ra routes <<< "$(echo "$ROUTES" | tr '\n' ' ')"
-        args+=("${routes[@]}")
-        for w in ${WIDTHS//,/ }; do args+=(--width "$w"); done
-        [ -n "$CONFIG" ] && args+=(--config "$CONFIG")
-        [ -n "$THRESHOLD" ] && args+=(--threshold "$THRESHOLD")
-        [ -n "$CONCURRENCY" ] && args+=(--concurrency "$CONCURRENCY")
-        [ -n "$ACCEPT" ] && args+=(--accept "$ACCEPT")
-        if [ -n "$STORAGE_STATE" ]; then
-          state="$RUNNER_TEMP/renderdiff-state.json"
-          (umask 077; printf '%s' "$STORAGE_STATE" > "$state")
-          args+=(--storage-state "$state")
+        echo "results=$OUT/results.json" >> "$GITHUB_OUTPUT"
+        log="$RUNNER_TEMP/renderdiff-$ARTIFACT.txt"
+        : > "$log"
+        code=0
+
+        if ! [[ "$TIMEOUT" =~ ^[0-9]+$ ]]; then
+          echo "wait-timeout must be whole seconds, got '$TIMEOUT'" | tee "$log"
+          code=2
+        else
+          end=$((SECONDS + TIMEOUT))
+          until status=$(curl -s --max-time 10 -o /dev/null -w '%{http_code}' "$LEFT") && [ "$status" -gt 0 ] && [ "$status" -lt 500 ]; do
+            if [ "$SECONDS" -ge "$end" ]; then
+              echo "$LEFT did not answer within ${TIMEOUT}s" | tee "$log"
+              code=2
+              break
+            fi
+            sleep 5
+          done
         fi
 
-        set +e
-        node "$CLI" "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/renderdiff.txt"
-        code=${PIPESTATUS[0]}
-        set -e
-        rm -f "${state:-}"
+        if [ "$code" = 0 ]; then
+          args=("--left=$LEFT" "--right=$RIGHT" "--out=$OUT" --no-progress)
+          read -ra routes <<< "$(echo "$ROUTES" | tr '\n' ' ')"
+          args+=("${routes[@]}")
+          for w in ${WIDTHS//,/ }; do args+=("--width=$w"); done
+          [ -n "$CONFIG" ] && args+=("--config=$CONFIG")
+          [ -n "$THRESHOLD" ] && args+=("--threshold=$THRESHOLD")
+          [ -n "$CONCURRENCY" ] && args+=("--concurrency=$CONCURRENCY")
+          [ -n "$ACCEPT" ] && args+=("--accept=$ACCEPT")
+          if [ -n "$STORAGE_STATE" ]; then
+            state="$RUNNER_TEMP/renderdiff-state-$ARTIFACT.json"
+            (umask 077; printf '%s' "$STORAGE_STATE" > "$state")
+            args+=("--storage-state=$state")
+          fi
 
+          set +e
+          node "$CLI" "${args[@]}" 2>&1 | tee "$log"
+          code=${PIPESTATUS[0]}
+          set -e
+          rm -f "${state:-}"
+
+          accepted="$(dirname "${CONFIG:-./_}")/renderdiff.accepted.json"
+          if [ -n "$ACCEPT" ] && [ -f "$accepted" ] && [ -d "$OUT" ]; then cp "$accepted" "$OUT/"; fi
+        fi
         echo "exit-code=$code" >> "$GITHUB_OUTPUT"
-        echo "results=$OUT/results.json" >> "$GITHUB_OUTPUT"
-        accepted="$(dirname "${CONFIG:-./_}")/renderdiff.accepted.json"
-        if [ -n "$ACCEPT" ] && [ -f "$accepted" ] && [ -d "$OUT" ]; then cp "$accepted" "$OUT/"; fi
 
         case $code in
           0) verdict="✅ No visual change" ;;
@@ -134,10 +150,10 @@ runs:
         {
           echo "### renderdiff: $verdict"
           echo
-          echo "\`$LEFT\` (your change) vs \`$RIGHT\` (reference). Report, results.json and crops are in the \`${{ inputs.artifact-name }}\` artifact."
+          echo "\`$LEFT\` (your change) vs \`$RIGHT\` (reference). Report, results.json and crops are in the \`$ARTIFACT\` artifact."
           echo
           echo '```text'
-          head -c 900000 "$RUNNER_TEMP/renderdiff.txt"
+          head -c 900000 "$log"
           echo '```'
         } >> "$GITHUB_STEP_SUMMARY"
 
