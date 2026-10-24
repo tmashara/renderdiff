@@ -10,6 +10,7 @@
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import http from "node:http";
 import path from "node:path";
 import { after, before, describe, test } from "node:test";
 import { cleanupTempDirs, context, renderdiffArgs, runCli, tempDir } from "../helpers/cli.ts";
@@ -244,5 +245,112 @@ describe("--rerun-failed", () => {
     const fresh = await runCli(args(["/color"], ["--rerun-failed"]));
     assert.equal(fresh.code, 2, context(fresh));
     assert.match(fresh.stderr, /no .*results\.json to rerun from/);
+  });
+});
+
+describe("--cache-right", () => {
+  test("replays the right side's traffic on a repeat run, with the same results", async () => {
+    const routes = ["/nav", "/color"];
+    const first = await runCli(args(routes, ["--cache-right"]));
+    assert.equal(first.code, 0, context(first));
+    assert.match(first.stdout, /^right: loaded live and recorded for --cache-right/m);
+    const was = results(first.outDir);
+    assert.equal(was.meta.rightReplayedFrom, null);
+
+    const hits = site.hits("/nav");
+    const again = await runCli(args(routes, ["--cache-right"]), { outDir: first.outDir });
+    assert.equal(again.code, 0, context(again));
+    assert.equal(site.hits("/nav"), hits + 1, "only the left side is loaded");
+    assert.match(again.stdout, /^right: replayed from a recording of \S+ \(--cache-right\)$/m);
+    const now = results(again.outDir);
+    assert.ok(now.meta.rightReplayedFrom, context(again));
+    for (const route of routes) {
+      const { rightReplayedFrom, ...replayed } = result(now, route, 1440);
+      assert.equal(rightReplayedFrom, now.meta.rightReplayedFrom);
+      assert.deepEqual(replayed, result(was, route, 1440));
+    }
+    assert.ok(
+      result(now, "/nav", 1440).bands?.some((b) => b.elements?.[0]?.side === "right"),
+      "elements are still named on a replayed right side",
+    );
+
+    const wider = await runCli(args([...routes, "/"], ["--cache-right"]), {
+      outDir: first.outDir,
+    });
+    assert.equal(wider.code, 0, context(wider));
+    assert.equal(site.hits("/nav"), hits + 3, "a shot the recording lacks loads it all live");
+    assert.match(wider.stdout, /^right: loaded live and recorded/m);
+  });
+
+  test("a shot measured against a replay is reused only by a run that would replay it", async () => {
+    const first = await runCli(args(["/"], ["--cache-right"]));
+    assert.equal(first.code, 0, context(first));
+    const again = (extra: string[]) => runCli(args(["/"], extra), { outDir: first.outDir });
+    const replayed = await again(["--cache-right"]);
+    assert.deepEqual(parseSummary(replayed.stdout).clean, ["/"], context(replayed));
+
+    const kept = await again(["--rerun-failed", "--cache-right"]);
+    assert.equal(parseSummary(kept.stdout).rerun?.reused, 1, context(kept));
+    assert.equal(
+      results(kept.outDir).meta.rightReplayedFrom,
+      results(replayed.outDir).meta.rightReplayedFrom,
+    );
+    assert.match(kept.stdout, /^right: replayed from a recording of/m);
+
+    const hits = site.hits("/");
+    const live = await again(["--rerun-failed"]);
+    assert.equal(site.hits("/"), hits + 2, context(live));
+    assert.equal(parseSummary(live.stdout).rerun?.shots, 1, context(live));
+    assert.equal(results(live.outDir).meta.rightReplayedFrom, null);
+    assert.doesNotMatch(live.stdout, /^right:/m);
+  });
+
+  test("a right side that failed once is not replayed as an error", async () => {
+    let failed = false;
+    const target = new URL(site.right);
+    const proxy = http.createServer((req, res) => {
+      if (req.url === "/nav" && req.method === "GET" && !failed) {
+        failed = true;
+        res.writeHead(500).end("flaky");
+        return;
+      }
+      const up = http.request(
+        {
+          host: target.hostname,
+          port: target.port,
+          path: req.url,
+          method: req.method,
+          headers: req.headers,
+        },
+        (r) => {
+          res.writeHead(r.statusCode!, r.headers);
+          r.pipe(res);
+        },
+      );
+      req.pipe(up);
+    });
+    await new Promise<void>((r) => proxy.listen(0, "127.0.0.1", r));
+    const right = `http://127.0.0.1:${(proxy.address() as { port: number }).port}`;
+    try {
+      // One worker, so /nav@1440 takes the 500 and /nav@375 records a good load beside it.
+      const flaky = [
+        ...args(["/nav"], ["--cache-right"], [1440, 375]),
+        "--concurrency",
+        "1",
+        "--right",
+        right,
+      ];
+      const first = await runCli(flaky);
+      assert.equal(first.code, 3, context(first));
+      assert.match(first.stdout, /ERROR HTTP 500/, context(first));
+
+      const replay = [...args(["/nav"], ["--cache-right"], [375]), "--right", right];
+      const again = await runCli(replay, { outDir: first.outDir });
+      assert.equal(again.code, 0, context(again));
+      assert.match(again.stdout, /^right: replayed from/m, context(again));
+    } finally {
+      proxy.closeAllConnections();
+      proxy.close();
+    }
   });
 });

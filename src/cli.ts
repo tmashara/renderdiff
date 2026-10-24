@@ -39,6 +39,7 @@ interface Args extends CliOverrides {
   /** The reason to accept this run's differences with. */
   accept?: string;
   rerunFailed: boolean;
+  cacheRight: boolean;
 }
 
 /** `Number(raw)`, but reject anything that isn't a finite number with a flag-named error. */
@@ -55,6 +56,7 @@ function parseArgs(argv: string[]): Args {
     dryRun: false,
     open: false,
     rerunFailed: false,
+    cacheRight: false,
     help: false,
     version: false,
     routes: [],
@@ -86,6 +88,7 @@ function parseArgs(argv: string[]): Args {
     else if (v === "--progress") a.progress = true;
     else if (v === "--no-progress") a.progress = false;
     else if (v === "--rerun-failed") a.rerunFailed = true;
+    else if (v === "--cache-right") a.cacheRight = true;
     else if (v === "--accept") {
       a.accept = next().trim();
       if (!a.accept) throw new Error("--accept needs a reason");
@@ -199,6 +202,9 @@ const HELP = `
     --accept <reason>   Accept this run's differences, scoped by its routes and widths.
     --rerun-failed      Rerun what the last run in --out didn't find clean or accepted,
                         keeping the rest. Same origins, routes and widths as that run.
+    --cache-right       Replay the right side's network from the last --cache-right run
+                        in --out, if under an hour old and covering every shot; else load
+                        it live and record it. The page still renders and is shot fresh.
     --dry-run           Print the URL pairs and exit. No browser.
     --open              Open the report when the run finishes.
     --progress          A line per shot as it finishes. The default on a terminal;
@@ -326,6 +332,7 @@ try {
       progress: args.progress ?? !!process.stdout.isTTY,
       accept: args.accept ?? null,
       rerun: args.rerunFailed,
+      cacheRight: args.cacheRight,
       acceptedFile: path.join(configPath ? path.dirname(configPath) : process.cwd(), ACCEPTED_FILE),
     }),
   );
