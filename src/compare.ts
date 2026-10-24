@@ -90,7 +90,8 @@ export interface Spot {
   target: Region | Band;
 }
 
-const PIXELMATCH = { threshold: 0.1, includeAA: false, alpha: 0.25 };
+/** Not pixelmatch's default 0.1: it passes Tailwind v3→v4 pink-500 (YIQ delta 117, cut-off 352). */
+const PIXELMATCH = { threshold: 0.05, includeAA: false, alpha: 0.25 };
 
 /** Edit-distance cap for `myers`: past it, memory is O(D²) and the answer is "unrelated" anyway. */
 const MAX_EDIT = 2000;

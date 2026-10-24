@@ -8,9 +8,11 @@
 /* LEFT: the transform-centring idiom.
    `translate(-50%, -50%)` only lands on whole pixels when the free space either side is an
    integer, which is why the hero and the box both have explicit even dimensions:
-   desktop (926 - 448) / 2 = 239 and (318 - 160) / 2 = 79, both exact. */
+   desktop (926 - 448) / 2 = 239 and (318 - 160) / 2 = 79, both exact. At 375 the shared hero
+   is 343 wide, so left: 50% and translate(-50%) both land on .5; the box below keeps them whole. */
 .hero { position: relative; }
 .hero-box { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+@media (max-width: 480px) { .hero { width: 342px; } .hero-box { width: 310px; } }
 </style>
 </head>
 <body>
