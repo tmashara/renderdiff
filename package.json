@@ -1,6 +1,6 @@
 {
   "name": "renderdiff",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Visual-parity checker for website migrations: screenshot-diffs your branch against production across viewport widths, and names the DOM element and CSS property behind each change. Built for coding agents (Claude Code, Codex, Cursor).",
   "type": "module",
   "license": "MIT",
