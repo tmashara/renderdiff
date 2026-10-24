@@ -111,7 +111,8 @@ cookie script ran wedges the renderer).
   renders live, so `dom` and the refusals still hold, but a deploy to the reference goes unseen
   until the recording expires. A `right: replayed from …` line says so. Never give a verdict
   from a replayed run alone. A `--rerun-failed --cache-right` re-record covers only the rerun
-  shots.
+  shots. `failed right: N request(s) not in the recording, loaded live` means the reference was
+  part replay, part live: drop the flag rather than trust or accept that shot.
 - **The out dir is wiped at the start of every run** (except `--rerun-failed`). To keep a previous run's evidence
   next to a new one, pass `--out renderdiff-before` / `--out renderdiff-after`. A
   directory holding files renderdiff didn't write is refused (exit 2).

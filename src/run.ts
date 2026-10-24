@@ -248,14 +248,26 @@ export async function run({
 
   const worker = async (browser: Browser, i: number) => {
     // One context per origin so cookies/localStorage never cross between them.
+    // A service worker answers requests a HAR never sees; blocked on both sides to stay symmetric.
+    const sw = har ? { serviceWorkers: "block" as const } : {};
     const leftCtx = await browser.newContext({
       ...CONTEXT_OPTIONS,
+      ...sw,
       storageState: cfg.storageState.left ?? undefined,
     });
     const rightCtx = await browser.newContext({
       ...CONTEXT_OPTIONS,
+      ...sw,
       storageState: cfg.storageState.right ?? undefined,
     });
+    // Registered before the HAR route, so it sees only what the recording lacks.
+    let missed = 0;
+    if (replayedAt) {
+      await rightCtx.route("**", (r) => {
+        missed++;
+        return r.fallback();
+      });
+    }
     if (har) {
       await rightCtx.routeFromHAR(
         replayedAt ? har : part(i),
@@ -278,6 +290,7 @@ export async function run({
       // Its own line: parse.ts reads the route on the row as one \S+ token.
       const sel = route.selector ? `selector ${selectorText(route.selector)}` : "";
       try {
+        missed = 0;
         // allSettled, not all: a page must not start the next job while still loading this one.
         const settled = await Promise.allSettled([
           shoot(leftPage, cfg.left + route.left, route, "left", width, cfg, now),
@@ -296,6 +309,8 @@ export async function run({
               `(left: ${leftShot.blank}; right: ${rightShot.blank}) at ${key}`,
           );
         }
+        // A replay that went live in part compared against two different moments of the reference.
+        if (missed) rightShot.failed.push(`${missed} request(s) not in the recording, loaded live`);
         const unstablePixels = await cancelUnstable(leftShot, rightShot);
 
         const { diffPng, spots, ...metrics } = await compare(leftShot, rightShot);
@@ -468,7 +483,8 @@ export async function run({
   }
   if (meta.rightReplayedFrom) {
     console.log(`right: replayed from a recording of ${meta.rightReplayedFrom} (--cache-right)`);
-  } else if (har) {
+  }
+  if (har && !replayedAt) {
     console.log(
       unsaved
         ? `right: loaded live; recording not saved: ${unsaved}`
