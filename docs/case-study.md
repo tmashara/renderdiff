@@ -37,7 +37,7 @@ Eleven routes, one per layout plus a few long posts with code, tables and math:
 ```bash
 R=(/ /about /blog /blog/page/2 /projects /tags /tags/markdown /blog/code-sample \
    /blog/github-markdown-guide /blog/deriving-ols-estimator /blog/new-features-in-v1)
-renderdiff http://localhost:3001 http://localhost:3002 $R
+renderdiff http://localhost:3001 http://localhost:3002 "${R[@]}"
 ```
 
 That is 55 shots at the default widths (1440, 1152, 896, 704, 375). renderdiff 0.3.0, Node
@@ -117,7 +117,7 @@ The rest is two things the v4 migration does on purpose:
 After looking at crops for each, I accepted them:
 
 ```bash
-renderdiff http://localhost:3001 http://localhost:3002 $R --rerun-failed \
+renderdiff http://localhost:3001 http://localhost:3002 "${R[@]}" --rerun-failed \
   --accept "Tailwind v4 oklch palette and sub-pixel prose line-height (24.0001px); checked crops, invisible"
 ```
 
@@ -163,6 +163,10 @@ not verified: dark mode, hover and focus states, the open mobile menu, and the p
   the next item.
 
   ![newsletter: the v4 pink is brighter](img/case-study/newsletter-pink.png)
+
+  Fixed after this study: the threshold is now 0.05 (cut-off about 88). Rerun against the
+  same two builds, the pink shows up on every page that has it: 10 of 11 routes differ
+  instead of 4, and the new differences are the pink button, links and tags.
 
 - **Phantom bands.** In run 1, `/` showed `band +48@y~1719  band -44@y~1721  band +24  band
   -28` on a page whose height didn't change. The bands sit on the newsletter form and the

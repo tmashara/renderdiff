@@ -7,6 +7,7 @@
  *   shifted  an 8px translation, nothing reflowed, heights identical
  *   taller   one extra section, so one side is padded with magenta
  *   color    one recoloured box, geometry untouched
+ *   tint     the same, but a pink a few units off: the per-pixel threshold must see it
  *   nav      one nav link missing on the left, so everything below it moves up 24px
  *   margin   one chip's margin-left changed, so it and the chip after it move 8px
  *
@@ -246,6 +247,14 @@ for (const width of WIDTHS) {
     const [e] = result(results(run.outDir), "/color", width).regions[0]!.elements!;
     assert.match(e!.selector, /swatch/, context(run));
     assert.deepEqual(e!.changed, { "background-color": ["rgb(31, 111, 235)", "rgb(198, 40, 40)"] });
+  });
+
+  test(`tint @${width} catches a pink a few units off, the swatch only`, () => {
+    const r = result(results(run.outDir), "/tint", width);
+    assert.equal(r.regions.length, 1, context(run));
+    assert.deepEqual(r.regions[0]!.elements![0]!.changed, {
+      "background-color": ["rgb(246, 51, 154)", "rgb(236, 72, 153)"],
+    });
   });
 }
 
