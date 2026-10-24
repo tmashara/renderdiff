@@ -100,6 +100,7 @@ renderdiff <left-origin> <right-origin> <route…> [options]
 | `--left-storage-state <file>`, `--right-storage-state <file>` | That side's storage state, over `--storage-state`. One side alone is fine. |
 | `--accept <reason>` | Record this run's differences as accepted, with a reason. See **Accepted differences and reruns**. |
 | `--rerun-failed` | Rerun only what the last run in `--out` didn't find clean or accepted, keeping the rest. |
+| `--cache-right` | Replay the right side's network traffic from the last `--cache-right` run in `--out`, when it's under an hour old and covers every shot; otherwise load it live and record it. See **Accepted differences and reruns**. |
 | `--dry-run` | Print the URL pairs and exit. No browser. |
 | `--open` | Open the report when the run finishes. |
 | `--progress` | A line per shot as it finishes, then the worst scores. The default on a terminal; piped, renderdiff prints one compact summary at the end. |
@@ -188,6 +189,7 @@ only.
 | `ERROR …` | Unmeasured, which is neither a pass nor a fail. Exits 3. |
 | `accepted:` / `stale accepted:` | Shots whose every difference was accepted, and accepted entries the run no longer saw. See below. |
 | `rerun:` | With `--rerun-failed`: how many shots were rerun and how many reused. |
+| `right:` | With `--cache-right`: whether the right side was replayed, and from when, or loaded live and recorded. |
 
 Read text first, then `dom`, then the crops for anything `dom` doesn't explain. Full
 detail, including the `--progress` and report forms: [docs/output.md](https://github.com/tmashara/renderdiff/blob/main/docs/output.md).
@@ -210,6 +212,16 @@ anything new on the same page still shows. `--rerun-failed` reruns only what the
 `--out` didn't find clean or accepted and merges it back; it exits 2 if the run differs from
 the previous one. Matching rules, what can still hide, and stale entries:
 [docs/accepted.md](https://github.com/tmashara/renderdiff/blob/main/docs/accepted.md).
+
+While iterating against a slow or remote reference, add `--cache-right`. The first run loads
+the right side live and records its network traffic as a HAR in `<out>/.cache/` (kept when the out dir is wiped); later runs
+replay it instead of fetching from the reference, for up to an hour, as long as it covers every
+shot in the run. The right page still renders, settles and gets shot fresh, so element names,
+blank-page and failed-asset checks and unstable pixels all work as before. Only the round trips
+are skipped. A request the recording doesn't have goes to the network. A replay can't see a
+deploy to the reference, so the run prints a `right: replayed from …` line, and
+`meta.rightCache` in `results.json` records it. Drop the flag for the final run. Recordings
+of a signed-in right side hold that session's responses, so keep the out dir out of git.
 
 ## Output
 
@@ -235,7 +247,8 @@ Everything lands in the out dir (`./renderdiff-out` by default):
     "blockUrlPatterns": ["…"], "hideSelectors": ["…"],
     "masks": [{ "urlPath": "/pricing", "reason": "live star count" }],   // no urlPath: every route
     "browser": { "name": "chromium", "version": "…" },   // "chrome" when it fell back
-    "storageState": { "left": "auth.json", "right": null }   // file names only
+    "storageState": { "left": "auth.json", "right": null },   // file names only
+    "rightCache": null   // --cache-right: { "replayedFrom": "…" }, or { "replayedFrom": null } when recorded
   },
   "results": [
     {

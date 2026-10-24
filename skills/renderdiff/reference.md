@@ -59,7 +59,8 @@ insertion point, `layout` `stacked` = left on top or `side` = left on the left, 
 Paths are relative to the out dir. `summary` has `compared`, `errors`, `mean`, `worst` and
 `belowThreshold`; `meta` records origins, widths, threshold, the pinned clock, block
 patterns, hidden selectors, mask reasons, the browser (`chromium`, or `chrome` when it fell
-back to the system Chrome) and each side's storage state file name. `hook: true` marks a
+back to the system Chrome), each side's storage state file name, and `rightCache` (with
+`--cache-right`: `replayedFrom`, the recording's time, or null when it was recorded). `hook: true` marks a
 route a `before` hook ran on. The normal loop doesn't need it.
 
 ## Config file
@@ -105,6 +106,11 @@ cookie script ran wedges the renderer).
 - **`--rerun-failed`** keeps the out dir and reruns only what wasn't clean or accepted. Give it
   the same origins, routes, widths and config (hooks included) as the run it continues, or it
   exits 2.
+- **`--cache-right`** replays the right side's recorded network traffic (`<out>/.cache/`, kept by the wipe)
+  for up to an hour, and only if the recording covers every shot in the run. The page still
+  renders live, so `dom` and the refusals still hold, but a deploy to the reference goes unseen
+  until the recording expires. A `right: replayed from …` line says so. Never give a verdict
+  from a replayed run alone.
 - **The out dir is wiped at the start of every run** (except `--rerun-failed`). To keep a previous run's evidence
   next to a new one, pass `--out renderdiff-before` / `--out renderdiff-after`. A
   directory holding files renderdiff didn't write is refused (exit 2).

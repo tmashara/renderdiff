@@ -5,6 +5,7 @@ import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { chromium, errors, type Browser, type Page } from "playwright";
 import { applyAccepted, readAccepted, updateAccepted } from "./accept.ts";
+import { CACHE_DIR, cacheFile, replayable, REPLAY_TTL, saveRecording, shotId } from "./cache.ts";
 import { cancelUnstable, capture, HookError, prepare, type Shot } from "./capture.ts";
 import { compare, crops, type Band } from "./compare.ts";
 import { locate, type ElementDiff } from "./locate.ts";
@@ -51,6 +52,8 @@ interface RunOpts {
   /** Rerun only what the previous results.json in the out dir didn't find clean or accepted. */
   rerun: boolean;
   acceptedFile: string;
+  /** Replay the right side's traffic from the out dir's recording, or record one. */
+  cacheRight: boolean;
 }
 
 const slug = (url: string) =>
@@ -89,6 +92,7 @@ function slugs(routes: Route[]): Map<string, string> {
 const ours = (f: string) =>
   f === "report.html" ||
   f === "results.json" ||
+  f === CACHE_DIR ||
   /^[a-z0-9_~@-]+\.[\d.]+\.(left|right|diff|c\d+)\.png$/.test(f);
 
 function wipeable(dir: string): boolean {
@@ -158,6 +162,7 @@ export async function run({
   accept,
   rerun,
   acceptedFile,
+  cacheRight,
 }: RunOpts): Promise<number> {
   const names = routes.map(name);
   const setup = {
@@ -201,7 +206,11 @@ export async function run({
     );
     return 2;
   }
-  if (!prev) fs.rmSync(cfg.outDir, { recursive: true, force: true });
+  if (!prev && fs.existsSync(cfg.outDir)) {
+    for (const f of fs.readdirSync(cfg.outDir)) {
+      if (f !== CACHE_DIR) fs.rmSync(path.join(cfg.outDir, f), { recursive: true, force: true });
+    }
+  }
   fs.mkdirSync(cfg.outDir, { recursive: true });
 
   if (prev) applyAccepted(prev.results, accepted);
@@ -222,8 +231,18 @@ export async function run({
   let done = 0;
   // Whole minute, so an HH:MM display reads the same on both sides.
   const now = Math.floor(Date.now() / 60_000) * 60_000;
+  const har = launched && cacheRight ? cacheFile(cfg, browserOf(launched)) : null;
+  const replayedAt =
+    har &&
+    replayable(
+      har,
+      jobs.map((j) => shotId(j.route, j.width)),
+    );
+  const recorded: string[] = [];
+  if (har && !replayedAt) fs.mkdirSync(path.dirname(har), { recursive: true });
+  const part = (i: number) => `${har}.${i}.part`;
 
-  const worker = async (browser: Browser) => {
+  const worker = async (browser: Browser, i: number) => {
     // One context per origin so cookies/localStorage never cross between them.
     const leftCtx = await browser.newContext({
       ...CONTEXT_OPTIONS,
@@ -233,6 +252,14 @@ export async function run({
       ...CONTEXT_OPTIONS,
       storageState: cfg.storageState.right ?? undefined,
     });
+    if (har) {
+      await rightCtx.routeFromHAR(
+        replayedAt ? har : part(i),
+        replayedAt
+          ? { notFound: "fallback" }
+          : { update: true, updateContent: "embed", updateMode: "minimal" },
+      );
+    }
     const leftPage = await leftCtx.newPage();
     const rightPage = await rightCtx.newPage();
     await prepare(leftPage, cfg, now);
@@ -301,6 +328,7 @@ export async function run({
           ...made.map((c, i) => write(cropped[i]!.path, c.png)),
         ]);
 
+        recorded.push(shotId(route, width));
         results.push({
           ...entry,
           status: "compared",
@@ -356,12 +384,16 @@ export async function run({
     console.log(`Capturing ${jobs.length} pair(s) with ${cfg.concurrency} worker(s)...\n`);
   }
   if (launched) {
-    await Promise.all(Array.from({ length: cfg.concurrency }, () => worker(launched.browser)));
+    await Promise.all(
+      Array.from({ length: cfg.concurrency }, (_, i) => worker(launched.browser, i)),
+    );
     await launched.browser.close();
   }
-  const browserMeta = launched
-    ? { name: launched.channel ?? "chromium", version: launched.browser.version() }
-    : prev!.meta.browser;
+  const browserMeta = launched ? browserOf(launched) : prev!.meta.browser;
+  if (har && !replayedAt) {
+    const parts = Array.from({ length: cfg.concurrency }, (_, i) => part(i));
+    saveRecording(har, parts, recorded, now);
+  }
 
   // A rerun overwrites a shot's files in place; drop the ones it no longer writes, ours only.
   const kept = new Set(results.flatMap(files));
@@ -405,6 +437,9 @@ export async function run({
     ...rest,
     browser: browserMeta,
     config,
+    rightCache: har
+      ? { replayedFrom: replayedAt ? new Date(replayedAt).toISOString() : null }
+      : null,
   };
   const reportPath = await writeReport(results, meta, cfg, stale);
   const resultsPath = writeResults(results, meta, cfg.outDir, stale);
@@ -414,6 +449,13 @@ export async function run({
     console.log(
       `rerun: ${jobs.length} shot(s) on ${rerunRoutes} route(s), ` +
         `${results.length - jobs.length} reused, ${names.length - rerunRoutes} route(s) untouched`,
+    );
+  }
+  if (har) {
+    console.log(
+      replayedAt
+        ? `right: replayed from a recording of ${new Date(replayedAt).toISOString()} (--cache-right)`
+        : `right: loaded live and recorded for --cache-right (replayed for ${REPLAY_TTL / 60_000} min)`,
     );
   }
   if (stale.length) {
@@ -439,6 +481,11 @@ export async function run({
   }
   return below.length ? 1 : results.some((r) => r.status === "error") ? 3 : 0;
 }
+
+const browserOf = (l: { browser: Browser; channel: string | null }) => ({
+  name: l.channel ?? "chromium",
+  version: l.browser.version(),
+});
 
 /**
  * A missing browser binary is the likeliest first-run failure, so fall back to the system

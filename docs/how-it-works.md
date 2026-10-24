@@ -37,6 +37,15 @@ honestly. This is what renderdiff does to make sure of that.
   cross (a storage state file seeds each context on its own). Both sides of a route load at
   the same time.
 - **Retries once** per shot; a live site can time out on a cold edge.
+- **Replays, never reuses, a cached reference.** With `--cache-right`, the right side's network
+  traffic comes from a HAR recorded by an earlier run, but the page is still loaded, settled and
+  shot under this run's clock. Element attribution needs the live document anyway, so nothing
+  measured is reused. A recording is used only while it's under an hour old, covers every shot in
+  the run, and was made with the same right origin, right storage state, blocked URLs, pinned
+  context options, renderdiff version and browser. Otherwise the right side loads live and is
+  recorded again. A request the recording lacks goes to the network. Shots that errored aren't
+  recorded, so an error is never replayed. The run says when it replayed (`right:` line,
+  `meta.rightCache`), because a recording can't see a deploy to the reference.
 - **Stitches tall pages.** A single screenshot past 16,384px can come out truncated or
   wrapped (Chrome repeats the top of the page; recent headless Chromium does not), so taller
   pages, and element shots taller than that, are captured as tiles through CDP and stitched

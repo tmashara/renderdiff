@@ -39,8 +39,10 @@ legitimate: [reference.md](reference.md).
 7. `Read` the crops under each row (next to results.json) for what `dom` doesn't explain.
    Left is on top or left; red box = change, red seam = missing rows.
 8. Fix or justify every band, region and text line. After each migration step,
-   `--rerun-failed` (same arguments) reruns only what isn't clean or accepted; finish with
-   all routes at default widths. For a multi-width row, open the widest and narrowest crop.
+   `--rerun-failed` (same arguments) reruns only what isn't clean or accepted; add
+   `--cache-right` to replay the reference's traffic from the last such run (an hour at most)
+   instead of fetching it again. Finish with all routes at default widths, without
+   `--cache-right`. For a multi-width row, open the widest and narrowest crop.
    `accepted:` routes are known; a row saying `1 accepted` still has something new.
 
 Exit: 0 nothing below `--threshold` (**without it, a diff still exits 0**) · 1 below

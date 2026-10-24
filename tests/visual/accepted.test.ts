@@ -246,3 +246,36 @@ describe("--rerun-failed", () => {
     assert.match(fresh.stderr, /no .*results\.json to rerun from/);
   });
 });
+
+describe("--cache-right", () => {
+  test("replays the right side's traffic on a repeat run, with the same results", async () => {
+    const routes = ["/nav", "/color"];
+    const first = await runCli(args(routes, ["--cache-right"]));
+    assert.equal(first.code, 0, context(first));
+    assert.match(first.stdout, /^right: loaded live and recorded for --cache-right/m);
+    const was = results(first.outDir);
+    assert.equal(was.meta.rightCache?.replayedFrom, null);
+
+    const hits = site.hits("/nav");
+    const again = await runCli(args(routes, ["--cache-right"]), { outDir: first.outDir });
+    assert.equal(again.code, 0, context(again));
+    assert.equal(site.hits("/nav"), hits + 1, "only the left side is loaded");
+    assert.match(again.stdout, /^right: replayed from a recording of \S+ \(--cache-right\)$/m);
+    const now = results(again.outDir);
+    assert.ok(now.meta.rightCache?.replayedFrom, context(again));
+    for (const route of routes) {
+      assert.deepEqual(result(now, route, 1440), result(was, route, 1440));
+    }
+    assert.ok(
+      result(now, "/nav", 1440).bands?.some((b) => b.elements?.[0]?.side === "right"),
+      "elements are still named on a replayed right side",
+    );
+
+    const wider = await runCli(args([...routes, "/"], ["--cache-right"]), {
+      outDir: first.outDir,
+    });
+    assert.equal(wider.code, 0, context(wider));
+    assert.equal(site.hits("/nav"), hits + 3, "a shot the recording lacks loads it all live");
+    assert.match(wider.stdout, /^right: loaded live and recorded/m);
+  });
+});
