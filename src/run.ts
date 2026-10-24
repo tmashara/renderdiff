@@ -208,7 +208,8 @@ export async function run({
   }
   if (!prev && fs.existsSync(cfg.outDir)) {
     for (const f of fs.readdirSync(cfg.outDir)) {
-      if (f !== CACHE_DIR) fs.rmSync(path.join(cfg.outDir, f), { recursive: true, force: true });
+      if (f !== CACHE_DIR || !cacheRight)
+        fs.rmSync(path.join(cfg.outDir, f), { recursive: true, force: true });
     }
   }
   fs.mkdirSync(cfg.outDir, { recursive: true });
@@ -220,7 +221,10 @@ export async function run({
   for (const route of routes) {
     for (const width of cfg.widths) {
       const had = before.get(`${name(route)}@${width}`);
-      if (had && reusable(had)) results.push(had);
+      // A shot measured against a replay stands only for a run that would replay it too.
+      const replay = had?.status === "compared" && had.rightReplayedFrom;
+      const fresh = !replay || (cacheRight && Date.now() - Date.parse(replay) < REPLAY_TTL);
+      if (had && reusable(had) && fresh) results.push(had);
       else jobs.push({ route, width });
     }
   }
@@ -328,7 +332,7 @@ export async function run({
           ...made.map((c, i) => write(cropped[i]!.path, c.png)),
         ]);
 
-        recorded.push(shotId(route, width));
+        if (!rightShot.failed.length) recorded.push(shotId(route, width));
         results.push({
           ...entry,
           status: "compared",
@@ -338,6 +342,7 @@ export async function run({
           crops: cropped,
           accepted: false,
           failed: { left: leftShot.failed, right: rightShot.failed },
+          ...(replayedAt ? { rightReplayedFrom: new Date(replayedAt).toISOString() } : {}),
         });
         const { regions, bands, alignedScore, text } = metrics;
         const dom = elementsOf(metrics);
@@ -390,10 +395,22 @@ export async function run({
     await launched.browser.close();
   }
   const browserMeta = launched ? browserOf(launched) : prev!.meta.browser;
+  let unsaved = "";
   if (har && !replayedAt) {
-    const parts = Array.from({ length: cfg.concurrency }, (_, i) => part(i));
-    saveRecording(har, parts, recorded, now);
+    try {
+      saveRecording(
+        har,
+        Array.from({ length: cfg.concurrency }, (_, i) => part(i)),
+        recorded,
+        now,
+      );
+    } catch (e) {
+      unsaved = e instanceof Error ? e.message : String(e);
+    }
   }
+  const replays = results.flatMap((r) =>
+    r.status === "compared" && r.rightReplayedFrom ? [r.rightReplayedFrom] : [],
+  );
 
   // A rerun overwrites a shot's files in place; drop the ones it no longer writes, ours only.
   const kept = new Set(results.flatMap(files));
@@ -437,9 +454,7 @@ export async function run({
     ...rest,
     browser: browserMeta,
     config,
-    rightCache: har
-      ? { replayedFrom: replayedAt ? new Date(replayedAt).toISOString() : null }
-      : null,
+    rightReplayedFrom: replays.sort()[0] ?? null,
   };
   const reportPath = await writeReport(results, meta, cfg, stale);
   const resultsPath = writeResults(results, meta, cfg.outDir, stale);
@@ -451,10 +466,12 @@ export async function run({
         `${results.length - jobs.length} reused, ${names.length - rerunRoutes} route(s) untouched`,
     );
   }
-  if (har) {
+  if (meta.rightReplayedFrom) {
+    console.log(`right: replayed from a recording of ${meta.rightReplayedFrom} (--cache-right)`);
+  } else if (har) {
     console.log(
-      replayedAt
-        ? `right: replayed from a recording of ${new Date(replayedAt).toISOString()} (--cache-right)`
+      unsaved
+        ? `right: loaded live; recording not saved: ${unsaved}`
         : `right: loaded live and recorded for --cache-right (replayed for ${REPLAY_TTL / 60_000} min)`,
     );
   }

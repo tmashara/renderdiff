@@ -3,13 +3,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { CONTEXT_OPTIONS, version, type ResolvedConfig, type Route } from "./config.ts";
 
-/**
- * `--cache-right`: the right side's network traffic, recorded as a HAR and replayed on later
- * runs. The page still loads, settles and is shot live, so attribution and every refusal
- * work as on a live load; only the round trips to the reference are skipped.
- */
-
-/** In the out dir, kept when it is wiped. */
 export const CACHE_DIR = ".cache";
 
 /** A recording older than this is recorded again, so prod can't drift unseen for long. */
@@ -31,33 +24,53 @@ export function cacheFile(cfg: ResolvedConfig, browser: { name: string; version:
   return path.join(cfg.outDir, CACHE_DIR, `right-${key}.har`);
 }
 
-interface Har {
-  log: { entries: unknown[]; _renderdiff?: { recordedAt: number; shots: string[] } };
+interface Entry {
+  request: { method: string; url: string };
+  response: { status: number };
 }
 
 /** When the recording was made, if it covers every shot and is under `REPLAY_TTL` old; else null. */
 export function replayable(file: string, shots: string[], now = Date.now()): number | null {
-  let rec;
+  let rec: { recordedAt: number; shots: string[] };
   try {
-    rec = (JSON.parse(fs.readFileSync(file, "utf8")) as Har).log._renderdiff;
+    rec = JSON.parse(fs.readFileSync(`${file}.json`, "utf8"));
   } catch {
     return null;
   }
-  if (!rec || !(now - rec.recordedAt >= 0 && now - rec.recordedAt < REPLAY_TTL)) return null;
+  if (!fs.existsSync(file) || !(now - rec.recordedAt >= 0 && now - rec.recordedAt < REPLAY_TTL))
+    return null;
   return shots.every((s) => rec.shots.includes(s)) ? rec.recordedAt : null;
 }
 
-/** Merge each worker's recording into `file`, for `shots` only; the parts are removed. */
+/**
+ * Merge each worker's recording into `file` for `shots`, replacing every other recording in
+ * its directory. The parts are removed.
+ */
 export function saveRecording(file: string, parts: string[], shots: string[], recordedAt: number) {
-  const hars = parts
-    .filter((p) => fs.existsSync(p))
-    .map((p) => JSON.parse(fs.readFileSync(p, "utf8")) as Har);
-  for (const p of parts) fs.rmSync(p, { force: true });
-  if (!hars.length || !shots.length) return;
-  const har = hars[0]!;
-  har.log.entries = hars.flatMap((h) => h.log.entries);
-  har.log._renderdiff = { recordedAt, shots };
-  // Renamed into place, so a run killed mid-write never leaves a half recording to replay.
-  fs.writeFileSync(`${file}.tmp`, JSON.stringify(har));
-  fs.renameSync(`${file}.tmp`, file);
+  try {
+    const hars = parts
+      .filter((p) => fs.existsSync(p))
+      .map((p) => JSON.parse(fs.readFileSync(p, "utf8")) as { log: { entries: Entry[] } });
+    if (!hars.length || !shots.length) return;
+    const seen = new Set<string>();
+    const har = hars[0]!;
+    // Replay serves the first match, so a one-off error would answer every later load.
+    har.log.entries = hars
+      .flatMap((h) => h.log.entries)
+      .filter((e) => {
+        const key = `${e.request.method} ${e.request.url}`;
+        if (e.response.status >= 400 || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    const dir = path.dirname(file);
+    for (const f of fs.readdirSync(dir)) {
+      if (f.startsWith("right-")) fs.rmSync(path.join(dir, f), { force: true });
+    }
+    fs.writeFileSync(file, JSON.stringify(har));
+    // Written last: without it the recording is never replayed.
+    fs.writeFileSync(`${file}.json`, JSON.stringify({ recordedAt, shots }));
+  } finally {
+    for (const p of parts) fs.rmSync(p, { force: true });
+  }
 }

@@ -45,6 +45,8 @@ export interface ComparedResult extends BaseResult {
   accepted: boolean;
   /** Stylesheets and font faces that failed to load per side, e.g. `font Inter 700`. */
   failed: { left: string[]; right: string[] };
+  /** With `--cache-right`: when the recording the right side was replayed from was made, ISO. */
+  rightReplayedFrom?: string;
 }
 
 /** A crop of one change: left and right panels, a 1px red box round it, or a 2px red seam. */
@@ -94,11 +96,8 @@ export interface RunMeta {
   storageState: { left: string | null; right: string | null };
   /** A hash of everything that decides how a shot is taken; `--rerun-failed` needs it unchanged. */
   config: string;
-  /**
-   * With `--cache-right`: when the recording the right side's network was replayed from was
-   * made, ISO, or null when it loaded live and was recorded. Null without the flag.
-   */
-  rightCache: { replayedFrom: string | null } | null;
+  /** The oldest `rightReplayedFrom` among the results, or null when every right side loaded live. */
+  rightReplayedFrom: string | null;
 }
 
 export interface Summary {
@@ -338,7 +337,7 @@ export async function writeReport(
     .filter((s) => meta.storageState[s])
     .map((s) => ` &middot; ${s} storage state <code>${esc(meta.storageState[s]!)}</code>`)
     .join("")}
-  ${meta.rightCache?.replayedFrom ? `&middot; right replayed from a recording of <code>${esc(meta.rightCache.replayedFrom)}</code>` : ""}
+  ${meta.rightReplayedFrom ? `&middot; right replayed from a recording of <code>${esc(meta.rightReplayedFrom)}</code>` : ""}
 </p>
 
 ${section(compared)}

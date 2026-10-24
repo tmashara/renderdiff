@@ -43,9 +43,12 @@ honestly. This is what renderdiff does to make sure of that.
   measured is reused. A recording is used only while it's under an hour old, covers every shot in
   the run, and was made with the same right origin, right storage state, blocked URLs, pinned
   context options, renderdiff version and browser. Otherwise the right side loads live and is
-  recorded again. A request the recording lacks goes to the network. Shots that errored aren't
-  recorded, so an error is never replayed. The run says when it replayed (`right:` line,
-  `meta.rightCache`), because a recording can't see a deploy to the reference.
+  recorded again, replacing any older recording; with `--rerun-failed` it covers only the
+  rerun shots. A request the recording lacks goes to the network. Error responses aren't
+  recorded, nor are shots that errored or failed an asset, so an error is never replayed. A shot
+  measured against a replay is marked `rightReplayedFrom`, and `--rerun-failed` reuses it only
+  in a run that would replay it too. The run says when it replayed (`right:` line,
+  `meta.rightReplayedFrom`), because a recording can't see a deploy to the reference.
 - **Stitches tall pages.** A single screenshot past 16,384px can come out truncated or
   wrapped (Chrome repeats the top of the page; recent headless Chromium does not), so taller
   pages, and element shots taller than that, are captured as tiles through CDP and stitched

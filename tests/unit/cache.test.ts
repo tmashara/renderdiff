@@ -13,17 +13,25 @@ import { cleanupTempDirs, tempDir } from "../helpers/cli.ts";
 after(cleanupTempDirs);
 
 const browser = { name: "chromium", version: "1" };
-const cfg = (over: Parameters<typeof resolveConfig>[1] = {}) =>
-  resolveConfig({}, { left: "http://l.test", right: "http://r.test", outDir: "/tmp/o", ...over });
+const cfg = (over: Parameters<typeof resolveConfig>[1] = {}, file = {}) =>
+  resolveConfig(file, { left: "http://l.test", right: "http://r.test", outDir: "/tmp/o", ...over });
+const entry = (url: string, status = 200) => ({
+  request: { method: "GET", url },
+  response: { status },
+});
 const [route] = parseRoutes(["/a"]);
 
-function record(shots: string[], recordedAt: number) {
-  const dir = tempDir();
-  const parts = [0, 1].map((i) => path.join(dir, `${i}.part`));
+function record(
+  shots: string[],
+  recordedAt: number,
+  entries = [[entry("/a")], [entry("/b")]],
+  dir = tempDir(),
+) {
+  const file = path.join(dir, "right-x.har");
+  const parts = entries.map((_, i) => `${file}.${i}.part`);
   parts.forEach((p, i) =>
-    fs.writeFileSync(p, JSON.stringify({ log: { version: "1.2", entries: [{ i }] } })),
+    fs.writeFileSync(p, JSON.stringify({ log: { version: "1.2", entries: entries[i] } })),
   );
-  const file = path.join(dir, "right.har");
   saveRecording(file, [...parts, path.join(dir, "missing.part")], shots, recordedAt);
   return { file, parts };
 }
@@ -36,8 +44,27 @@ describe("replayable", () => {
   test("a fresh recording covering every shot replays; the parts merge and go", () => {
     const { file, parts } = record([a, b], now - 1000);
     assert.equal(replayable(file, [a], now), now - 1000);
-    assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")).log.entries, [{ i: 0 }, { i: 1 }]);
+    assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")).log.entries, [
+      entry("/a"),
+      entry("/b"),
+    ]);
     assert.ok(parts.every((p) => !fs.existsSync(p)));
+  });
+
+  test("errors and repeats are dropped, so a one-off 500 is never replayed", () => {
+    const { file } = record([a], now, [
+      [entry("/a", 500), entry("/a.css", 404)],
+      [entry("/a"), entry("/a")],
+    ]);
+    assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")).log.entries, [entry("/a")]);
+  });
+
+  test("a new recording replaces every other one beside it", () => {
+    const dir = tempDir();
+    fs.writeFileSync(path.join(dir, "right-old.har"), "{}");
+    fs.writeFileSync(path.join(dir, "right-old.har.json"), "{}");
+    record([a], now, undefined, dir);
+    assert.deepEqual(fs.readdirSync(dir).sort(), ["right-x.har", "right-x.har.json"]);
   });
 
   test("a shot it lacks, an expired or future recording, or none at all loads live", () => {
@@ -61,7 +88,7 @@ describe("keys", () => {
     assert.equal(shotId(route!, 1440), shotId(paired, 1440), "the left path doesn't matter");
   });
 
-  test("the right origin, its storage state and the browser change the file", () => {
+  test("the right origin, its storage state, blocked URLs and the browser change the file", () => {
     const dir = tempDir();
     const state = path.join(dir, "auth.json");
     fs.writeFileSync(state, JSON.stringify({ cookies: [], origins: [] }));
@@ -73,6 +100,7 @@ describe("keys", () => {
       cacheFile(cfg(), { ...browser, version: "2" }),
       signed,
       cacheFile(cfg({ storageState: { right: state } }), browser),
+      cacheFile(cfg({}, { blockUrlPatterns: ["**/ads/**"] }), browser),
     ];
     assert.equal(new Set(files).size, files.length);
     assert.equal(cacheFile(cfg({ left: "http://x.test" }), browser), files[0]);
