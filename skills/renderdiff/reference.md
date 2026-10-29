@@ -38,7 +38,7 @@ renderdiff: 1 of 3 routes differ (1 of 15 shots), 1 error, worst 97.41% /about@1
 Before the summary, when they apply: `Config: <path>`, `accepted N difference(s), pruned M
 stale — <file>` (`--accept`), `rerun: …` (`--rerun-failed`), `right: replayed from …` or
 `right: loaded live and recorded …` (`--cache-right`), `stale accepted: /a@1440 …`. After it,
-on stderr: `✗ N route(s) differ.` (or `below 97.00%` with `--threshold`).
+on stderr: `✗ 2 routes differ (10 shots).` (`below 97.00%` with `--threshold`).
 
 **Lines**
 

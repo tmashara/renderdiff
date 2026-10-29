@@ -544,8 +544,11 @@ export async function run({
       (cfg.threshold === null ? r.diffPixels > 0 : r.score < cfg.threshold),
   );
   if (below.length) {
-    const what = cfg.threshold === null ? "differ" : `below ${pct(cfg.threshold)}`;
-    console.error(`\n✗ ${below.length} route(s) ${what}.`);
+    const n = new Set(below.map(name)).size;
+    const what =
+      cfg.threshold === null ? (n === 1 ? "differs" : "differ") : `below ${pct(cfg.threshold)}`;
+    const shots = `${below.length} shot${below.length === 1 ? "" : "s"}`;
+    console.error(`\n✗ ${n} route${n === 1 ? "" : "s"} ${what} (${shots}).`);
   }
   return below.length ? 1 : results.some((r) => r.status === "error") ? 3 : 0;
 }
