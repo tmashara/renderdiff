@@ -4,8 +4,11 @@ import type { ComparedResult, RouteResult } from "./report.ts";
 
 /** `--computed`: every rendered element's computed style on both sides, diffed by a stable key. */
 
-/** Selector path -> its opening tag with own text, and `PROPS` then `content`, computed. */
-export type Snapshot = Record<string, { html: string; styles: string[] }>;
+/**
+ * Selector path -> its opening tag with own text, `PROPS` then `content` computed, and its
+ * specified width and height (`auto`, `100%`, `200px`) where the browser says.
+ */
+export type Snapshot = Record<string, { html: string; styles: string[]; size?: [string, string] }>;
 
 export interface StyleChange {
   /** Selector path from `body`, e.g. `body > div.page > nav.chips > a[href="#blog"]`; `::before` on a pseudo-element. */
@@ -74,19 +77,37 @@ export const normalizeAssets = (html: string) =>
     return ` ${n}="${u}"`;
   });
 
+/** A page's throw is its text after the first `Error: `, without the stack page.evaluate appends. */
+export const pageError = (e: unknown) => {
+  const m = String(e instanceof Error ? e.message : e);
+  const i = m.indexOf("Error: ");
+  return i < 0 ? m : m.slice(i + 7).split("\n")[0]!;
+};
+
 /**
  * Drops what a change elsewhere explains: an inherited property's change the parent has too,
  * a width inside a parent whose width changed, a height around a child whose height changed.
+ * With the snapshots, a box whose own size is set in px on either side is kept, and a
+ * percentage height inside a px-height parent whose height changed is the one that follows.
  */
-export function collapseInherited(changes: StyleChange[]): StyleChange[] {
+export function collapseInherited(changes: StyleChange[], snaps: Snapshot[] = []): StyleChange[] {
   const raw = new Set(changes.map((c) => `${c.key}\0${c.prop}\0${c.values.join("\0")}`));
   const wide = new Set(changes.filter((c) => c.prop === "width").map((c) => c.key));
-  const tallKid = new Set(changes.filter((c) => c.prop === "height").map((c) => parentOf(c.key)));
+  const tall = new Set(changes.filter((c) => c.prop === "height").map((c) => c.key));
+  const spec = (key: string, i: 0 | 1) => snaps.map((s) => s[key]?.size?.[i] ?? "auto");
+  const set = (key: string, i: 0 | 1) => spec(key, i).some((v) => v.endsWith("px"));
+  // A percentage of an auto height is auto, so only a px-height parent sizes it.
+  const follows = (key: string) => {
+    const vs = spec(key, 1);
+    const p = parentOf(key);
+    return tall.has(p) && set(p, 1) && vs.length > 0 && vs.every((v) => v.includes("%"));
+  };
+  const tallKid = new Set([...tall].filter((k) => !follows(k)).map(parentOf));
   return changes.filter((c) => {
     const p = parentOf(c.key);
     if (INHERITED.has(c.prop)) return !raw.has(`${p}\0${c.prop}\0${c.values.join("\0")}`);
-    if (c.prop === "width") return !wide.has(p);
-    if (c.prop === "height") return !tallKid.has(c.key);
+    if (c.prop === "width") return !wide.has(p) || set(c.key, 0);
+    if (c.prop === "height") return (!tallKid.has(c.key) || set(c.key, 1)) && !follows(c.key);
     return true;
   });
 }
@@ -125,7 +146,10 @@ export function diffSnapshots(left: Snapshot, right: Snapshot): ComputedDiff {
         if (l.styles[i] !== r.styles[i])
           changes.push({ key, prop, values: [l.styles[i]!, r.styles[i]!] });
       });
-    } else if (isPseudo(key) && left[parentOf(key)] && right[parentOf(key)]) {
+    } else if (
+      isPseudo(key) &&
+      [left, right].every((s) => s[parentOf(key)] && s[parentOf(key)]!.styles[DISPLAY] !== "none")
+    ) {
       // A pseudo-element one side no longer generates: the removed rule's own finding.
       changes.push({
         key,
@@ -140,7 +164,7 @@ export function diffSnapshots(left: Snapshot, right: Snapshot): ComputedDiff {
     const set = new Set(ks);
     return ks.filter((k) => !set.has(parentOf(k))).slice(0, MAX_UNMATCHED);
   };
-  const kept = collapseInherited(changes);
+  const kept = collapseInherited(changes, [left, right]);
   return {
     dom,
     changes: kept.slice(0, MAX_CHANGES),

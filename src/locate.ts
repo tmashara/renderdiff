@@ -252,7 +252,7 @@ function probe({ boxes, find, masked, props, perSpot, walk, root }: ProbeArgs) {
         a.cancel();
       }
     }
-    const snap: Record<string, { html: string; styles: string[] }> = {};
+    const snap: Record<string, { html: string; styles: string[]; size?: [string, string] }> = {};
     const SKIP = new Set(["script", "style", "link", "meta", "template", "noscript"]);
     let n = 0;
     const end = performance.now() + walk;
@@ -279,7 +279,13 @@ function probe({ boxes, find, masked, props, perSpot, walk, root }: ProbeArgs) {
       if (++n > MAX_SCAN) throw new Error(`more than ${MAX_SCAN} elements`);
       if (performance.now() > end) throw new Error(`took over ${walk}ms`);
       const cs = getComputedStyle(e);
-      snap[key] = { html: html(e), styles: props.map((p) => cs.getPropertyValue(p)) };
+      // Specified, not used: `auto`, `100%` or `200px` says which box sizes which.
+      const m = e.computedStyleMap?.();
+      snap[key] = {
+        html: html(e),
+        styles: props.map((p) => cs.getPropertyValue(p)),
+        ...(m ? { size: [String(m.get("width")), String(m.get("height"))] } : {}),
+      };
       if (cs.display === "none") return;
       for (const pseudo of ["::before", "::after"]) {
         const ps = generated(e, pseudo);

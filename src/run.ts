@@ -8,7 +8,7 @@ import { applyAccepted, readAccepted, updateAccepted } from "./accept.ts";
 import { CACHE_DIR, cacheFile, replayable, REPLAY_TTL, saveRecording, shotId } from "./cache.ts";
 import { cancelUnstable, capture, HookError, prepare, type Shot } from "./capture.ts";
 import { compare, crops, type Band, type Region } from "./compare.ts";
-import { diffSnapshots, fmtComputed } from "./computed.ts";
+import { diffSnapshots, fmtComputed, pageError } from "./computed.ts";
 import { locate, snapshot, type ElementDiff } from "./locate.ts";
 import {
   CONTEXT_OPTIONS,
@@ -349,10 +349,7 @@ export async function run({
             COMPUTED_TIMEOUT,
             route.selector ? page.locator(route.selector[side]) : null,
           ).catch((e: unknown) => {
-            // page.evaluate prefixes the page's own error: keep only its message.
-            throw new Error(
-              String(e instanceof Error ? e.message : e).replace(/^[\s\S]*Error: /, ""),
-            );
+            throw new Error(pageError(e));
           });
         const computed = cfg.computed
           ? await Promise.race([
