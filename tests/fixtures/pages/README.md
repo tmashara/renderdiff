@@ -19,7 +19,7 @@ Three groups:
   elements each change names (`margin`, `color`, `nav`), and a lost `::before` line and a
   re-parented pairing (`divider`).
 - **Guard rails** — `blank`, `tall`, `animated`, `lazy`, `lazy-deep`, `lazy-js`, `lazy-grow`, `consent`,
-  `drifting`, `tracker`, `clock`, `ticker`, `unsettled`, `sprite`, `short`, `tall-region`, `reorder`, `stripe`, `frameset`, `menu`, `signed-in`, `fixed`, `inserted`, `labelled`, `broken-asset`, `media`, `long`, `video`, `hang`.
+  `drifting`, `tracker`, `clock`, `ticker`, `unsettled`, `sprite`, `short`, `tall-region`, `reorder`, `stripe`, `frameset`, `menu`, `signed-in`, `fixed`, `inserted`, `labelled`, `broken-asset`, `media`, `long`, `video`, `hang`, `origin`.
   One per defence in `src/capture.ts` / `src/config.ts`.
 
 ## Authoring rules

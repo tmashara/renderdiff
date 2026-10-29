@@ -113,7 +113,7 @@ renderdiff <left-origin> <right-origin> <route…> [options]
 | `--accept <reason>` | Record this run's differences as accepted, with a reason. See **Accepted differences and reruns**. |
 | `--rerun-failed` | Rerun only what the last run in `--out` didn't find clean or accepted, keeping the rest. |
 | `--cache-right` | Replay the right side's network traffic from the last `--cache-right` run in `--out`, when it's under an hour old and covers every shot; otherwise load it live and record it. Keeps `<out>/.cache/` when the out dir is wiped. See **Accepted differences and reruns**. |
-| `--computed` | Also diff the computed style of every rendered element and its `::before`/`::after`, and say per route whether the markup is identical apart from asset hashes. Pixels still decide the score and exit code. See [docs/output.md](docs/output.md#computed-styles---computed). |
+| `--computed` | Also diff the computed style of every rendered element and its `::before`/`::after`, and say per route whether the markup is identical apart from asset hashes and origin. Pixels still decide the score and exit code. See [docs/output.md](docs/output.md#computed-styles---computed). |
 | `--dry-run` | Print the URL pairs and exit. No browser. |
 | `--open` | Open the report when the run finishes. |
 | `--progress` | A line per shot as it finishes, then the worst scores. The default on a terminal; piped, renderdiff prints one compact summary at the end. |

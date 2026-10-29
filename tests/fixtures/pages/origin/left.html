@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layout parity</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for --computed. Byte-identical sides on two ports: an absolute href and a
+   relative url() both resolve to each side's own origin, which must not read as a change. */
+.art { width: 208px; height: 160px; background-image: url(/shared/img/azure.svg); }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Origin guard rail</h1>
+<p class="lede">Both sides serve this same file from different ports. Nothing here differs but the origin.</p>
+
+<div class="art"></div>
+<p><a class="abs" href="#about">About</a></p>
+<script>document.querySelector("a.abs").setAttribute("href", location.origin + "/#about")</script>
+
+<section class="notes">
+<h2>Notes</h2>
+<p>The link is made absolute while the page parses, so its key and markup carry the port. The background is relative in the stylesheet, but its computed value is always resolved to an absolute URL.</p>
+<p>A comparison that reported either of them would be measuring where the page was served from, not how it looks.</p>
+</section>
+</div>
+</body>
+</html>

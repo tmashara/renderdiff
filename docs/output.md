@@ -204,6 +204,9 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
   text are the same on both sides.
   - Bundler hashes in `src`/`href`/`srcset` are ignored (`hero.3f9a8c1d.png`, `?v=…`), and
     so are generated class names (`css-1q2w3e`, `Button_root__a1b2c`).
+  - Absolute URLs on the left origin are read as the right origin's (keys, attributes,
+    `url()` values), so two ports or a local build against production don't differ by
+    origin alone.
   - A pixel difference on such a route comes from CSS or script, not from walked markup.
     SVG internals, shadow DOM, iframes and `display: none` subtrees aren't walked.
   - Hash-shaped tokens only: 8 or more letters and digits that alternate, between
