@@ -8,7 +8,7 @@
     {
       "name": "renderdiff",
       "source": "./",
-      "description": "Visual-parity loop for coding agents doing website migrations: screenshot-diff your branch against production at several widths and explain every change down to the DOM element and CSS property."
+      "description": "Visual-parity loop for coding agents doing website migrations: screenshot-diff your change against a local build of the base (or production) at several widths and explain every change down to the DOM element and CSS property."
     }
   ]
 }

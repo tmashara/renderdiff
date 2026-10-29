@@ -63,8 +63,17 @@ const same = (a: Fingerprint, b: Fingerprint) =>
  * Padding no band or region covers: columns past the narrower page, or rows past the shorter
  * one when they didn't align. A shot with any, or with unstable pixels, is never accepted.
  */
-const acceptable = (r: ComparedResult) =>
-  r.unstablePixels === 0 && r.widthDelta === 0 && (r.bands !== null || r.heightDelta === 0);
+const acceptable = (r: ComparedResult) => !unacceptable(r);
+
+/** Why a shot can never be accepted, or null when it can. */
+export const unacceptable = (r: ComparedResult) =>
+  r.unstablePixels
+    ? "unstable"
+    : r.widthDelta
+      ? "width change"
+      : r.bands === null && r.heightDelta
+        ? "unaligned height"
+        : null;
 
 export function readAccepted(file: string): Accepted[] {
   if (!fs.existsSync(file)) return [];

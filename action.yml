@@ -25,16 +25,16 @@ inputs:
     description: Fail only when a comparison scores below this (0..1). Without it any difference fails the job; 0 never fails on one.
     default: ""
   concurrency:
-    description: Parallel workers, which is also the most loads production sees at once.
+    description: Parallel workers, which is also the most loads production sees at once. Default half the cores, 2 to 8 (2 on a hosted runner).
     default: ""
   storage-state:
-    description: Contents of a Playwright storage-state JSON for both sides, from a secret.
+    description: Contents of a Playwright storage-state JSON for both sides, from a secret. Written to a 0600 temp file, deleted after the run.
     default: ""
   accept:
     description: Record this run's differences as accepted, with this reason. Commit the renderdiff.accepted.json from the artifact.
     default: ""
   wait-timeout:
-    description: Seconds to wait for left to answer before running.
+    description: Whole seconds to wait for left to answer (any status under 500) before running. Past it, exit-code is 2.
     default: "300"
   out:
     description: Output directory. Overrides the config's outDir.

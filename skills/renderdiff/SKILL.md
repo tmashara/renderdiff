@@ -7,64 +7,69 @@ allowed-tools: Bash(npx renderdiff:*), Bash(npx renderdiff@latest:*), Bash(rende
 # renderdiff
 
 ```bash
-npx renderdiff@latest http://localhost:3000 https://example.com /about --width 1440
+npx renderdiff@latest http://localhost:3001 http://localhost:3002 / /about /pricing
 ```
 
-Left (first origin) = your change; right (second) = the reference. `+` means only/more in
-your change, `-` only/more in the reference. First run: `npx playwright install chromium`.
-Flags: `--help`. Moved page: `/old::/new`. One component: `--selector`. Click-gated state:
-a config `before` hook. Signed in: `--storage-state auth.json`. Per-load noise: `--mask <sel>`, `--mask-media`. When each is
-legitimate: [reference.md](reference.md).
+First origin = left = your change; second = right = the reference. `+` is only/more in your
+change, `-` only/more in the reference. Default widths 1440, 1152, 896, 704, 375. First run:
+`npx playwright install chromium`. Flags: `--help`. Details: [reference.md](reference.md),
+the § named at each step.
+
+## Pick the mode
+
+| Change | Run |
+| --- | --- |
+| CSS only, markup untouched (refactor, dead-CSS removal, token swap) | pixels + `--computed`. Expect `dom identical` on every route: then each `computed:` finding is a real style change, even on a clean route. `dom differs`: often a wrapper's class changed, re-keying its subtree (§ `--computed`). Hover, focus and open menus aren't shot without a `before` hook, and dead-CSS removal breaks exactly those. |
+| Markup changes (framework, template or component migration) | pixels. `--computed` findings would only be hints. |
+| Dependency or build upgrade | pixels, plus `--computed` if the markup should be identical. |
+| One component | pixels with `--selector <sel>`. |
+
+Pixels decide the score and the exit code in every mode.
 
 ## Loop
 
-1. **Reference: the base, built locally.** When the base can be built, it is the default
-   reference: the base commit in a `git worktree`, a production build of it on another
-   port as right, your change as left, both up with the same content. Same data, fonts and CDN, so every diff is yours.
-   Production as right is a secondary check afterwards: it adds deploy drift, one-sided
-   third-party content and CSP errors. Serve production builds on both sides: dev overlays
-   exist only on one side (Next's and Astro's are hidden; others go in `hideSelectors`).
-   Routes: one per template or layout, from the sitemap or router; skip search results,
-   pagination and admin. `--dry-run` shows the URL pairs.
-2. **Baseline first.** Before changing code, run the base against the reference. Against
-   the base build that is base vs base, so whatever differs varies per load: mask it
-   (`--mask-media` for iframes; video is frozen by default; `--mask <sel>` or a config
-   mask with a `reason` for the rest), then rerun until the baseline is clean. Against
-   production, `--accept "differs before the change"` what is stable drift. Mask or accept
-   only what you looked at, never to get green.
-3. One route, one width. A row: score, `h±N`/`w±N` height/width delta,
-   `band`, `aligned`, `N reg`, `unstable Npx` (moving pixels, unmeasured), `text`.
-4. `failed` first: a stylesheet or font one side didn't load explains the whole row; fix
-   that and rerun. Then `text`: `-"x"` is missing from your change, `+"x"` only in yours.
-5. `band -24@y196`: 24 rows only the reference has. `aligned 100.00%`: the band is the
-   whole difference. `unaligned`: see reference.md.
-6. `dom` before crops. `sel prop l→r`: computed value, left first; find the *rule*.
-   `+sel`/`-sel`: only left/right. `sel x+8`: moved; the cause is listed after it.
-   Bare `sel`: its own pixels changed (image, canvas).
-   CSS refactor or dead-CSS removal: add `--computed`. Each `computed:` finding is
-   `key prop left→right`, collapsed across routes and widths. `dom identical` means the
-   cause is CSS or JS, not markup.
-7. `Read` the crops under each row (next to results.json) for what `dom` doesn't explain.
-   Left is on top or left; red box = change, red seam = missing rows.
-8. Fix or justify every band, region and text line. After each migration step,
-   `--rerun-failed` (same arguments) reruns only what isn't clean or accepted; add
-   `--cache-right` to replay the reference's traffic from the last such run (an hour at most)
-   instead of fetching it again. Finish with all routes at default widths, without
-   `--cache-right`. For a multi-width row, open the widest and narrowest crop.
-   `accepted:` routes are known; a row saying `1 accepted` still has something new.
+1. **Serve both sides as production builds**: the base commit in a `git worktree` on one
+   port (right), your change on another (left), same data (static build:
+   `npx serve -l 3002 dist`). Production as the reference is a later second pass. Routes:
+   every page the change can reach, from the sitemap; `--dry-run` prints the pairs.
+   § Reference and routes; moved page, component, sign-in, click state: § Scoping.
+2. **Baseline**: base vs base. Before changing code, the untouched change side against the
+   reference; if the change is already made, the base build served on two ports. Whatever
+   differs varies per load: mask it (`--mask-media` for iframes, `--mask <sel>` or a config
+   mask with a `reason`; video is already frozen; a looping carousel: stop it with a
+   `before` hook on both sides, or mask it), and rerun until clean. Against production instead:
+   open each difference, then `--accept "differs before the change"`. § Masks, accepts and
+   thresholds.
+3. **Change, run all routes at default widths, read each row in this order**: `ERROR` →
+   `failed` (a missing stylesheet or font explains the whole row: fix, rerun) → `text` →
+   `h`/`w`, `band`, `aligned`, `line` → `dom` (`sel prop l→r` is a computed value: find the
+   *rule*) → `computed:` → `Read` the `crops` for what `dom` doesn't explain (multi-width row:
+   widest and narrowest). Every token: § Output.
+4. **Decide every band, region, line and text line:**
 
-Exit: 0 no differing pixels, or all accepted (unstable pixels or a failed asset alone still
-exit 0: read their rows) · 1 a difference (with `--threshold`: below it), even on `--accept` for one it can't accept (unstable pixels, width change, unaligned height change) · 2 bad args/config/origin down · 3 a route errored (unmeasured) or crash. 1 wins over 3.
-All clean? Confirm both sides actually rendered.
+   | It is | Do |
+   | --- | --- |
+   | Caused by your change, not intended | Fix it. |
+   | In the baseline too, or intended, and you opened it | `--accept "<why>"` on the OS that checks (Mac entries go stale on Linux CI). |
+   | Varying per load (base vs base shows it) | Mask it, with a `reason`. |
+   | `unstable`, a width change, or `unaligned` with a height change | Can't be accepted (§ Masks, accepts and thresholds): fix or report. |
 
-**Before you mask, lower the threshold, drop a route or skip widths,** read
-reference.md's Rationalizations.
+   Before you mask, accept, set `--threshold`, drop a route or skip a width: § Rationalizations.
+5. **Iterate** with `--rerun-failed` (same arguments) and optionally `--cache-right`
+   (§ Iterating). **Finish** with a fresh full run: all routes, default widths, neither flag.
+   All clean? Confirm both sides actually rendered.
+
+Exit 0 is not verified: unstable pixels or a failed asset alone exit 0, so report them. 1: an
+unaccepted difference. § Exit codes.
 
 ## Verdict (all four, in order)
 
 1. **Numbers**: the `renderdiff:` line and each differing row.
-2. **What you saw**: per route and width, element and property ("/pricing @1440: `.cta` margin-left 24px→16px").
-3. **Not verified**: errors, skipped widths, masks, unopened regions, unlisted routes, baseline drift and its reference (base build or production).
+2. **What you saw**: per route and width, element and property ("/pricing @1440: `.cta`
+   margin-left 24px→16px").
+3. **Not verified**: errors, unstable or failed-asset rows, skipped widths, masks, accepts,
+   hooks, unshot states (hover, open menus), unopened regions, unlisted pages, and the
+   reference (base build or production).
 4. **Call**: parity, regression, or expected change, and why.
 
 A score without looking is not a verdict: 99.6% can be a missing nav link.

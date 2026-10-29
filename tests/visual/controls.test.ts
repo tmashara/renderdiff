@@ -482,22 +482,22 @@ test("--threshold turns a low score into a failure", async () => {
     }),
   );
   assert.equal(r.code, 1, `expected exit 1 below threshold${context(r)}`);
-  assert.match(r.stderr, /1 route\(s\) below 99\.90%/);
+  assert.match(r.stderr, /✗ 1 route below 99\.90% \(1 shot\)\./);
   // The report is still written — a failing run is the one you most want to look at.
   assert.ok(r.report(), "no report on a threshold failure");
 });
 
-test("any difference fails when no threshold is set", async () => {
+test("any difference fails when no threshold is set, counted in routes and shots", async () => {
   const r = await runCli(
     renderdiffArgs({
       left: site.left,
       right: site.right,
-      routes: ["/shifted"],
-      widths: [1440],
+      routes: ["/shifted", "/margin"],
+      widths: [1440, 896],
     }),
   );
   assert.equal(r.code, 1, context(r));
-  assert.match(r.stderr, /1 route\(s\) differ/);
+  assert.match(r.stderr, /✗ 2 routes differ \(4 shots\)\./, context(r));
 });
 
 test("--threshold 0 never fails on a difference", async () => {
