@@ -39,6 +39,9 @@ import {
 import { PAGES_DIR, startFixtureSite, type FixtureSite } from "../helpers/server.ts";
 import { EXPECT_HEIGHT } from "../fixtures/pages/tall/page.ts";
 
+/** Inside the lottie fixture's top-right player box on the 1440 shot. */
+const [LOTTIE_X, LOTTIE_Y] = [1340, 100];
+
 const CONFIGS = path.resolve(
   path.dirname(new URL(import.meta.url).pathname),
   "..",
@@ -570,6 +573,29 @@ describe("selector masks", () => {
     assert.equal(run.code, 0, context(run));
     const r = result(results(run.outDir), "/video-seek", 1440);
     assert.deepEqual([r.diffPixels, r.unstablePixels], [0, 0], context(run));
+  });
+
+  test("lottie-player is held on lottieFrame on both sides", async () => {
+    const run = await capture(["/lottie"], { config: path.join(CONFIGS, "lottie.mjs") });
+    assert.equal(run.code, 0, context(run));
+    const r = result(results(run.outDir), "/lottie", 1440);
+    assert.deepEqual([r.diffPixels, r.unstablePixels], [0, 0], context(run));
+    for (const side of ["left", "right"]) {
+      const px = await sharp(run.file(`lottie.1440.${side}.png`))
+        .extract({ left: LOTTIE_X, top: LOTTIE_Y, width: 1, height: 1 })
+        .removeAlpha()
+        .raw()
+        .toBuffer();
+      // Frame 60's colour, so the late side was seeked, not just stopped on blank frame 0.
+      assert.deepEqual([...px], [108, 188, 204], `${side}${context(run)}`);
+    }
+    assert.match(parseReport(run.report()!).neutralized, /lottie-player held on frame 60/);
+  });
+
+  test("without lottieFrame a lottie-player keeps playing", async () => {
+    const run = await capture(["/lottie"]);
+    const r = result(results(run.outDir), "/lottie", 1440);
+    assert.ok(r.unstablePixels > 0, context(run));
   });
 
   test("--mask-media paints iframes; freezing video hides video.js overlays", async () => {

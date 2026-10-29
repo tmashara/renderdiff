@@ -137,4 +137,9 @@ describe("keys", () => {
     assert.match(cfg().neutralizeCss, /\.vjs-control-bar \*\{visibility:hidden/);
     assert.doesNotMatch(cfg({ freezeVideo: false }).neutralizeCss, /vjs/);
   });
+
+  test("lottie players are left playing unless the config names a frame", () => {
+    assert.equal(cfg().lottieFrame, undefined);
+    assert.equal(cfg({}, { lottieFrame: 60 }).lottieFrame, 60);
+  });
 });

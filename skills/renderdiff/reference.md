@@ -287,6 +287,7 @@ export default {
   masks: [{ selector: "[data-star-count]", reason: "live star count", urlPath: "/pricing" }],
   maskMedia: false,     // --mask-media
   freezeVideo: true,    // --no-freeze-video sets false
+  lottieFrame: 60,      // hold lottie-player on frame 60; unset leaves it playing
   computed: false,      // --computed
 };
 ```
@@ -352,7 +353,7 @@ For scripts and drilling into one route; the loop doesn't need it. One result pe
   and with `--computed` `computed` (each change once with `at: [{ url, widths }]`).
 - **`meta`:** origins, widths, threshold, `clock`, block patterns, hidden selectors, mask
   reasons, `browser` (`chromium`, or `chrome` after a fallback), storage state file names,
-  `config` hash, `rightReplayedFrom`, `freezeVideo`, `platform`, `rerun` (`{ rerun, reused }` or
+  `config` hash, `rightReplayedFrom`, `freezeVideo`, `lottieFrame` (only when set), `platform`, `rerun` (`{ rerun, reused }` or
   null).
 
 ## Gotchas

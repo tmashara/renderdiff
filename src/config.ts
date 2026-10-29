@@ -281,6 +281,8 @@ export interface RenderdiffConfig {
   maskMedia?: boolean;
   /** Keep every video paused on frame 0 (its poster if it never loads) and hide video.js overlays. Default true. */
   freezeVideo?: boolean;
+  /** Hold every lottie-player on this frame once it loads. Unset: left playing. */
+  lottieFrame?: number;
 }
 
 /** A fully merged config. Everything the run needs, nothing optional. */
@@ -301,6 +303,8 @@ export interface ResolvedConfig {
   storageState: { left: string | null; right: string | null };
   computed: boolean;
   freezeVideo: boolean;
+  /** Optional, not null, so an unset value leaves the config hash unchanged. */
+  lottieFrame?: number;
 }
 
 /** package.json's version; the same relative path resolves from `src/` and `dist/`. */
@@ -511,6 +515,11 @@ function validate(c: Record<string, unknown>, file: string) {
   if (c.maskMedia !== undefined && typeof c.maskMedia !== "boolean") bad("maskMedia", "a boolean");
   if (c.freezeVideo !== undefined && typeof c.freezeVideo !== "boolean")
     bad("freezeVideo", "a boolean");
+  if (
+    c.lottieFrame !== undefined &&
+    !(Number.isSafeInteger(c.lottieFrame) && (c.lottieFrame as number) >= 0)
+  )
+    bad("lottieFrame", "a whole number ≥ 0");
 }
 
 /** CLI-supplied values. `undefined` means "not passed", so the config file wins. */
@@ -584,6 +593,7 @@ export function resolveConfig(file: RenderdiffConfig, cli: CliOverrides): Resolv
     },
     computed: cli.computed ?? file.computed ?? false,
     freezeVideo,
+    lottieFrame: file.lottieFrame,
   };
 }
 
