@@ -408,6 +408,7 @@ describe("probe", () => {
     await rejects(["probe", U, "--loads", "1"], "--loads expects an integer of at least 2, got 1");
     await rejects(["probe", U, "--loads=2.5"], "--loads expects an integer of at least 2");
     await rejects(["probe", U, "--loads"], "--loads needs a value");
+    await rejects([L, R, "/a", "--loads", "3"], "unknown flag: --loads");
   });
 
   test("one width, no selector", async () => {

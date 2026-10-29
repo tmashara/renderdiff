@@ -466,9 +466,7 @@ async function probe(a: Args, loads: number): Promise<never> {
   await preflight(cfg.left, cfg.left);
   const { probe } = await import("./probe.ts");
   try {
-    process.exit(
-      await probe(cfg.left + route.left, route, a.widths?.[0] ?? cfg.widths[0]!, cfg, loads),
-    );
+    process.exit(await probe(cfg.left + route.left, route, cfg.widths[0]!, cfg, loads));
   } catch (e) {
     console.error(`✗ ${e instanceof Error ? e.message : String(e)}`);
     process.exit(3);

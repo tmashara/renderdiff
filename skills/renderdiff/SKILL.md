@@ -39,7 +39,8 @@ Pixels decide the score and the exit code in every mode.
    iframes, `--mask <sel>` or a config mask with a `reason`; video is already frozen; a
    looping carousel: stop it with a `before` hook on both sides, or mask it), and rerun
    until clean. A difference with no `varies` line and nothing unstable:
-   `renderdiff probe <right><route> --width <w>` names what varies between loads; mask that. Against production instead: open each difference, then
+   `renderdiff probe <right><route> --width <w>` names what varies between loads; mask that.
+   Against production instead: open each difference, then
    `--accept "differs before the change"`. § Masks, accepts and thresholds.
 3. **Change, run all routes at default widths, read each row in this order**: `ERROR` →
    `failed` (a missing stylesheet or font explains the whole row: fix, rerun) → `text` →

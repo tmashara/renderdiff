@@ -5,8 +5,6 @@ import { CONTEXT_OPTIONS, masksFor, type ResolvedConfig, type Route } from "./co
 import { PROPS, snapshot } from "./locate.ts";
 import { COMPUTED_TIMEOUT, launch, shoot } from "./run.ts";
 
-/** `renderdiff probe`: what varies between loads of one URL, from computed styles and positions. */
-
 // ponytail: x/y also list the siblings a grown box pushes down; drop a y a previous sibling's height explains if it gets noisy
 const FIELDS = [...PROPS, "content", "x", "y"];
 
@@ -57,6 +55,7 @@ async function load(
   }
 }
 
+/** `renderdiff probe`: what varies between loads of one URL, from computed styles and positions. */
 export async function probe(
   url: string,
   route: Route,
