@@ -68,10 +68,9 @@ const TILE_HEIGHT = 16_000;
 const MAX_PAGE_AREA = 1440 * 40_000;
 
 /** Requests still open per page, when the last one opened or closed, and stylesheets that failed. */
-const network = new WeakMap<
-  Page,
-  { open: Set<Request>; last: number; failed: Set<string>; doc?: Response }
->();
+const network = new WeakMap<Page, { open: Set<Request>; last: number; failed: Set<string> }>();
+/** Each page's last main-frame document response; redirect hops come first, so it is the final one. */
+const doc = new WeakMap<Page, Response>();
 
 const html = (r: Response) => {
   const type = r.headers()["content-type"];
@@ -99,12 +98,7 @@ export class HookError extends Error {}
  * page, before any navigation.
  */
 export async function prepare(page: Page, cfg: ResolvedConfig, now: number): Promise<void> {
-  const net = {
-    open: new Set<Request>(),
-    last: Date.now(),
-    failed: new Set<string>(),
-    doc: undefined as Response | undefined,
-  };
+  const net = { open: new Set<Request>(), last: Date.now(), failed: new Set<string>() };
   const blocked = new WeakSet<Request>();
   const sheet = (r: Request) => {
     if (r.resourceType() === "stylesheet" && !blocked.has(r))
@@ -127,7 +121,7 @@ export async function prepare(page: Page, cfg: ResolvedConfig, now: number): Pro
   });
   page.on("response", (r) => {
     if (r.status() >= 400) sheet(r.request());
-    if (r.request().isNavigationRequest() && r.frame() === page.mainFrame()) net.doc = r;
+    if (r.request().isNavigationRequest() && r.frame() === page.mainFrame()) doc.set(page, r);
   });
   // A request the old document left open never finishes or fails, so it can't hold the next load.
   page.on("framenavigated", (f) => {
@@ -181,14 +175,14 @@ export async function capture(
   const maxHeight = Math.max(40_000, Math.floor(MAX_PAGE_AREA / width));
   await page.clock.setSystemTime(now);
   // Here, not on framenavigated, which a pushState during hydration fires too.
-  const net = network.get(page)!;
-  net.failed.clear();
-  net.doc = undefined;
+  network.get(page)!.failed.clear();
+  doc.delete(page);
   const res = await page
     .goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 })
     .catch((e: unknown) => {
-      if (!net.doc || html(net.doc)) throw e;
-      return net.doc;
+      const d = doc.get(page);
+      if (!d || html(d)) throw e;
+      return d;
     });
   if (res && res.status() >= 400) {
     throw new Error(`HTTP ${res.status()} at ${url}`);
