@@ -631,3 +631,23 @@ test("--aria names a div that lost its button role, where pixels see nothing", a
   assert.match(r.stdout, /^aria: identical on 2 of 3 route\(s\), differs \/button-vs-div/m);
   assert.equal(r.stdout.match(/\/button-vs-div@1440,375/g)?.length, 1, context(r));
 });
+
+test("--aria leaves out masked elements and reads only a route's @selector element", async () => {
+  const runs = await Promise.all(
+    [["/button-vs-div", "--mask", ".buy"], ["/button-vs-div @.notes"]].map(([route, ...flags]) =>
+      runCli([
+        ...renderdiffArgs({ left: site.left, right: site.right, routes: [route!], widths: [1440] }),
+        "--aria",
+        ...flags,
+      ]),
+    ),
+  );
+  for (const r of runs) {
+    const [row] = results(r.outDir).results;
+    assert.deepEqual(
+      row?.status === "compared" && row.aria,
+      { added: [], removed: [], truncated: 0 },
+      context(r),
+    );
+  }
+});

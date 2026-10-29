@@ -95,6 +95,10 @@ export default {
   // apart from asset hashes. Same as --computed. Pixels still decide the score.
   computed: false,
 
+  // Also diff each page's ARIA snapshot (the accessibility tree). Same as --aria.
+  // Pixels still decide the score.
+  aria: false,
+
   // Content that renders on both sides but whose value drifts. Painted over on both,
   // so the noise cancels out instead of scoring against you.
   //
