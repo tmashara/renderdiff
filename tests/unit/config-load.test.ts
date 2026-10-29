@@ -181,6 +181,8 @@ describe("validation", () => {
     ],
     ['{ maskMedia: "yes" }', /`maskMedia` must be a boolean/],
     ['{ freezeVideo: "no" }', /`freezeVideo` must be a boolean/],
+    ["{ lottieFrame: 1.5 }", /`lottieFrame` must be a whole number/],
+    ["{ lottieFrame: -1 }", /`lottieFrame` must be a whole number/],
     ["{ storageState: 1 }", /`storageState` must be a non-empty path/],
     [
       '{ storageState: { left: "a.json", center: "b.json" } }',

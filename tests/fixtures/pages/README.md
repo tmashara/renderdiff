@@ -19,7 +19,7 @@ Three groups:
   elements each change names (`margin`, `color`, `nav`), and a lost `::before` line and a
   re-parented pairing (`divider`).
 - **Guard rails** — `blank`, `tall`, `animated`, `lazy`, `lazy-deep`, `lazy-js`, `lazy-grow`, `consent`,
-  `drifting`, `tracker`, `clock`, `ticker`, `unsettled`, `unsettled-once`, `sprite`, `short`, `tall-region`, `reorder`, `stripe`, `frameset`, `menu`, `scroll-spy`, `signed-in`, `fixed`, `inserted`, `labelled`, `broken-asset`, `media`, `long`, `video`, `video-seek`, `hang`, `origin`, `cooperate`, `mask-geometry`.
+  `drifting`, `tracker`, `clock`, `ticker`, `unsettled`, `unsettled-once`, `sprite`, `short`, `tall-region`, `reorder`, `stripe`, `frameset`, `menu`, `scroll-spy`, `signed-in`, `fixed`, `inserted`, `labelled`, `broken-asset`, `media`, `long`, `video`, `video-seek`, `lottie`, `hang`, `origin`, `cooperate`, `mask-geometry`.
   One per defence in `src/capture.ts` / `src/config.ts`.
 
 ## Authoring rules
@@ -60,8 +60,9 @@ Breaking any of these produces a flaky suite, and the flake looks like a renderd
 9. **No animation** except in `animated`, which exists to prove `STILL_CSS` and the
    image-animation launch flag kill it, `ticker`, whose timer exists to be caught by the
    stability check, `unsettled`, which recolours the whole page to trip the
-   unstable-pixel cap, `unsettled-once`, which does so on its first render only, and
-   `mask-geometry`, whose box moves once after settle.
+   unstable-pixel cap, `unsettled-once`, which does so on its first render only,
+   `mask-geometry`, whose box moves once after settle, and `lottie`, whose script-driven
+   player exists to be held on one frame.
 
 ## Adding a route
 

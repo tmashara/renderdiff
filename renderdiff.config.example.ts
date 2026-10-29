@@ -84,6 +84,10 @@ export default {
   // captions and control bars are hidden. false, or --no-freeze-video, lets them play.
   freezeVideo: true,
 
+  // Hold every lottie-player on this frame once it loads (frame 0 is often blank). Unset,
+  // they keep playing.
+  // lottieFrame: 60,
+
   // Mask every iframe on every route (embeds that differ per load). Same as --mask-media.
   maskMedia: false,
 

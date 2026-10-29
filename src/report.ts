@@ -131,6 +131,7 @@ export interface RunMeta {
   /** The oldest `rightReplayedFrom` among the results, or null when every right side loaded live. */
   rightReplayedFrom: string | null;
   freezeVideo: boolean;
+  lottieFrame?: number;
   /** `process.platform` of the run; accepted entries and pixels are OS-specific. */
   platform: string;
   /** With `--rerun-failed`: shots rerun and shots reused from the previous run; else null. */
@@ -553,6 +554,10 @@ const neutralized = (meta: RunMeta, results: RouteResult[]) => {
      scheme, reduced motion, CSS animations and transitions off, animated images and SVG animations held on their
      first frame${
        meta.freezeVideo ? ", videos kept from playing with video.js overlays hidden" : ""
+     }${
+       meta.lottieFrame !== undefined
+         ? `, every lottie-player held on frame ${meta.lottieFrame}`
+         : ""
      }.</p>
   <p>Unstable pixels — ones that changed between two shots of the same load — are painted
      magenta on both sides, counted on each card, and excluded from the measurement. A route

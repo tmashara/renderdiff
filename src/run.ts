@@ -204,6 +204,7 @@ export async function run({
     hideSelectors: cfg.hideSelectors,
     masks: cfg.masks.map(({ urlPath, reason }) => ({ urlPath, reason })),
     freezeVideo: cfg.freezeVideo,
+    lottieFrame: cfg.lottieFrame,
     platform: process.platform,
     storageState: {
       left: cfg.storageState.left && path.basename(cfg.storageState.left),

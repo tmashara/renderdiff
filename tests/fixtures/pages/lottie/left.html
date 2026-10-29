@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lottie guard rail</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for lottieFrame. An inline stand-in for LottieFiles' lottie-player, mirroring its
+   getLottie()/stop()/seek() and lottie-web's load order: isLoaded is set at the end of a long
+   task, then autoplay's play() runs a tick later. Frame 0 is blank and every later frame has its own colour. It loads later
+   on the right than the left, so held, both show the configured frame; left alone, it plays. */
+lottie-player { position: absolute; top: 0; right: 0; width: 200px; height: 200px; }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Lottie guard rail</h1>
+<p class="lede">An autoplaying, looping lottie-player whose first frame is blank. It finishes loading later on one side than the other, so a run that let it play, or stopped it on frame 0, would compare different or empty frames.</p>
+<lottie-player autoplay loop></lottie-player>
+<script>
+const LOAD_MS = 50;
+customElements.define("lottie-player", class extends HTMLElement {
+  connectedCallback() {
+    this.frame = 0;
+    setTimeout(() => {
+      // A long task, as building the renderer is, so a poll timer is overdue when it ends.
+      for (const end = performance.now() + 100; performance.now() < end; );
+      this._lottie = { isLoaded: true, totalFrames: 120 };
+      setTimeout(() => this.hasAttribute("autoplay") && this.play(), 0);
+    }, LOAD_MS);
+  }
+  getLottie() { return this._lottie; }
+  paint() {
+    const n = this.frame;
+    this.style.background = n ? `rgb(${(n * 53) % 256}, ${(n * 97) % 256}, ${(n * 29) % 256})` : "transparent";
+  }
+  play() {
+    clearInterval(this.timer);
+    this.timer = setInterval(() => { this.frame = (this.frame % 119) + 1; this.paint(); }, 16);
+  }
+  stop() {
+    if (!this._lottie) return;
+    clearInterval(this.timer);
+    this.frame = 0;
+    this.paint();
+  }
+  seek(value) {
+    const m = /^(\d+)(%?)$/.exec(value.toString());
+    if (!m) return;
+    this.frame = m[2] ? Math.round((+m[1] / 100) * 120) : +m[1];
+    this.paint();
+  }
+});
+</script>
+<section class="notes">
+<h2>Notes</h2>
+<p>Lottie animations are driven by script, not CSS, so the stylesheet that stills CSS animation cannot reach them. Holding every player on one frame once it loads is what makes the two sides comparable.</p>
+</section>
+</div>
+</body>
+</html>
