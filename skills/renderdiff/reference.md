@@ -162,7 +162,8 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
   dropped, and so is a width inside a parent whose width changed, or a height around a child
   whose height changed (unless set in px). Shown on one side and `display: none` on the other
   is one `display` finding. A pseudo-element one side no longer generates is `content` against
-  `none`.
+  `none`. An `auto` margin reads as `auto`, not the px it resolved to, which varies with
+  layout.
 - A finding on a clean route is a change you can't see in this state: a hidden element
   (closed menu), another breakpoint, `:hover`/`:focus` (not snapshotted). Decide it; a
   `before` hook can open the state.

@@ -203,6 +203,9 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
 - An element shown on one side and `display: none` on the other is one `display` finding;
   its subtree and its `::before`/`::after` count neither as findings, unmatched nor against
   `dom identical`.
+- An `auto` margin reads as `auto`, not the px Chrome resolved it to, since that number
+  changes with the layout (a grid item's reads `0px`). Centring swapped for a fixed margin
+  is `margin-left auto→60px`.
 - A `::before`/`::after` that only one side generates shows as `content` against `none`.
   That is how a removed rule that drew an icon shows up.
 - `dom identical` means that on every width, each walked element's tag, attributes and own
