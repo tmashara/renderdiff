@@ -4,8 +4,9 @@
 
 ![renderdiff output for a page missing a nav link, next to the crop it wrote](https://raw.githubusercontent.com/tmashara/renderdiff/main/docs/img/hero.png)
 
-renderdiff screenshots the same routes on two running copies of a site (your branch on
-localhost, and production) at five viewport widths and pixel-diffs each pair. For every
+renderdiff screenshots the same routes on two running copies of a site (your change, and a
+reference: a local build of the base commit, or production) at five viewport widths and
+pixel-diffs each pair. For every
 change it tells you where on the page it is, which DOM element and CSS property is behind
 it, and what text differs. It also writes small crops sized for an LLM's context. It refuses
 to score what it can't trust: blank pages, error pages, pages still moving. A clean result
@@ -63,7 +64,8 @@ exists only on the reference (`-`). Open `renderdiff-out/about.1440.c1.png` to s
 
 ### For coding agents
 
-Install the skill so the agent runs the loop and reports a verdict, not a bare score:
+Install the skill so the agent runs the loop (base build vs change build, a baseline before
+the change, pixels plus `--computed` for CSS-only work) and reports a verdict, not a bare score:
 
 ```
 /plugin marketplace add tmashara/renderdiff     # Claude Code
@@ -104,8 +106,8 @@ renderdiff <left-origin> <right-origin> <route…> [options]
 | `--selector <sel>` | Compare the one element this Playwright selector matches, on both sides, instead of the whole page. Applies to every route, over the config's per-route `selector`. |
 | `--left-selector <sel>`, `--right-selector <sel>` | That side's selector, over `--selector`. One without the other side (or `--selector`) is an error. |
 | `--mask <sel>` | Paint this Playwright selector over on both sides, on every route; repeatable. Added to the config's masks and listed in the report as coverage given up. |
-| `--mask-media` | Mask every `iframe` on every route, as config `maskMedia: true` does. Video isn't masked: it is frozen by default, so the player's box and styles are still compared. |
-| `--no-freeze-video` | Leave videos playing and video.js overlays visible, as config `freezeVideo: false` does. By default no `video` plays, from the page's first script on, so each shows its poster (one that started anyway is paused at frame 0), and `.vjs-text-track-display` / `.vjs-control-bar` are hidden. Without freezing, videos play through the lazy-load scroll and the shots, so expect unstable pixels or `did not settle`; with `--mask-media` too, they are neither masked nor frozen. |
+| `--mask-media` | Mask every `iframe` on every route, as config `maskMedia: true` does. Video isn't masked: it is frozen by default, so the player's box is still compared. |
+| `--no-freeze-video` | Leave videos playing and video.js overlays visible, as config `freezeVideo: false` does. By default every video shows its poster ([how it works](https://github.com/tmashara/renderdiff/blob/main/docs/how-it-works.md)); unfrozen, expect unstable pixels or `did not settle`. `--mask-media` doesn't mask them either. |
 | `--storage-state <file>` | Start both sides with this Playwright storage state (cookies, localStorage), e.g. signed in. Relative to cwd. Over the config's `storageState`. |
 | `--left-storage-state <file>`, `--right-storage-state <file>` | That side's storage state, over `--storage-state`. One side alone is fine. |
 | `--accept <reason>` | Record this run's differences as accepted, with a reason. See **Accepted differences and reruns**. |
@@ -128,7 +130,7 @@ range rather than on a boundary, so a layout switch never flaps between runs.
 | --- | --- |
 | `0` | No route errored and no shot differs (with `--threshold`: none scored below it). Accepted differences don't count; nor do unstable pixels or a failed asset alone, which still get their own row. |
 | `1` | A shot differs, or with `--threshold` scored below it. Wins over `3` when both happen. A difference that can't be accepted (unstable pixels beside it, a width change, a height change whose rows don't align) exits 1 even on the `--accept` run. |
-| `2` | Bad arguments, bad config, or an origin that isn't responding. |
+| `2` | Bad arguments or config, an origin that isn't responding, an unreadable storage state or `renderdiff.accepted.json`, an out dir holding files renderdiff didn't write, or a `--rerun-failed` that doesn't repeat the last run. |
 | `3` | A route errored, so it went unmeasured, or the run crashed (e.g. no Chromium). |
 
 ### Moved pages, components, interactions, sign-in
@@ -178,38 +180,21 @@ only.
 ## Reading the output
 
 **Signs always point at your change:** `+` = only in or more in the left (your change);
-`-` = only in or more in the right (the reference).
+`-` = only in or more in the right (the reference). A row reads: score, `h`/`w` height and
+width delta, `band`s (rows only one side has), `aligned` (the score without them), `line`s
+(a 1–2px border or divider), `N reg` (regions), `unstable` pixels, `text` lines. Under it,
+`failed` assets, the `dom` elements and properties behind the changes, and the `crops`.
 
-| Token | Meaning |
-| --- | --- |
-| `97.41%` | Share of measured pixels that match. A range (`99.12%–99.87%`) when one row covers several widths. A triage signal, not a verdict. |
-| `@1440,1152` | The widths a row covers. They agree on height and width delta, bands, aligned score and text; score and region count are ranges. |
-| `h-24` / `w+8` | Height / width delta, left − right. The smaller image is padded with magenta, and the padding counts against the score on purpose. |
-| `band -24@y196` | 24 rows only the reference has, at y=196 (`+`: only your change has them). `@y~196`: the row's widths put it at different y; the first width's is shown. |
-| `aligned 100.00%` | The score with the bands cut out. 100% means the band is the whole difference. |
-| `unaligned` | Heights differ but too few rows match to find bands. Use the height delta and regions. |
-| `3 reg` | Regions: connected patches of differing pixels. A missing link barely moves the score, but it is still a region. |
-| `unstable 1,204px` | Pixels that kept changing between shots of the same load (a ticker, a carousel). Excluded from the score, so the route is never clean. |
-| `failed left: font Inter 700` | A stylesheet or font face that side failed to load (blocked URLs aside). Fix that first: a fallback font changes every line of text. |
-| `text -"Pricing"` | A line of visible text only the reference has (`+`: only your change). Up to three, then `(+N more)`. |
-| `dom sel prop a→b` | Element on both sides whose computed `prop` differs, left value first. |
-| `dom +sel` / `-sel` | Element only on the left / only on the right. |
-| `dom sel x+8` | It moved without its own style changing; the neighbour or parent listed after it is the cause. |
-| `dom sel` | On both sides and unchanged in style or position, so its own pixels changed (an image or canvas). |
-| `computed: N findings` | With `--computed`: each `key prop left→right` once, with the routes and widths it was seen at; `dom identical`: the markup matches apart from asset hashes and generated class names, so look at CSS or script. |
-| `crops …` | Up to 3 PNGs per comparison, bands first, relative to `results.json`. Left is on top or on the left, and the change is boxed in red. |
-| `ERROR …` | Unmeasured, which is neither a pass nor a fail. Exits 3. |
-| `accepted:` / `stale accepted:` | Shots whose every difference was accepted, and accepted entries the run no longer saw. See below. |
-| `rerun:` | With `--rerun-failed`: how many shots were rerun and how many reused. |
-| `right:` | With `--cache-right`: whether the right side was replayed, and from when, or loaded live and recorded. |
-
-Read text first, then `dom`, then the crops for anything `dom` doesn't explain. Full
-detail, including the `--progress` and report forms: [docs/output.md](https://github.com/tmashara/renderdiff/blob/main/docs/output.md).
+Read text first, then `dom`, then the crops for anything `dom` doesn't explain. Every token,
+the `--computed` block, the `--progress` and report forms and `results.json`:
+[docs/output.md](https://github.com/tmashara/renderdiff/blob/main/docs/output.md).
 
 ## Accepted differences and reruns
 
-A migration starts with differences that already exist between the untouched local build
-and production. Record them once, then change code and re-check only what's red:
+Run once before changing code. Against a local build of the base that is base vs base, so
+whatever differs varies per load: mask it. Against production, the untouched build already
+differs (deploy drift, one-sided embeds); look, record it once, then change code and re-check
+only what's red:
 
 ```
 renderdiff http://localhost:3000 https://example.com / /about --accept "differs before the migration"
@@ -219,18 +204,12 @@ renderdiff http://localhost:3000 https://example.com / /about --rerun-failed
 
 `--accept "<reason>"` writes every difference the run saw to `renderdiff.accepted.json` (next
 to the config, or in cwd); commit it. Later, a shot whose every difference matches an entry is
-listed on an `accepted:` line and counts neither as differing nor toward the exit code;
-anything new on the same page still shows. `--rerun-failed` reruns only what the last run in
-`--out` didn't find clean or accepted and merges it back; it exits 2 if the run differs from
-the previous one. Matching rules, what can still hide, and stale entries:
+listed on an `accepted:` line and doesn't count toward the exit code; anything new on the same
+page still shows. `--rerun-failed` reruns only what the last run in `--out` didn't find clean
+or accepted. Against a slow reference, `--cache-right` replays the right side's recorded
+traffic for up to an hour; drop it for the final run. Matching rules, why to accept on the
+platform that checks, and the cache:
 [docs/accepted.md](https://github.com/tmashara/renderdiff/blob/main/docs/accepted.md).
-
-Against a slow reference, add `--cache-right` while iterating: it records the right side's
-network traffic in `<out>/.cache/` and replays it for up to an hour. The page still renders
-and is shot fresh, so only the round trips are skipped. A replay can't see a deploy, so the run
-says `right: replayed from …`; drop the flag for the final run. With `--rerun-failed`, a new
-recording covers only the rerun shots. It holds a signed-in session's responses: keep the out
-dir out of git.
 
 ## Output
 
@@ -243,66 +222,8 @@ Everything lands in the out dir (`./renderdiff-out` by default):
 - `{slug}.{width}.c{n}.png`: up to three crops per comparison, left on top or on the left,
   change boxed in red.
 - `results.json`: everything above as data, written on every run, errors included, one
-  result per line, scores rounded down to four decimals (so a shot that differs never
-  reads as `1`). Its types (`Results` and friends) are exported from the package.
-
-```jsonc
-{
-  "meta": {
-    "tool": "renderdiff", "version": "0.3.2", "generatedAt": "…",
-    "left": "http://localhost:3000", "right": "https://example.com",
-    "widths": [1440, 375], "threshold": null,
-    "clock": "…",                // the instant both sides' clocks start at
-    "blockUrlPatterns": ["…"], "hideSelectors": ["…"],
-    "masks": [{ "urlPath": "/pricing", "reason": "live star count" }],   // no urlPath: every route
-    "browser": { "name": "chromium", "version": "…" },   // "chrome" when it fell back
-    "storageState": { "left": "auth.json", "right": null },   // file names only
-    "rightReplayedFrom": null   // --cache-right: when the replayed recording was made
-  },
-  "results": [
-    {
-      "url": "/about", "left": "/about", "right": "/about",   // a pair: "/a::/b", "/a", "/b"
-      "selector": null, "hook": false,                         // hook: a before hook ran
-      "width": 1440, "status": "compared",
-      "score": 0.9714,           // share of measured pixels that match
-      "alignedScore": 1,         // score over the aligned rows; null unless there are bands
-      "diffPixels": 33120, "totalPixels": 1158000, "unstablePixels": 0,
-      "heightDelta": -24, "widthDelta": 0,          // left − right
-      "regions": [],             // left-page px; with bands, from the realigned rows
-      "bands": [{ "side": "right", "y": 196, "h": 24,      // null: too different to align
-        "elements": [{                                     // regions have them too; absent: not looked at
-          "selector": "nav > a[href=\"/pricing\"]", "side": "right",   // or "left", "both"
-          "left": null, "right": { "x": 256, "y": 192, "w": 928, "h": 24 },
-          "changed": {},         // "margin-left": ["24px", "16px"], left first; "text" too
-          "text": "Pricing"      // "rightSelector" when the right one differs
-        }]
-      }],
-      "text": { "added": [], "removed": ["Pricing"] },   // added: left only; removed: right only
-      "failed": { "left": [], "right": [] },   // stylesheets and font faces that didn't load: "font Inter 700", "stylesheet https://…"
-      "computed": { "dom": 1, "changes": [], "truncated": 0, "unmatched": { "left": [], "right": ["body > nav > a[href=\"/pricing\"]"] } },   // --computed only; null: snapshot failed, "computedError" says why
-      "images": { "left": "about.1440.left.png", "right": "about.1440.right.png", "diff": "about.1440.diff.png" },
-      "crops": [{
-        "path": "about.1440.c1.png", "kind": "band",          // or "region"
-        "left": { "x": 256, "y": 196, "w": 68, "h": 0 },      // h 0: where the rows would go
-        "right": { "x": 256, "y": 196, "w": 68, "h": 24 },
-        "layout": "stacked", "scale": 1, "clipped": false     // left on top, or on the left ("side")
-      }]
-    },
-    { "url": "/blank", "left": "/blank", "right": "/blank", "width": 1440, "status": "error", "error": "page did not render …" }
-  ],
-  "summary": {
-    "compared": 1, "errors": 1, "mean": 0.9714,
-    "worst": { "url": "/about", "width": 1440, "score": 0.9714 },
-    "belowThreshold": 0,          // accepted shots aside
-    "differing": 1,               // shots with any differing pixel, accepted ones aside
-    "accepted": 0,                // shots whose every difference was accepted
-    "stale": [],                  // accepted entries the run measured but didn't see
-    "computed": []                // --computed: { key, prop, values: [left, right], at: [{ url, widths }] }
-  }
-}
-```
-
-Paths are relative to the out dir. Results are in route-then-width order.
+  result per line. Its types (`Results` and friends) are exported from the package; fields:
+  [docs/output.md](https://github.com/tmashara/renderdiff/blob/main/docs/output.md#resultsjson).
 
 ## Why a clean result is trustworthy
 

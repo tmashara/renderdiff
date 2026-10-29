@@ -7,7 +7,7 @@ npm install        # builds via the prepare script
 npm run build      # tsc → dist/
 npm run typecheck  # src + tests, no emit
 npm run lint       # oxlint
-npm run format     # oxfmt
+npm run format     # oxfmt; format:check is what CI runs
 npm install -g .   # install this working copy globally
 ```
 
@@ -35,22 +35,24 @@ formats it depends on are parsed in exactly one place, `tests/helpers/parse.ts`.
 validation and precedence. All of it through `--dry-run`, which exits before the browser.
 
 **`tests/visual/`** — real captures against `tests/fixtures/`, a two-origin site served on
-ephemeral ports. Three groups:
+ephemeral ports. Three groups, plus `accepted.test.ts` (`--accept`, `--rerun-failed`,
+`--cache-right`) and `computed.test.ts` (`--computed`):
 
 - *Equivalence* — six pairs of pages that are visually identical but built with different CSS:
-  flex against grid, floats against flex, CSS tables against grid, transform-centring against
-  `place-items`, inline-block against flex. These assert a **zero-pixel** diff, not a
+  the home page, flex against grid, floats against flex, CSS tables against grid,
+  transform-centring against `place-items`, inline-block against flex. These assert a **zero-pixel** diff, not a
   threshold. They are the corpus's central claim: the score tracks pixels, not markup, so a
   refactor that changed nothing visible reads as nothing changed.
-- *Controls* — an 8px shift, an extra section, one recoloured box, one changed margin. These
-  must score low. Without them a tool that returned 100% unconditionally would pass the
+- *Controls* — an 8px shift, an extra section, a recoloured box, a subtle tint, a missing nav
+  link, a changed margin, a lost divider. These must score low. Without them a tool that returned 100% unconditionally would pass the
   suite. They also pin the elements each change names.
 - *Guard rails* — one per defence in [docs/how-it-works.md](docs/how-it-works.md): the
   blank-page refusal (and a short sign-in page that must not be refused), the 18,000px tiled
   capture with masks in both tiles, animation stilling, the shared clock start and seeded
   randomness, the unstable-pixel check, lazy-image settling (native and script-driven,
-  4,800px below the fold), consent hiding, masks, network blocking, `before` hooks, storage
-  state, and naming fixed chrome over what it covers. Masks and blocking each run twice,
+  4,800px below the fold), consent hiding, masks, video freezing, the area ceiling, failed
+  assets, network blocking, `before` hooks, storage state, and naming fixed chrome over what it
+  covers. Masks and blocking each run twice,
   with and without their config, so the mechanism is shown doing something rather than a
   page merely happening to match.
 

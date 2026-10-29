@@ -1,7 +1,10 @@
 # Accepted differences and reruns
 
-A migration starts with differences that already exist between the untouched local build
-and production. Record them once, then change code and re-check only what's red:
+Before changing code, run the untouched build against the reference. Against a local build
+of the base commit (the default reference) that is base vs base, so whatever differs varies
+per load: mask it rather than accept it. Against production, the untouched build already
+differs (deploy drift, one-sided embeds). Look at those differences, record them once, then
+change code and re-check only what's red:
 
 ```
 renderdiff http://localhost:3000 https://example.com / /about --accept "differs before the migration"
@@ -63,3 +66,15 @@ earlier run's. It must repeat the previous run: different origins, routes, width
 (`meta.config` hashes masks, `before` hooks and `locate` sources, hidden selectors, block
 patterns, extra CSS and storage state file names) or renderdiff version exit 2, as does a
 missing `results.json`.
+
+## Replaying the reference (`--cache-right`)
+
+Against a slow reference, add `--cache-right` while iterating: it records the right side's
+network traffic in `<out>/.cache/` (kept when the out dir is wiped) and replays it for up to
+an hour, when the recording covers every shot. The page still renders and is shot fresh, so
+only the round trips are skipped. A replay can't see a deploy, so the run says
+`right: replayed from …`; drop the flag for the final run. With `--rerun-failed`, a new
+recording covers only the rerun shots. A request the recording lacks loads live and the shot
+lists `failed right: N request(s) not in the recording, loaded live`. The recording holds a
+signed-in session's responses: keep the out dir out of git. Exact rules:
+[how-it-works.md](how-it-works.md).

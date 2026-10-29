@@ -188,9 +188,10 @@ const HELP = `
   --rerun-failed reruns only what the previous run in --out didn't find clean or accepted.
 
   Writes report.html, results.json and crops of each change to --out. Exits 1 if any
-  shot differs (with --threshold, only if one scores below it; --threshold 0 never fails
-  on a diff), 3 if a route errored (unmeasured) or the run crashed, 2 on bad arguments,
-  bad config or an origin that is down.
+  shot differs and isn't accepted (with --threshold, only if one scores below it;
+  --threshold 0 never fails on a diff), 3 if a route errored (unmeasured) or the run
+  crashed, 2 on bad arguments or config, an origin that is down, or an out dir it won't
+  wipe.
 
   Options
     --left <url>        Left origin, instead of the first positional one.

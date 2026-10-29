@@ -6,11 +6,11 @@
 import type { RenderdiffConfig } from "renderdiff";
 
 export default {
-  // left: the build you changed (usually localhost). right: the reference you must match
-  // (usually production). The +/- signs in the output and text.added/removed in
-  // results.json are written from left's point of view.
-  left: "http://localhost:3000",
-  right: "https://example.com",
+  // left: the build you changed. right: the reference you must match, best a local build
+  // of the base commit (production adds deploy drift). The +/- signs in the output and
+  // text.added/removed in results.json are written from left's point of view.
+  left: "http://localhost:3001",
+  right: "http://localhost:3002",
 
   // Diffed when you run bare `renderdiff` with no positional routes. `/a::/b` (or
   // `{ left: "/a", right: "/b" }`) loads /a on the left and /b on the right — for a page
@@ -53,7 +53,8 @@ export default {
   // Replaces the default set (1440, 1152, 896, 704, 375).
   widths: [1440, 896, 375],
 
-  // Non-zero exit if any comparison scores below this.
+  // Exit 1 only when a comparison scores below this, instead of on any difference.
+  // 0 never fails on one.
   threshold: 0.97,
 
   // Relative to the directory you run in. Wiped at the start of each run.
@@ -77,7 +78,14 @@ export default {
 
   // Raw CSS injected after the built-in rules. An escape hatch for the odd case that
   // a selector list cannot express.
-  extraCss: `.hero video { visibility: hidden !important }`,
+  extraCss: `.chat-launcher { visibility: hidden !important }`,
+
+  // Videos are kept from playing (each shows its poster) and video.js captions and
+  // control bars are hidden. false, or --no-freeze-video, lets them play.
+  freezeVideo: true,
+
+  // Mask every iframe on every route (embeds that differ per load). Same as --mask-media.
+  maskMedia: false,
 
   // Also diff every element's computed style, and say whether the markup is identical
   // apart from asset hashes. Same as --computed. Pixels still decide the score.
@@ -96,7 +104,7 @@ export default {
   //
   // Each needs exactly one of `selector` (a Playwright selector) or `locate`. Without
   // `urlPath` it applies to every route; on a pair it matches either side's path.
-  // `maskMedia: true` (or --mask-media) adds one for iframes.
+  // `--mask <sel>` adds one for every route.
   masks: [
     {
       // Baked in at build time from a nightly job, so a local tree and a production
