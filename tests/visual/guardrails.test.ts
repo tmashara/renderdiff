@@ -136,6 +136,21 @@ describe("the render gate", () => {
     assert.match(report.errors[0]!.message, /HTTP 404/);
   });
 
+  test("a route that is not HTML is an error that names its content type", async () => {
+    const run = await capture(["/shared/doc.pdf", "/shared/img/azure.svg"]);
+    assert.equal(run.code, 3, context(run));
+    const messages = parseReport(run.report()!).errors.map((e) => e.message);
+    assert.equal(messages.length, 2, context(run));
+    assert.ok(
+      messages.some((m) => /not an HTML page: server sent application\/pdf at /.test(m)),
+      context(run),
+    );
+    assert.ok(
+      messages.some((m) => /not an HTML page: server sent image\/svg\+xml at /.test(m)),
+      context(run),
+    );
+  });
+
   test("a document with no <body> is refused at once, not after a wait for one", async () => {
     const start = Date.now();
     const run = await capture(["/frameset"]);

@@ -1,5 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import type { Locator, Page, Request } from "playwright";
+import type { Locator, Page, Request, Response } from "playwright";
 import sharp from "sharp";
 import { label, MASK_COLOR, masksFor, type ResolvedConfig, type Route } from "./config.ts";
 
@@ -68,7 +68,16 @@ const TILE_HEIGHT = 16_000;
 const MAX_PAGE_AREA = 1440 * 40_000;
 
 /** Requests still open per page, when the last one opened or closed, and stylesheets that failed. */
-const network = new WeakMap<Page, { open: Set<Request>; last: number; failed: Set<string> }>();
+const network = new WeakMap<
+  Page,
+  { open: Set<Request>; last: number; failed: Set<string>; doc?: Response }
+>();
+
+const html = (r: Response) => {
+  const type = r.headers()["content-type"];
+  return !type || /^\s*(text\/html|application\/xhtml\+xml)\b/i.test(type);
+};
+
 /** The step each page's capture is on, for the shot deadline to name. */
 export const step = new WeakMap<Page, string>();
 
@@ -90,7 +99,12 @@ export class HookError extends Error {}
  * page, before any navigation.
  */
 export async function prepare(page: Page, cfg: ResolvedConfig, now: number): Promise<void> {
-  const net = { open: new Set<Request>(), last: Date.now(), failed: new Set<string>() };
+  const net = {
+    open: new Set<Request>(),
+    last: Date.now(),
+    failed: new Set<string>(),
+    doc: undefined as Response | undefined,
+  };
   const blocked = new WeakSet<Request>();
   const sheet = (r: Request) => {
     if (r.resourceType() === "stylesheet" && !blocked.has(r))
@@ -113,6 +127,7 @@ export async function prepare(page: Page, cfg: ResolvedConfig, now: number): Pro
   });
   page.on("response", (r) => {
     if (r.status() >= 400) sheet(r.request());
+    if (r.request().isNavigationRequest() && r.frame() === page.mainFrame()) net.doc = r;
   });
   // A request the old document left open never finishes or fails, so it can't hold the next load.
   page.on("framenavigated", (f) => {
@@ -166,13 +181,21 @@ export async function capture(
   const maxHeight = Math.max(40_000, Math.floor(MAX_PAGE_AREA / width));
   await page.clock.setSystemTime(now);
   // Here, not on framenavigated, which a pushState during hydration fires too.
-  network.get(page)!.failed.clear();
-  const res = await page.goto(url, {
-    waitUntil: "domcontentloaded",
-    timeout: 45_000,
-  });
+  const net = network.get(page)!;
+  net.failed.clear();
+  net.doc = undefined;
+  const res = await page
+    .goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 })
+    .catch((e: unknown) => {
+      if (!net.doc || html(net.doc)) throw e;
+      return net.doc;
+    });
   if (res && res.status() >= 400) {
     throw new Error(`HTTP ${res.status()} at ${url}`);
+  }
+  if (res && !html(res)) {
+    const type = res.headers()["content-type"]!.split(";")[0]!.trim();
+    throw new Error(`not an HTML page: server sent ${type} at ${url}`);
   }
   if (route.before) {
     step.set(page, "before hook");

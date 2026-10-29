@@ -106,6 +106,7 @@ Report (`--open`, for a human): green from 99.5%, amber to 97%, red below.
 | Error | Cause and fix |
 | --- | --- |
 | `HTTP 404 at …` (any ≥ 400) | That side answered an error: a route missing on one origin, or a server not ready. |
+| `not an HTML page: server sent … at …` | The route is a file (PDF, image, JSON, download), not a page. Drop it from the routes. Never retried. |
 | `page did not render on either side (…)` | Both sides under 200 chars of text and no visible image, SVG, canvas, video, iframe or form control. Usually a failed asset or an app that never mounted. One blank side isn't refused; it scores low. |
 | `page did not settle: Npx unstable at …` | Over 25% of the page kept changing. Mask or stop the moving part. |
 | `page is Npx tall at Wpx wide, past the …px sanity ceiling …` | Taller than 57,600,000px ÷ width (never under 40,000px): a runaway layout, not a page. |
