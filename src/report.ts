@@ -400,7 +400,9 @@ ${
   <p>Pinned on both sides: clock starts at <code>${esc(meta.clock)}</code> on every load, a seeded
      <code>Math.random</code>, timezone <code>${CONTEXT_OPTIONS.timezoneId}</code>, locale
      <code>${CONTEXT_OPTIONS.locale}</code>, <code>${CONTEXT_OPTIONS.colorScheme}</code> colour
-     scheme, reduced motion, CSS animations and transitions off, videos paused at frame 0.</p>
+     scheme, reduced motion, CSS animations and transitions off${
+       cfg.freezeVideo ? ", videos kept from playing with video.js overlays hidden" : ""
+     }.</p>
   <p>Unstable pixels — ones that changed between two shots of the same load — are painted
      magenta on both sides, counted on each card, and excluded from the measurement. A route
      more than 25% unstable is an error.</p>

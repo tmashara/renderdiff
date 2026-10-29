@@ -25,7 +25,7 @@ Left is your change, right is the reference: `+` is only/more on the left, `-` o
 | `dom sel` (nothing after it) | On both sides, and no compared style changed and it didn't move: its own pixels did (an image's source, a canvas, an SVG). Open the crop. |
 | No `dom` line | Nothing was found under the change, a band whose rows hold nothing only one side has, past the first five bands and regions, or the probe timed out. Open the crop. |
 | `band …@y~N` | Widths collapsed into one row put the band at different `y`; `N` is the first width's. |
-| `unstable Npx` | Pixels that kept changing between shots of the same load on one origin (a ticker, a carousel, a video). Painted out on both sides and excluded from the score. A large number means a big area went unmeasured: look at the magenta on the full shots. Such a route is never on the `clean:` line. |
+| `unstable Npx` | Pixels that kept changing between shots of the same load on one origin (a ticker, a carousel, a video with `--no-freeze-video`). Painted out on both sides and excluded from the score. A large number means a big area went unmeasured: look at the magenta on the full shots. Such a route is never on the `clean:` line. |
 | `ERROR selector "…" matched N elements on left (/a), expected 1` | A selector must match exactly one element per side. Make it more specific (`>> nth=0`, an id, `data-test`), or list the route once per element. |
 | `ERROR selector "…" has no box on …` | It matched an element that isn't rendered (`display: none`, zero size). |
 | `accepted: /a /b` | Every difference on those routes matches `renderdiff.accepted.json`. Known, not verified again: say so in the verdict. |
@@ -44,7 +44,7 @@ Report colouring (`--open`, for a human): green above 99.5%, amber to 97%, red b
 | "It's probably just fonts / antialiasing." | "Probably" is exactly what the crop resolves. Look. |
 | "`dom` says margin, done." | It's a computed value. Confirm the source rule changed on purpose, and still open the crop when the region is large or `dom` names nothing. |
 | "The crops looked fine, done." | There are at most three: bands, then the largest regions. Check the region count, any `clipped` crop in results.json, and open the diff PNG for the rest and for any height delta: padding is never cropped. |
-| "Masking the header gets this to 100%." | Every mask is coverage surrendered. Mask only content *proven* to vary per load (clocks, star counts, rotating quotes), with a `reason`, which the report prints verbatim. Differing base vs base is that proof; `--mask-media` still gives up every iframe and video. |
+| "Masking the header gets this to 100%." | Every mask is coverage surrendered. Mask only content *proven* to vary per load (clocks, star counts, rotating quotes), with a `reason`, which the report prints verbatim. Differing base vs base is that proof; `--mask-media` still gives up every iframe. |
 | "I'll `--accept` it so the run is green." | Accept only differences you opened and that exist before your change (or are intended), with a reason that says which. |
 | "I'll lower `--threshold` until it passes." | `--threshold` relaxes the exit code; the difference is still there. It's a CI gate, not a dial for reaching green. |
 | "That route errors, I'll drop it from the list." | Shrinking the route list shrinks what you verified. Fix it, or say it's unverified. |
@@ -94,7 +94,7 @@ A mask takes exactly one of `selector` or `locate: (page) => Locator`; without `
 applies to every route, and on a pair it matches either side's path and paints both. A plain
 `export default {}` needs no import; a type import from "renderdiff" is for editor types only. Without a config, `--mask <sel>` (repeatable) adds a mask on every
 route, after the config's; `--mask-media` (config `maskMedia: true`) adds one for
-`iframe, video, .vjs-text-track-display`. Both are listed in the report like any mask. [`renderdiff.config.example.ts`](https://github.com/tmashara/renderdiff/blob/main/renderdiff.config.example.ts)
+`iframe`; videos are already kept from playing, with video.js overlays hidden, unless `--no-freeze-video`. Both are listed in the report like any mask. [`renderdiff.config.example.ts`](https://github.com/tmashara/renderdiff/blob/main/renderdiff.config.example.ts)
 annotates every field.
 
 Two rules for `hideSelectors`: match the element **exactly** (consent scripts also stamp

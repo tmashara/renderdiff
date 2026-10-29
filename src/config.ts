@@ -225,10 +225,10 @@ export type Mask = {
   | { /** The escape hatch for what a selector can't say. */ locate: (page: Page) => Locator }
 );
 
-/** The `maskMedia` / `--mask-media` preset: embeds and players that differ per load. */
+/** The `maskMedia` / `--mask-media` preset: embeds that differ per load. Video is frozen instead. */
 export const MEDIA_MASK: Mask = {
-  selector: "iframe, video, .vjs-text-track-display",
-  reason: "iframes, video and video.js text tracks (--mask-media)",
+  selector: "iframe",
+  reason: "iframes (--mask-media)",
 };
 
 /** The shape a `renderdiff.config.*` file default-exports. Every field is optional. */
@@ -264,8 +264,10 @@ export interface RenderdiffConfig {
   masks?: Mask[];
   /** Also diff every element's computed style, and say whether the markup is identical. */
   computed?: boolean;
-  /** Mask every `iframe`, `video` and video.js text track on every route. */
+  /** Mask every `iframe` on every route. */
   maskMedia?: boolean;
+  /** Keep every video from playing, so it shows its poster, and hide video.js overlays. Default true. */
+  freezeVideo?: boolean;
 }
 
 /** A fully merged config. Everything the run needs, nothing optional. */
@@ -285,6 +287,7 @@ export interface ResolvedConfig {
   /** Absolute storage state paths, checked to be JSON; null for a side without one. */
   storageState: { left: string | null; right: string | null };
   computed: boolean;
+  freezeVideo: boolean;
 }
 
 /** package.json's version; the same relative path resolves from `src/` and `dist/`. */
@@ -482,6 +485,8 @@ function validate(c: Record<string, unknown>, file: string) {
     });
   }
   if (c.maskMedia !== undefined && typeof c.maskMedia !== "boolean") bad("maskMedia", "a boolean");
+  if (c.freezeVideo !== undefined && typeof c.freezeVideo !== "boolean")
+    bad("freezeVideo", "a boolean");
 }
 
 /** CLI-supplied values. `undefined` means "not passed", so the config file wins. */
@@ -498,6 +503,7 @@ export interface CliOverrides {
   /** From --mask, appended to the config's masks. */
   masks?: string[];
   maskMedia?: boolean;
+  freezeVideo?: boolean;
 }
 
 /** Merge built-in defaults, the config file, and CLI flags into one resolved config. */
@@ -522,6 +528,7 @@ export function resolveConfig(file: RenderdiffConfig, cli: CliOverrides): Resolv
       : file.storageState;
 
   const hideSelectors = [...DEFAULT_HIDE_SELECTORS, ...(file.hideSelectors ?? [])];
+  const freezeVideo = cli.freezeVideo ?? file.freezeVideo ?? true;
 
   return {
     left: left.replace(/\/+$/, ""),
@@ -533,7 +540,13 @@ export function resolveConfig(file: RenderdiffConfig, cli: CliOverrides): Resolv
     blockUrlPatterns: [...DEFAULT_BLOCK_URL_PATTERNS, ...(file.blockUrlPatterns ?? [])],
     hideSelectors,
     neutralizeCss:
-      STILL_CSS + `${hideSelectors.join(",")}{display:none!important}\n` + (file.extraCss ?? ""),
+      STILL_CSS +
+      `${hideSelectors.join(",")}{display:none!important}\n` +
+      // visibility, not display, so the player keeps its layout.
+      (freezeVideo
+        ? ".vjs-text-track-display,.vjs-control-bar,.vjs-control-bar *{visibility:hidden!important}\n"
+        : "") +
+      (file.extraCss ?? ""),
     masks: [
       ...(file.masks ?? []).map((m) =>
         m.urlPath === undefined ? m : { ...m, urlPath: normalize(m.urlPath) },
@@ -546,6 +559,7 @@ export function resolveConfig(file: RenderdiffConfig, cli: CliOverrides): Resolv
       right: storageFile(cli.storageState?.right ?? fileState?.right),
     },
     computed: cli.computed ?? file.computed ?? false,
+    freezeVideo,
   };
 }
 

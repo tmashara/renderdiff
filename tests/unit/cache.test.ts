@@ -108,7 +108,7 @@ describe("keys", () => {
     assert.equal(shotId(route!, 1440), shotId(paired, 1440), "the left path doesn't matter");
   });
 
-  test("the right origin, its storage state, blocked URLs and the browser change the file", () => {
+  test("the right origin, its storage state, blocked URLs, video freezing and the browser change the file", () => {
     const dir = tempDir();
     const state = path.join(dir, "auth.json");
     fs.writeFileSync(state, JSON.stringify({ cookies: [], origins: [] }));
@@ -121,9 +121,18 @@ describe("keys", () => {
       signed,
       cacheFile(cfg({ storageState: { right: state } }), browser),
       cacheFile(cfg({}, { blockUrlPatterns: ["**/ads/**"] }), browser),
+      cacheFile(cfg({ freezeVideo: false }), browser),
     ];
     assert.equal(new Set(files).size, files.length);
     assert.equal(cacheFile(cfg({ left: "http://x.test" }), browser), files[0]);
     assert.equal(path.dirname(files[0]!), "/tmp/o/.cache");
+  });
+
+  test("video is frozen unless the CLI or the config says not to, the CLI winning", () => {
+    assert.equal(cfg().freezeVideo, true);
+    assert.equal(cfg({}, { freezeVideo: false }).freezeVideo, false);
+    assert.equal(cfg({ freezeVideo: true }, { freezeVideo: false }).freezeVideo, true);
+    assert.match(cfg().neutralizeCss, /\.vjs-control-bar \*\{visibility:hidden/);
+    assert.doesNotMatch(cfg({ freezeVideo: false }).neutralizeCss, /vjs/);
   });
 });
