@@ -192,7 +192,7 @@ only.
 | `dom +sel` / `-sel` | Element only on the left / only on the right. |
 | `dom sel x+8` | It moved without its own style changing; the neighbour or parent listed after it is the cause. |
 | `dom sel` | On both sides and unchanged in style or position, so its own pixels changed (an image or canvas). |
-| `computed: N findings` | With `--computed`: each `key prop left→right` once, with the routes and widths it was seen at; `dom identical` routes differ only in CSS or script. |
+| `computed: N findings` | With `--computed`: each `key prop left→right` once, with the routes and widths it was seen at; `dom identical`: the markup matches apart from asset hashes and generated class names, so look at CSS or script. |
 | `crops …` | Up to 3 PNGs per comparison, bands first, relative to `results.json`. Left is on top or on the left, and the change is boxed in red. |
 | `ERROR …` | Unmeasured, which is neither a pass nor a fail. Exits 3. |
 | `accepted:` / `stale accepted:` | Shots whose every difference was accepted, and accepted entries the run no longer saw. See below. |

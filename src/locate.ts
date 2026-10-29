@@ -100,8 +100,8 @@ interface ProbeArgs {
   masked: Node[];
   props: string[];
   perSpot: number;
-  /** Snapshot every rendered element's `props` instead of picking. */
-  walk?: boolean;
+  /** Snapshot every rendered element's `props` instead of picking, giving up after this many ms. */
+  walk?: number;
 }
 
 /** Runs in the page. At scroll 0 a client rect is page px, below the fold too. */
@@ -134,6 +134,7 @@ function probe({ boxes, find, masked, props, perSpot, walk }: ProbeArgs) {
     // ponytail: hashed-class heuristic, attributes and nth-of-type are the fallback
     s += Array.from(e.classList)
       .filter((c) => !HASHED.test(c))
+      .sort()
       .slice(0, 2)
       .map((c) => `.${CSS.escape(c)}`)
       .join("");
@@ -201,8 +202,11 @@ function probe({ boxes, find, masked, props, perSpot, walk }: ProbeArgs) {
     }
     const snap: Record<string, { html: string; styles: string[] }> = {};
     let n = 0;
+    const end = performance.now() + walk;
     const visit = (e: Element, parent: string) => {
-      if (n++ >= MAX_SCAN || hidden.has(e) || (e as SVGElement).ownerSVGElement) return;
+      if (n++ >= MAX_SCAN) throw new Error(`more than ${MAX_SCAN} elements`);
+      if (performance.now() > end) throw new Error(`walk took over ${walk}ms`);
+      if (hidden.has(e) || (e as SVGElement).ownerSVGElement) return;
       const cs = getComputedStyle(e);
       if (cs.display === "none") return;
       const seg =
@@ -210,10 +214,17 @@ function probe({ boxes, find, masked, props, perSpot, walk }: ProbeArgs) {
       const key = parent ? `${parent} > ${seg}` : seg;
       // ponytail: first wins on a key collision; a sibling index if real pages collide
       if (snap[key]) return;
-      const attrs = Array.from(
-        e.attributes,
-        (a) => ` ${a.name}="${a.value.replace(/"/g, "&quot;")}"`,
-      ).join("");
+      // Generated class names change with the CSS, so they aren't markup changes.
+      const attrs = Array.from(e.attributes, (a) => {
+        const v =
+          a.name === "class"
+            ? Array.from(e.classList)
+                .filter((c) => !HASHED.test(c))
+                .sort()
+                .join(" ")
+            : a.value;
+        return ` ${a.name}="${v.replace(/"/g, "&quot;")}"`;
+      }).join("");
       const text = Array.from(e.childNodes, (c) => (c.nodeType === 3 ? c.textContent : ""))
         .join("")
         .replace(/\s+/g, " ")
@@ -348,14 +359,14 @@ const handles = async (ls: Locator[]) =>
  * generated, keyed by a selector path; masked and `display: none` subtrees are skipped.
  * Finishes the page's animations, so it runs after `locate`.
  */
-export async function snapshot(page: Page, masks: Locator[]): Promise<Snapshot> {
+export async function snapshot(page: Page, masks: Locator[], budget: number): Promise<Snapshot> {
   const { snap } = await page.evaluate(probe, {
     boxes: [],
     find: [],
     masked: await handles(masks),
     props: [...PROPS, "content"],
     perSpot: 0,
-    walk: true,
+    walk: budget,
   });
   return snap!;
 }

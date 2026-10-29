@@ -16,7 +16,7 @@ export interface StyleChange {
 }
 
 export interface ComputedDiff {
-  /** Elements whose tag, attributes (asset hashes aside) or own text differ; 0 is "dom identical". */
+  /** Elements whose tag, attributes (asset hashes and generated classes aside) or own text differ, or that one side lacks; 0 is "dom identical". */
   dom: number;
   /** At most `MAX_CHANGES`, inherited repeats of a parent's change dropped. */
   changes: StyleChange[];
@@ -48,24 +48,26 @@ const INHERITED = new Set([
 /** A box resizing resizes what it holds: only the outermost one is a finding. */
 const SIZES = new Set(["width", "height"]);
 
+const PSEUDO = /::(before|after)$/;
+const isPseudo = (key: string) => PSEUDO.test(key);
+
 const parentOf = (key: string) => {
-  const p = key.indexOf("::");
-  if (p >= 0) return key.slice(0, p);
+  if (isPseudo(key)) return key.replace(PSEUDO, "");
   const i = key.lastIndexOf(" > ");
   return i >= 0 ? key.slice(0, i) : "";
 };
 
-/** In URL attributes, `main.a1b2c3.css`, `app-3f9a8c1d.js`, `?v=1a2b3c` and hex runs read the same on both sides. */
+/** In URL attributes, bundler hashes (`main.3f9a8c1d.png`, `index-BxQrZkAb.webp`, `?v=…`) read the same on both sides. */
 export const normalizeAssets = (html: string) =>
   // ponytail: common bundler hash shapes; add a framework's build-id path when one shows up
   html.replace(/ (src|href|srcset|poster)="([^"]*)"/g, (_, n: string, v: string) => {
     const u = v
       .replace(
-        /([.\-_])(?=[A-Za-z]*\d)[A-Za-z0-9]{6,}(?=\.(?:css|js|mjs|png|jpe?g|gif|svg|webp|avif|woff2?)\b)/g,
-        "$1#",
+        /([.\-_])(?=[\w-]*(?:\d|[a-z][A-Z]|[A-Z][a-z]*[A-Z]))[\w-]{8,}(?=\.\w{2,5}\b)/g,
+        (m, sep: string) => (/[a-z]/i.test(m) ? `${sep}#` : m),
       )
       .replace(/([?&](?:v|ver|version|hash)=)[\w.-]+/g, "$1#")
-      .replace(/\b[0-9a-f]{8,}\b/g, "#");
+      .replace(/\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{12,}\b/g, "#");
     return ` ${n}="${u}"`;
   });
 
@@ -83,19 +85,10 @@ export function collapseInherited(changes: StyleChange[]): StyleChange[] {
 }
 
 export function diffSnapshots(left: Snapshot, right: Snapshot): ComputedDiff {
-  const lines = (s: Snapshot) => {
-    const m = new Map<string, number>();
-    for (const [k, v] of Object.entries(s)) {
-      if (k.includes("::")) continue;
-      const line = `${k}\t${normalizeAssets(v.html)}`;
-      m.set(line, (m.get(line) ?? 0) + 1);
-    }
-    return m;
-  };
-  const [ll, rl] = [lines(left), lines(right)];
+  const html = (s: Snapshot, k: string) => (s[k] ? normalizeAssets(s[k].html) : null);
   let dom = 0;
-  for (const line of new Set([...ll.keys(), ...rl.keys()]))
-    dom += Math.abs((ll.get(line) ?? 0) - (rl.get(line) ?? 0));
+  for (const k of new Set([...Object.keys(left), ...Object.keys(right)]))
+    if (!isPseudo(k) && html(left, k) !== html(right, k)) dom++;
 
   const changes: StyleChange[] = [];
   const content = FIELDS.length - 1;
@@ -106,7 +99,7 @@ export function diffSnapshots(left: Snapshot, right: Snapshot): ComputedDiff {
         if (l.styles[i] !== r.styles[i])
           changes.push({ key, prop, values: [l.styles[i]!, r.styles[i]!] });
       });
-    } else if (key.includes("::") && left[parentOf(key)] && right[parentOf(key)]) {
+    } else if (isPseudo(key) && left[parentOf(key)] && right[parentOf(key)]) {
       // A pseudo-element one side no longer generates: the removed rule's own finding.
       changes.push({
         key,
@@ -117,7 +110,7 @@ export function diffSnapshots(left: Snapshot, right: Snapshot): ComputedDiff {
   }
 
   const only = (a: Snapshot, b: Snapshot) => {
-    const keys = Object.keys(a).filter((k) => !k.includes("::") && !b[k]);
+    const keys = Object.keys(a).filter((k) => !isPseudo(k) && !b[k]);
     const set = new Set(keys);
     return keys.filter((k) => !set.has(parentOf(k))).slice(0, MAX_UNMATCHED);
   };
@@ -152,6 +145,8 @@ export function groupFindings(results: RouteResult[]): Finding[] {
 /** Findings shown in the console summary; results.json has them all. */
 const SHOWN = 20;
 const AT_ROUTES = 3;
+/** Unmatched routes, and keys per route, in the console summary. */
+const UNMATCHED_SHOWN = 5;
 
 /** The console block: dom per route, then one line per finding, `left→right` like `dom`. */
 export function fmtComputed(results: RouteResult[], routes: string[]): string[] {
@@ -186,12 +181,17 @@ export function fmtComputed(results: RouteResult[], routes: string[]): string[] 
     out.push(`  ${f.key} ${f.prop} ${f.values.join("→")}  ${at}${more}`);
   }
   if (findings.length > SHOWN) out.push(`  (+${findings.length - SHOWN} more in results.json)`);
-  for (const route of routes) {
+  const unmatched = routes.flatMap((route) => {
     const r = computedOf(rows).find((x) => name(x) === route && x.computed!.dom);
-    if (!r) continue;
+    if (!r) return [];
     const { left, right } = r.computed!.unmatched;
     const keys = [...left.map((k) => `+${k}`), ...right.map((k) => `-${k}`)];
-    if (keys.length) out.push(`  unmatched ${route}@${r.width} ${keys.join(" ")}`);
-  }
+    if (!keys.length) return [];
+    const more = keys.length > UNMATCHED_SHOWN ? ` (+${keys.length - UNMATCHED_SHOWN} more)` : "";
+    return [`  unmatched ${route}@${r.width} ${keys.slice(0, UNMATCHED_SHOWN).join(" ")}${more}`];
+  });
+  out.push(...unmatched.slice(0, UNMATCHED_SHOWN));
+  if (unmatched.length > UNMATCHED_SHOWN)
+    out.push(`  (+${unmatched.length - UNMATCHED_SHOWN} more routes with unmatched elements)`);
   return out;
 }

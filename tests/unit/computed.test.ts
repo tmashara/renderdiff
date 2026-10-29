@@ -59,6 +59,12 @@ describe("diffSnapshots", () => {
     );
   });
 
+  test("a :: inside an attribute is not a pseudo-element", () => {
+    const key = 'body > a[href="#std::vec"]';
+    const d = diffSnapshots({ body: el("<body>") }, { body: el("<body>"), [key]: el("<a>") });
+    assert.deepEqual([d.dom, d.unmatched.right], [1, [key]]);
+  });
+
   test("a ::before only one side generates is a content change against none", () => {
     const left: Snapshot = { "body > a": el("<a>Go") };
     const right: Snapshot = {
@@ -90,17 +96,20 @@ describe("diffSnapshots", () => {
       "body > img": el(`<img src="${src}">`),
       "body > p": el(`<p>${text}`),
     });
-    assert.equal(diffSnapshots(page("/main.a1b2c3.png"), page("/main.d4e5f6.png")).dom, 0);
+    assert.equal(diffSnapshots(page("/main.3f9a8c1d.png"), page("/main.d4e5f6a7.png")).dom, 0);
+    assert.equal(diffSnapshots(page("/hero-BxQrZkAb.webp"), page("/hero-Cy_r3-Qa.webp")).dom, 0);
     assert.equal(diffSnapshots(page("/a.png?v=12"), page("/a.png?v=13")).dom, 0);
-    assert.equal(diffSnapshots(page("/a.png"), page("/b.png")).dom, 2);
-    assert.equal(diffSnapshots(page("/a.png", "20240101"), page("/a.png", "20240102")).dom, 2);
+    assert.equal(diffSnapshots(page("/a.png"), page("/b.png")).dom, 1);
+    assert.equal(diffSnapshots(page("/hero-image1.png"), page("/hero-image2.png")).dom, 1);
+    assert.equal(diffSnapshots(page("/blog/20231015-a"), page("/blog/20231016-a")).dom, 1);
+    assert.equal(diffSnapshots(page("/a.png", "20240101"), page("/a.png", "20240102")).dom, 1);
   });
 });
 
 test("normalizeAssets leaves words alone", () => {
   assert.equal(
-    normalizeAssets(' href="/site-header.css" src="/app-3f9a8c1d.js"'),
-    ' href="/site-header.css" src="/app-#.js"',
+    normalizeAssets(' href="/site-header.png" src="/app-3f9a8c1d.png"'),
+    ' href="/site-header.png" src="/app-#.png"',
   );
 });
 

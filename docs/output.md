@@ -138,25 +138,34 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
   route and width it was seen at. The same change on 300 pages is one line, most widespread
   first. The summary shows 20; `summary.computed` in results.json has them all, and each
   result's `computed.changes` has its own, up to 500.
-- The key is a selector path from `body`: tag, then id or up to two classes that don't look
-  generated, then `:nth-of-type` only where siblings would otherwise share it. Elements
-  are matched by key, not by position, so a cookie banner injected on one side doesn't
-  misalign everything after it. The key works with `querySelector`.
+- The key is a selector path from `body`. Each step is the tag, then the id or up to two
+  classes that don't look generated (sorted), then `:nth-of-type` only where siblings would
+  otherwise share it. The key works with `querySelector`.
+  - Elements are matched by key, not by position, so a cookie banner injected on one side
+    doesn't misalign everything after it.
+  - An inserted sibling of the same tag and classes still shifts the `:nth-of-type` of the
+    ones after it.
+  - A class renamed on an ancestor unmatches its whole subtree.
 - One change high in the tree is one finding. An inherited property (`font-*`,
   `line-height`, `letter-spacing`, `text-*`, `white-space`, `color`, `visibility`) is
   dropped where the parent has the same change, and `width`/`height` where the parent
   resized too. So a `body` font change is one line, not one per element.
 - A `::before`/`::after` that only one side generates shows as `content` against `none`.
   That is how a removed rule that drew an icon shows up.
-- `dom identical`: on every width, each element's tag, attributes and own text are the
-  same on both sides, with asset hashes in `src`/`href`/`srcset` ignored (`main.a1b2c3.css`,
-  `?v=…`). Any difference on that route then comes from CSS or script, not markup. `dom
-  differs (N)` counts the elements that differ. There, an insertion can shift a sibling's
-  `:nth-of-type` key, so treat that route's findings as hints. `unmatched` lists the
-  outermost elements only one side has: `+` left, `-` right.
+- `dom identical` means that on every width, each walked element's tag, attributes and own
+  text are the same on both sides.
+  - Bundler hashes in `src`/`href`/`srcset` are ignored (`hero.3f9a8c1d.png`, `?v=…`), and
+    so are generated class names (`css-1q2w3e`, `Button_root__a1b2c`).
+  - A pixel difference on such a route comes from CSS or script, not from walked markup.
+    SVG internals, shadow DOM, iframes and `display: none` subtrees aren't walked.
+- `dom differs (N)` counts the elements that differ or that one side lacks. Treat that
+  route's findings as hints.
+- `unmatched` lists the outermost elements only one side has: `+` left, `-` right. The
+  summary shows five routes, five each.
 - The HTML report shows the same block and puts `dom identical` / `dom differs (N)` on each
-  card. Accepted shots are left out of the findings. A snapshot that fails or takes over
-  15s is reported as failed (`computed: null`), and the pixel result stands. Pixels still
+  card. Accepted shots are left out of the findings. A snapshot that fails, takes over 15s
+  or meets more than 50,000 elements is reported as failed (`computed: null`), and the
+  pixel result stands. Pixels still
   decide the score and the exit code.
 
 `:hover`/`:focus` states aren't snapshotted. With `--selector`, the walk still covers the

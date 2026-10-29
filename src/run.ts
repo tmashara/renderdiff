@@ -143,7 +143,7 @@ function previous(file: string, now: Record<string, unknown>): Results | string 
   for (const [key, value] of Object.entries(now)) {
     if (key === "config" && value !== was[key]) {
       return (
-        `the config (masks, hooks, hidden selectors, blocked URLs, CSS, storage state) ` +
+        `the config (masks, hooks, hidden selectors, blocked URLs, CSS, storage state, --computed) ` +
         `differs from the one that wrote ${file}; run without --rerun-failed to start over`
       );
     }
@@ -345,12 +345,12 @@ export async function run({
         const computed = cfg.computed
           ? await Promise.race([
               Promise.all([
-                snapshot(leftPage, masksFor(cfg, leftPage, route)),
-                snapshot(rightPage, masksFor(cfg, rightPage, route)),
+                snapshot(leftPage, masksFor(cfg, leftPage, route), COMPUTED_TIMEOUT),
+                snapshot(rightPage, masksFor(cfg, rightPage, route), COMPUTED_TIMEOUT),
               ])
                 .then(([l, r]) => diffSnapshots(l, r))
                 .catch(() => null),
-              sleep(COMPUTED_TIMEOUT, null, { ref: false }),
+              sleep(COMPUTED_TIMEOUT + 5_000, null, { ref: false }),
             ])
           : undefined;
         const cropped = made.map(({ png, ...c }, i) => ({ path: `${base}.c${i + 1}.png`, ...c }));
