@@ -166,7 +166,8 @@ DOM and iframes aren't searched.
 ## Computed styles (`--computed`)
 
 With `--computed`, after the shot renderdiff reads the computed style of every rendered
-element on both sides: the properties `dom` compares, plus `content`, and `::before` and
+element on both sides: the properties `dom` compares, plus `outline`,
+`text-decoration-line` and `content`, and `::before` and
 `::after` wherever they generate content. Masked subtrees and `script`/`style`-like tags
 are skipped; a `display: none` element is read, its subtree isn't. Script-driven
 animations are finished first. The summary gets one block, after the rows:
@@ -232,7 +233,17 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
   50,000 elements is reported as failed, with why (`computed: null`, `computedError`), and
   the pixel result stands. Pixels still decide the score and the exit code.
 
-`:hover`/`:focus` states aren't snapshotted.
+Links and controls (`a[href]`, `button`, `input`, `select`, `textarea`, `summary`,
+`[tabindex]`) are also read in `:hover` and `:focus-visible`, with their subtrees:
+
+- The key gets the state: `body > nav > a[href="#x"]:hover > span.icon`. `:focus-visible`
+  is keyboard focus, forced as `:focus` plus `:focus-visible`.
+- Only what differs from resting is a finding: a resting change isn't repeated per state.
+- The first 500 per page are read; `states:` in the summary says where there were more
+  (`computed.unchecked` in results.json). One with more than 50 descendants is skipped.
+- All of them are forced at once, so a rule relating two of them
+  (`ul:has(a:hover) a:not(:hover)`) isn't seen, nor `:hover` on an ancestor (`li:hover`
+  menus), `:active`, `:focus-within` or script hover handlers.
 
 ## ARIA snapshots (`--aria`)
 

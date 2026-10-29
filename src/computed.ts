@@ -1,12 +1,12 @@
 import { textDiff } from "./compare.ts";
 import { name } from "./config.ts";
-import { PROPS } from "./locate.ts";
+import { MAX_STATES, SNAP_PROPS } from "./locate.ts";
 import type { ComparedResult, RouteResult } from "./report.ts";
 
 /** `--computed`: every rendered element's computed style on both sides, diffed by a stable key. */
 
 /**
- * Selector path -> its opening tag with own text, `PROPS` then `content` computed, and its
+ * Selector path -> its opening tag with own text, `SNAP_PROPS` computed, and its
  * specified width and height (`auto`, `100%`, `200px`) where the browser says.
  */
 export type Snapshot = Record<string, { html: string; styles: string[]; size?: [string, string] }>;
@@ -28,6 +28,8 @@ export interface ComputedDiff {
   truncated: number;
   /** Elements only that side has, outermost only, at most `MAX_UNMATCHED` per side. */
   unmatched: { left: string[]; right: string[] };
+  /** Links and controls past `MAX_STATES` on a side, not forced into `:hover`/`:focus-visible`. */
+  unchecked?: number;
 }
 
 /** One change, with every route and width it was seen at. */
@@ -47,7 +49,7 @@ const MAX_CHANGES = 500;
 const MAX_ARIA_LINES = 200;
 const ARIA_LINES_SHOWN = 10;
 const MAX_UNMATCHED = 20;
-const FIELDS = [...PROPS, "content"];
+const FIELDS = SNAP_PROPS;
 
 const INHERITED = new Set([
   "font-family",
@@ -65,6 +67,8 @@ const DISPLAY = FIELDS.indexOf("display");
 
 const PSEUDO = /::(before|after)$/;
 const isPseudo = (key: string) => PSEUDO.test(key);
+const STATE = /:(hover|focus-visible)(?= > |::|$)/;
+const isState = (key: string) => STATE.test(key);
 
 const parentOf = (key: string) => {
   if (isPseudo(key)) return key.replace(PSEUDO, "");
@@ -121,6 +125,9 @@ export function collapseInherited<C extends { key: string; prop: string; values:
   };
   const tallKid = new Set([...tall].filter((k) => !follows(k)).map(parentOf));
   return changes.filter((c) => {
+    // A state only reports what differs from resting.
+    if (isState(c.key) && raw.has(`${c.key.replace(STATE, "")}\0${c.prop}\0${c.values.join("\0")}`))
+      return false;
     const p = parentOf(c.key);
     if (INHERITED.has(c.prop)) return !raw.has(`${p}\0${c.prop}\0${c.values.join("\0")}`);
     if (c.prop === "width") return !wide.has(p) || set(c.key, 0);
@@ -161,7 +168,7 @@ export function diffSnapshots(
   const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
   let dom = 0;
   for (const k of keys) {
-    if (isPseudo(k) || html(left, k) === html(right, k)) continue;
+    if (isPseudo(k) || isState(k) || html(left, k) === html(right, k)) continue;
     if (!left[k] && hiddenIn(left, k)) continue;
     if (!right[k] && hiddenIn(right, k)) continue;
     dom++;
@@ -196,7 +203,9 @@ export function diffSnapshots(
   }
 
   const only = (a: Snapshot, b: Snapshot) => {
-    const ks = Object.keys(a).filter((k) => !isPseudo(k) && !b[k] && !hiddenIn(b, k));
+    const ks = Object.keys(a).filter(
+      (k) => !isPseudo(k) && !isState(k) && !b[k] && !hiddenIn(b, k),
+    );
     const set = new Set(ks);
     return ks.filter((k) => !set.has(parentOf(k))).slice(0, MAX_UNMATCHED);
   };
@@ -279,6 +288,12 @@ export function fmtComputed(results: RouteResult[], routes: string[]): string[] 
     out.push(
       `  truncated: only the first ${MAX_CHANGES} changes kept on ` +
         cut.map((r) => `${name(r)}@${r.width} (+${r.computed!.truncated})`).join(" "),
+    );
+  const capped = computedOf(rows).filter((r) => r.computed!.unchecked);
+  if (capped.length)
+    out.push(
+      `  states: only the first ${MAX_STATES} links and controls forced on ` +
+        capped.map((r) => `${name(r)}@${r.width} (+${r.computed!.unchecked})`).join(" "),
     );
   const unmatched = routes.flatMap((route) => {
     const r = computedOf(rows).find((x) => name(x) === route && x.computed!.dom);

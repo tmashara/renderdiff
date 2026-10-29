@@ -72,6 +72,16 @@ export const PROPS = [
   "height",
 ];
 
+/** `--computed` reads these too; pixel mode's `changed`, and so accepted fingerprints, don't. */
+export const SNAP_PROPS = [...PROPS, "outline", "text-decoration-line", "content"];
+
+/** Links and controls forced into each state, per page per side. */
+export const MAX_STATES = 500;
+const STATES = [
+  [":hover", ["hover"]],
+  [":focus-visible", ["focus", "focus-visible"]],
+] as const;
+
 interface Seen {
   sel: string;
   tag: string;
@@ -110,10 +120,29 @@ interface ProbeArgs {
   walk?: number;
   /** Where the walk starts, keyed `:scope`; the body, keyed `body`, when null. */
   root?: Node | null;
+  /** Of `walk`, already used by an earlier pass. */
+  spent?: number;
+  /** Keep up to this many links and controls on `globalThis.__renderdiffStates`, returning their keys. */
+  collect?: number;
+  /** Walk only the kept elements, keyed `states[i] + state`, instead of the page. */
+  state?: string;
+  states?: string[];
 }
 
 /** Runs in the page. At scroll 0 a client rect is page px, below the fold too. */
-function probe({ boxes, find, masked, props, perSpot, walk, root }: ProbeArgs) {
+function probe({
+  boxes,
+  find,
+  masked,
+  props,
+  perSpot,
+  walk,
+  root,
+  spent,
+  collect,
+  state,
+  states,
+}: ProbeArgs) {
   const MAX_SCAN = 50_000;
   const HASHED = /\d{3,}|^(css|sc|jsx|svelte)-|__[\w-]{5,}$|^_/;
   const TEST = ["data-testid", "data-test", "data-test-id", "data-cy", "data-qa"];
@@ -184,9 +213,18 @@ function probe({ boxes, find, masked, props, perSpot, walk, root }: ProbeArgs) {
   };
 
   // A resolved auto margin's px depends on the layout path: a grid item's reads 0px.
-  const styles = (e: Element, cs: CSSStyleDeclaration, m = e.computedStyleMap?.()) =>
+  const styles = (
+    e: Element,
+    cs: CSSStyleDeclaration,
+    m: StylePropertyMapReadOnly | null | undefined = e.computedStyleMap?.(),
+  ) =>
     props.map((p) =>
-      p.startsWith("margin-") && String(m?.get(p)) === "auto" ? "auto" : cs.getPropertyValue(p),
+      p.startsWith("margin-") && String(m?.get(p)) === "auto"
+        ? "auto"
+        : // Unset, it reads `<currentColor> none 3px`, which would repeat every color change.
+          p === "outline" && cs.getPropertyValue("outline-style") === "none"
+          ? "none"
+          : cs.getPropertyValue(p),
     );
 
   const seen = (e: Element) => {
@@ -261,7 +299,11 @@ function probe({ boxes, find, masked, props, perSpot, walk, root }: ProbeArgs) {
     const snap: Record<string, { html: string; styles: string[]; size?: [string, string] }> = {};
     const SKIP = new Set(["script", "style", "link", "meta", "template", "noscript"]);
     let n = 0;
-    const end = performance.now() + walk;
+    const end = performance.now() + walk - (spent ?? 0);
+    const g = globalThis as { __renderdiffStates?: Element[] };
+    const kept: Element[] = [];
+    const keys: string[] = [];
+    let unchecked = 0;
     // Generated class names change with the CSS, so they aren't markup changes.
     const html = (e: Element) => {
       const attrs = Array.from(e.attributes, (a) => {
@@ -293,9 +335,20 @@ function probe({ boxes, find, masked, props, perSpot, walk, root }: ProbeArgs) {
         ...(m ? { size: [String(m.get("width")), String(m.get("height"))] } : {}),
       };
       if (cs.display === "none") return;
+      // ponytail: skips containers like <main tabindex=-1>, which would re-walk the page per state
+      if (
+        collect &&
+        e.matches("a[href], button, input, select, textarea, summary, [tabindex]") &&
+        e.getElementsByTagName("*").length <= 50
+      ) {
+        if (kept.length < collect) {
+          kept.push(e);
+          keys.push(key);
+        } else unchecked++;
+      }
       for (const pseudo of ["::before", "::after"]) {
         const ps = generated(e, pseudo);
-        if (ps) snap[key + pseudo] = { html: "", styles: props.map((p) => ps.getPropertyValue(p)) };
+        if (ps) snap[key + pseudo] = { html: "", styles: styles(e, ps, null) };
       }
       // Indexed among every child, as :nth-of-type counts, so the key works with querySelector.
       const ofType = new Map<string, number>();
@@ -319,9 +372,13 @@ function probe({ boxes, find, masked, props, perSpot, walk, root }: ProbeArgs) {
         visit(c, `${key} > ${count.get(g)! > 1 ? `${g}:nth-of-type(${k})` : g}`);
       });
     };
-    const start = (root as Element | null) ?? document.body;
-    if (start) visit(start, root ? ":scope" : "body");
-    return { picks: [], found: [], snap };
+    if (state) g.__renderdiffStates!.forEach((e, i) => visit(e, states![i]! + state));
+    else {
+      const start = (root as Element | null) ?? document.body;
+      if (start) visit(start, root ? ":scope" : "body");
+    }
+    if (collect) g.__renderdiffStates = kept;
+    return { picks: [], found: [], snap, states: keys, unchecked };
   }
   const els = document.body?.querySelectorAll("*") ?? [];
   for (let i = 0; i < els.length && i < MAX_SCAN; i++) {
@@ -459,8 +516,22 @@ const moved = (a: Box, b: Box) => a.x !== b.x || a.y !== b.y || a.w !== b.w || a
 const handles = async (ls: Locator[]) =>
   (await Promise.all(ls.map((l) => l.elementHandles()))).flat();
 
+const walker = async (page: Page, masks: Locator[], budget: number, root: Locator | null) => {
+  const args = {
+    root: root && (await root.elementHandle()),
+    boxes: [],
+    find: [],
+    masked: await handles(masks),
+    props: SNAP_PROPS,
+    perSpot: 0,
+    walk: budget,
+  };
+  return (more: Pick<ProbeArgs, "spent" | "collect" | "state" | "states"> = {}) =>
+    page.evaluate(probe, { ...args, ...more });
+};
+
 /**
- * Every rendered element's computed `PROPS` and `content`, and its `::before`/`::after` when
+ * Every rendered element's computed `SNAP_PROPS`, and its `::before`/`::after` when
  * generated, keyed by a selector path; masked and `display: none` subtrees are skipped.
  * Finishes the page's animations, so it runs after `locate`.
  */
@@ -470,16 +541,57 @@ export async function snapshot(
   budget: number,
   root: Locator | null,
 ): Promise<Snapshot> {
-  const { snap } = await page.evaluate(probe, {
-    root: root && (await root.elementHandle()),
-    boxes: [],
-    find: [],
-    masked: await handles(masks),
-    props: [...PROPS, "content"],
-    perSpot: 0,
-    walk: budget,
-  });
-  return snap!;
+  return (await (await walker(page, masks, budget, root))()).snap!;
+}
+
+/**
+ * `snapshot`, plus the first `MAX_STATES` links and controls and their subtrees forced into
+ * each of `STATES` at once, keyed `…a[href="#x"]:hover > span`. Forcing all at once misses
+ * rules relating two of them, and never puts an ancestor in `:hover`. Leaves the page resting.
+ */
+export async function snapshotStates(
+  page: Page,
+  masks: Locator[],
+  budget: number,
+  root: Locator | null,
+): Promise<{ snap: Snapshot; unchecked: number }> {
+  const t0 = Date.now();
+  const run = await walker(page, masks, budget, root);
+  const { snap, states, unchecked } = await run({ collect: MAX_STATES });
+  const client = await page.context().newCDPSession(page);
+  try {
+    await Promise.all([client.send("DOM.enable"), client.send("CSS.enable")]);
+    await client.send("DOM.getDocument", { depth: 0 });
+    const { result } = await client.send("Runtime.evaluate", {
+      expression: "globalThis.__renderdiffStates",
+    });
+    const { result: own } = await client.send("Runtime.getProperties", {
+      objectId: result.objectId!,
+      ownProperties: true,
+    });
+    const nodeIds = await Promise.all(
+      own
+        .filter((p) => /^\d+$/.test(p.name))
+        .map((p) =>
+          client.send("DOM.requestNode", { objectId: p.value!.objectId! }).then((r) => r.nodeId),
+        ),
+    );
+    for (const [state, forced] of STATES) {
+      // A new force replaces the last; detaching clears them all.
+      await Promise.all(
+        nodeIds.map((nodeId) =>
+          client.send("CSS.forcePseudoState", { nodeId, forcedPseudoClasses: [...forced] }),
+        ),
+      );
+      Object.assign(snap!, (await run({ spent: Date.now() - t0, state, states })).snap);
+    }
+  } finally {
+    await client
+      .send("Runtime.evaluate", { expression: "delete globalThis.__renderdiffStates" })
+      .catch(() => {});
+    await client.detach().catch(() => {});
+  }
+  return { snap: snap!, unchecked: unchecked! };
 }
 
 /**

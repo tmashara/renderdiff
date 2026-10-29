@@ -2,11 +2,11 @@ import type { Page } from "playwright";
 import { prepare } from "./capture.ts";
 import { collapseInherited, pageError, SHOWN, type Snapshot } from "./computed.ts";
 import { CONTEXT_OPTIONS, masksFor, type ResolvedConfig, type Route } from "./config.ts";
-import { PROPS, snapshot } from "./locate.ts";
+import { SNAP_PROPS, snapshot } from "./locate.ts";
 import { COMPUTED_TIMEOUT, launch, shoot } from "./run.ts";
 
 // ponytail: x/y also list the siblings a grown box pushes down; drop a y a previous sibling's height explains if it gets noisy
-const FIELDS = [...PROPS, "content", "x", "y"];
+const FIELDS = [...SNAP_PROPS, "x", "y"];
 
 interface Change {
   key: string;

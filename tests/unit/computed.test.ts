@@ -15,10 +15,10 @@ import {
   pageError,
   type Snapshot,
 } from "../../src/computed.ts";
-import { PROPS } from "../../src/locate.ts";
+import { SNAP_PROPS } from "../../src/locate.ts";
 import type { ComparedResult, RouteResult } from "../../src/report.ts";
 
-const FIELDS = [...PROPS, "content"];
+const FIELDS = SNAP_PROPS;
 const el = (html: string, styles: Record<string, string> = {}) => ({
   html,
   styles: FIELDS.map((p) => styles[p] ?? (p === "content" ? "normal" : "x")),
@@ -35,6 +35,25 @@ describe("diffSnapshots", () => {
     const d = diffSnapshots(font("Inter"), font("Arial"));
     assert.equal(d.dom, 0);
     assert.deepEqual(d.changes, [{ key: "body", prop: "font-family", values: ["Inter", "Arial"] }]);
+  });
+
+  test("a state only one side forced is no markup change; one matching resting isn't repeated", () => {
+    const a = (color: string): Snapshot => ({
+      body: el("<body>"),
+      "body > a": el("<a>", { color }),
+      "body > a:hover": el("<a>", { color }),
+      "body > a:focus-visible": el("<a>", { color, outline: "red solid 2px" }),
+    });
+    const left = { ...a("red"), "body > b:hover": el("<b>") };
+    const d = diffSnapshots(left, a("blue"));
+    assert.equal(d.dom, 0);
+    assert.deepEqual(d.unmatched, { left: [], right: [] });
+    assert.deepEqual(d.changes, [{ key: "body > a", prop: "color", values: ["red", "blue"] }]);
+    const right = a("red");
+    right["body > a:hover"] = el("<a>", { color: "blue" });
+    assert.deepEqual(diffSnapshots(a("red"), right).changes, [
+      { key: "body > a:hover", prop: "color", values: ["red", "blue"] },
+    ]);
   });
 
   test("a descendant that changed differently from its parent is kept", () => {
@@ -289,13 +308,15 @@ describe("groupFindings", () => {
           ...results,
           shot("/d", 1440, { computed: null, computedError: "more than 50000 elements" }),
           shot("/e", 1440, { computed: { ...diff(), truncated: 7 } }),
+          shot("/f", 1440, { computed: { ...diff(), changes: [], unchecked: 312 } }),
         ],
-        ["/a", "/b", "/c", "/d", "/e"],
+        ["/a", "/b", "/c", "/d", "/e", "/f"],
       ),
       [
-        "computed: 1 finding; dom identical on 3 of 4 route(s), differs /b (1), so findings there are hints; snapshot failed on /d@1440 (more than 50000 elements)",
+        "computed: 1 finding; dom identical on 4 of 5 route(s), differs /b (1), so findings there are hints; snapshot failed on /d@1440 (more than 50000 elements)",
         "  body > a margin-left 24px→16px  /a@1440,375 /b@1440 /c@1440 +1 routes",
         "  truncated: only the first 500 changes kept on /e@1440 (+7)",
+        "  states: only the first 500 links and controls forced on /f@1440 (+312)",
       ],
     );
   });

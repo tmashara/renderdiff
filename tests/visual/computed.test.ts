@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { chromium, type Browser, type Page } from "playwright";
 import { diffSnapshots } from "../../src/computed.ts";
-import { locate, PROPS, snapshot } from "../../src/locate.ts";
+import { locate, PROPS, snapshot, snapshotStates } from "../../src/locate.ts";
 import type { Shot } from "../../src/capture.ts";
 import type { Region } from "../../src/compare.ts";
 
@@ -133,4 +133,60 @@ test("pixel mode's selectors keep the classes in source order", async () => {
   );
   await Promise.all(pages.map((p) => p.close()));
   assert.equal(els?.[0]?.selector, "div.zeta.alpha");
+});
+
+async function states(body: string, css: [string, string]) {
+  const [l, r] = await Promise.all([page(body, css[0]), page(body, css[1])]);
+  const s = await Promise.all([l, r].map((p) => snapshotStates(p, [], BUDGET, null)));
+  await Promise.all([l.close(), r.close()]);
+  return diffSnapshots(s[0]!.snap, s[1]!.snap);
+}
+
+const LINK = `<nav><a href="#x">Go <span class="icon">></span></a></nav>`;
+const A = `body > nav > a[href="#x"]`;
+const changed = (d: ReturnType<typeof diffSnapshots>) => d.changes.map((c) => [c.key, c.prop]);
+
+test("a hover colour one side drops is a finding on the link's :hover key alone", async () => {
+  const d = await states(LINK, ["a:hover { color: red }", ""]);
+  assert.equal(d.dom, 0);
+  assert.deepEqual(d.unmatched, { left: [], right: [] });
+  assert.deepEqual(changed(d), [
+    [`${A}:hover`, "color"],
+    [`${A}:hover`, "border-top-color"],
+    [`${A}:hover > span.icon`, "border-top-color"],
+  ]);
+});
+
+test("a dropped focus ring shows on :focus-visible as outline", async () => {
+  const d = await states(LINK, ["a:focus-visible { outline: 2px solid blue }", ""]);
+  assert.deepEqual(changed(d), [[`${A}:focus-visible`, "outline"]]);
+});
+
+test("a rule on a hovered link's child is keyed under the :hover", async () => {
+  const d = await states(LINK, ["a:hover .icon { color: red }", ""]);
+  assert.deepEqual(changed(d), [
+    [`${A}:hover > span.icon`, "color"],
+    [`${A}:hover > span.icon`, "border-top-color"],
+  ]);
+});
+
+test("same states are no change, and a resting change isn't repeated per state", async () => {
+  const css = "a:hover { color: red } a:focus-visible { outline: 1px solid }";
+  assert.deepEqual(changed(await states(LINK, [css, css])), []);
+  const d = await states(LINK, ["a { text-decoration: underline }", "a { text-decoration: none }"]);
+  assert.deepEqual(changed(d), [[A, "text-decoration-line"]]);
+});
+
+test("past 500 links the rest are counted, and the page is left resting", async () => {
+  const p = await page(
+    `<a href="#x">x</a>${"<a href='#y'>y</a>".repeat(500)}`,
+    "a:hover { color: red }",
+  );
+  const before = await snapshot(p, [], BUDGET, null);
+  const { snap, unchecked } = await snapshotStates(p, [], BUDGET, null);
+  assert.equal(unchecked, 1);
+  assert.ok(snap[`body > a[href="#x"]:hover`]);
+  assert.equal(await p.evaluate(() => "__renderdiffStates" in globalThis), false);
+  assert.deepEqual(await snapshot(p, [], BUDGET, null), before);
+  await p.close();
 });
