@@ -700,9 +700,18 @@ export async function merge(fullDir: string, partialDir: string, outDir: string)
         `${side} differs: ${full.meta[side]} in ${fullDir}, ${partial.meta[side]} in ${partialDir}`,
       );
   }
-  const out = path.resolve(outDir);
-  if (out === path.resolve(fullDir) || out === path.resolve(partialDir))
-    throw new Error(`--out ${outDir} is an input; pass a new directory`);
+  const real = (p: string): string => {
+    try {
+      return fs.realpathSync.native(p);
+    } catch {
+      return path.join(real(path.dirname(path.resolve(p))), path.basename(p));
+    }
+  };
+  for (const dir of [fullDir, partialDir]) {
+    const rel = path.relative(real(dir), real(outDir));
+    if (!rel || (rel.split(path.sep)[0] !== ".." && !path.isAbsolute(rel)))
+      throw new Error(`--out ${outDir} is or is inside ${dir}; pass a new directory`);
+  }
   if (!wipeable(outDir))
     throw new Error(
       `output directory ${outDir} holds files renderdiff didn't write — ` +
@@ -722,6 +731,7 @@ export async function merge(fullDir: string, partialDir: string, outDir: string)
   for (const r of results) {
     const src = taken.has(key(r)) ? partialDir : fullDir;
     for (const f of files(r)) {
+      if (!fs.existsSync(path.join(src, f))) throw new Error(`${path.join(src, f)} is missing`);
       const had = copies.get(f);
       if (had)
         throw new Error(`${had.shot} and ${key(r)} both write ${f}; rerun both into one --out`);

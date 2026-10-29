@@ -311,7 +311,7 @@ references. Exits 2 without `results.json` or a readable verdict file.
 with each shot the partial run also took replaced by its (files too), the rest added; each
 such shot has `from` (that run's `generatedAt`). Masks, hidden selectors, blocked URLs and
 widths are unioned in `meta`; accepted flags stay as each run set them. `evidence.html` says
-Not verified. Exits 2 on different origins, an `--out` that is an input or holds foreign
+Not verified. Exits 2 on different origins, an `--out` that is or is inside an input or holds foreign
 files, or two shots writing one file. A merged out dir refuses `--rerun-failed`.
 
 ## results.json

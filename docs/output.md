@@ -295,7 +295,7 @@ recomputed; the summary is recomputed against the full run's threshold. Each sho
 `accepted` flag its own run gave it: `renderdiff.accepted.json` is not reread. The shots
 were taken at different times, so `evidence.html` says Not verified; chain
 `renderdiff report <dir> --verdict …` for one. Exits 2 when the two runs compare different
-origins, `--out` is an input or holds files renderdiff didn't write, or two shots would
+origins, `--out` is or is inside an input or holds files renderdiff didn't write, a referenced file is missing, or two shots would
 write the same file (run both into one `--out` instead). A merged out dir can't be continued
 with `--rerun-failed`: rerun into a new `--out` and merge again.
 

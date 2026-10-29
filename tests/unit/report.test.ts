@@ -335,13 +335,22 @@ describe("renderdiff merge", () => {
     assert.equal((await merge(a, b, out)).code, 0);
   });
 
-  test("refuses other origins, an input as --out, and a directory it didn't write", async () => {
+  test("refuses other origins, an --out at or in an input, a directory it didn't write, and a missing file", async () => {
     const [a, b] = [full(), partial()];
     const other = partial([], { right: "https://other.example" });
     assert.match((await merge(a, other, path.join(tempDir(), "o"))).stderr, /✗ right differs/);
     const self = await merge(a, b, a);
     assert.equal(self.code, 2);
-    assert.match(self.stderr, /is an input/);
+    assert.match(self.stderr, /is or is inside/);
+    const link = path.join(tempDir(), "link");
+    fs.symlinkSync(a, link);
+    assert.match((await merge(a, b, `${link}/`)).stderr, /is or is inside/);
+    assert.match((await merge(a, b, path.join(b, "sub"))).stderr, /is or is inside/);
+    const kept = path.join(tempDir(), "kept");
+    assert.equal((await merge(a, b, kept)).code, 0);
+    fs.rmSync(path.join(b, "index.1440.left.png"));
+    assert.match((await merge(a, b, kept)).stderr, /index\.1440\.left\.png is missing/);
+    assert.ok(fs.existsSync(path.join(kept, "results.json")));
     const foreign = tempDir();
     fs.writeFileSync(path.join(foreign, "notes.txt"), "mine");
     const r = await merge(a, b, foreign);
