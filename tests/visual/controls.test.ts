@@ -270,6 +270,9 @@ for (const width of WIDTHS) {
     assert.equal(rule?.side, "right", JSON.stringify(named));
     const card = named.find((e) => e.selector.endsWith(".card"));
     assert.equal(card?.reparented, true, JSON.stringify(named));
+    const border = named.find((e) => e.selector.endsWith(".card::after"));
+    assert.deepEqual(border?.changed["border-top-width"], ["0px", "1px"], JSON.stringify(named));
+    assert.equal(border?.reparented, true);
     const rows = parseSummary(run.stdout).routes.get("/divider")!.rows;
     assert.ok(
       rows.some((x) => /line -1px@y/.test(x.text)),

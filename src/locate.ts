@@ -80,7 +80,7 @@ interface Seen {
   styles: string[];
   /** Its grandparent's and parent's tags, e.g. `section>div`. */
   up: string;
-  /** `::before` and `::after` when generated: their content, size and background. */
+  /** `::before` and `::after` when generated: their content, size, background and borders. */
   pseudo: (Record<string, string> | null)[];
 }
 
@@ -208,7 +208,18 @@ function probe({ boxes, find, masked, props, perSpot, walk, root }: ProbeArgs) {
         return (
           ps &&
           Object.fromEntries(
-            ["content", "width", "height", "background-color", "background-image"].map((q) => [
+            [
+              "content",
+              "width",
+              "height",
+              "background-color",
+              "background-image",
+              "border-top-width",
+              "border-top-color",
+              "border-bottom-width",
+              "border-bottom-color",
+              "box-shadow",
+            ].map((q) => [
               q,
               // A url() resolves against each side's origin.
               ps.getPropertyValue(q).replaceAll(location.origin, ""),
@@ -538,7 +549,12 @@ export async function locate(
       const el = element([a, b], [shots[0].origin, shots[1].origin]);
       if (a && b && a.up !== b.up) el.reparented = true;
       out.push(el);
-      if (a && b) out.push(...pseudos([a, b], [shots[0].origin, shots[1].origin]));
+      if (a && b)
+        out.push(
+          ...pseudos([a, b], [shots[0].origin, shots[1].origin]).map((p) =>
+            el.reparented ? { ...p, reparented: el.reparented } : p,
+          ),
+        );
       // ponytail: one level of cause; a deeper cascade search if agents ask for it
       if (el.left && el.right && !Object.keys(el.changed).length && moved(el.left, el.right)) {
         for (const [p, q] of [

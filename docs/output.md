@@ -28,7 +28,7 @@ A row covers the widths that agree on height and width delta (`h`, `w`), bands, 
 score and text; the score and region count are then shown as ranges, and `unstable` as the
 largest. Bands are `+` for rows only the left has and `-` for rows only the right has, at
 `y`, with `~` when the widths put it in different places. A region that is a thin line
-across the page shows as `line -1px@y812` instead of counting toward `reg`. Up to three text-diff lines
+across the page shows as `line -1px@y812` instead of counting toward `reg`; past three, `(+N more)`. Up to three text-diff lines
 follow (`-"x"` only on the right, `+"x"` only on the left, `(+N more)` past that). Under a
 row, `failed` lists stylesheets and font faces a side failed to load (fix those first),
 `dom` names up to three elements behind the changes (`@w` when the row covers several
@@ -119,8 +119,8 @@ right after the shot. Each is a CSS selector unique on its side, so `--selector`
 - `sel x+8` moved without a style of its own changing, so the cause is a neighbour or its
   parent, which is listed after it when one of them changed.
 - `-sel::before` / `+sel::before` is a pseudo-element only the right / left generates, and
-  `sel::after height 1px→2px` one on both whose `content`, `width`, `height`,
-  `background-color` or `background-image` differ.
+  `sel::after height 1px→2px` one on both whose `content`, size, background, top or bottom
+  border, or `box-shadow` differ. It carries `(re-parented)` when its element does.
 - `(re-parented)` after an entry means its ancestors' tags differ between the sides, so the
   pairing crossed a structure change: its properties may not be the cause.
 - A bare `sel` is on both sides with nothing compared changed or moved, so its own pixels did

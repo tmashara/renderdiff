@@ -396,7 +396,7 @@ export async function run({
           regions.length
             ? `${regions.length} region${regions.length > 1 ? "s" : ""}, largest ${fmtRegion(regions[0]!)}`
             : "",
-          ...regions.flatMap((g) => (g.line ? [fmtLine(g.line)] : [])).slice(0, 3),
+          ...more(regions.flatMap((g) => (g.line ? [fmtLine(g.line)] : []))),
           ...(bands ?? []).map((b) => `band ${fmtBand(b)}`),
           alignedScore !== null ? `aligned ${pct(alignedScore)}` : "",
           bands === null ? "rows too different to align" : "",
@@ -751,6 +751,10 @@ export function compact(
   return out.join("\n");
 }
 
+/** The first three, and how many more there are. */
+const more = (lines: string[]) =>
+  lines.length > 3 ? [...lines.slice(0, 3), `(+${lines.length - 3} more)`] : lines;
+
 /** One compact row for comparisons that agree on everything but score, regions and unstable px. */
 function row(g: ComparedResult[]): string {
   const [r] = g as [ComparedResult];
@@ -761,6 +765,12 @@ function row(g: ComparedResult[]): string {
   const drawn = (c: Region) => c.line && !c.accepted;
   const regions = g.map((x) => x.regions.filter((c) => !drawn(c)).length);
   const lined = g.find((x) => x.regions.some(drawn)) ?? r;
+  const ys = (x: ComparedResult) =>
+    x.regions
+      .filter(drawn)
+      .map((c) => c.line!.y)
+      .join();
+  const approx = new Set(g.map(ys)).size > 1;
   const accepted = g.map(
     (x) => [...(x.bands ?? []), ...x.regions].filter((c) => c.accepted).length,
   );
@@ -778,7 +788,7 @@ function row(g: ComparedResult[]): string {
     r.bands === null ? "unaligned" : "",
     ...(r.bands ?? []).map((b) => `band ${b.side === "left" ? "+" : "-"}${b.h}${y(b)}`),
     r.alignedScore !== null ? `aligned ${pct(r.alignedScore)}` : "",
-    ...lined.regions.flatMap((c) => (drawn(c) ? [fmtLine(c.line!, g.length > 1)] : [])).slice(0, 3),
+    ...more(lined.regions.flatMap((c) => (drawn(c) ? [fmtLine(c.line!, approx)] : []))),
     Math.max(...regions) ? `${span(regions, String)} reg` : "",
     unstable ? `unstable ${unstable.toLocaleString("en-US")}px` : "",
     Math.max(...accepted) ? `${span(accepted, String)} accepted` : "",

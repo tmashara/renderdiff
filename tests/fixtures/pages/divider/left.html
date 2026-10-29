@@ -6,10 +6,12 @@
 <link rel="stylesheet" href="/shared/base.css">
 <style>
 /* CONTROL for pseudo-elements, lines and re-parenting. The right draws a 1px divider with
-   ::before; the left lost it, and wraps the card in a div that indents it 16px. */
+   ::before and a card border with ::after; the left lost both, and wraps the card in a div
+   that indents it 16px. */
 .rule { position: relative; height: 1px; margin: 32px 0; }
 .wrap { padding-left: 16px; }
 .card { width: 160px; height: 48px; margin-top: var(--gap); background: var(--fill); }
+.card::after { content: ""; display: block; }
 </style>
 </head>
 <body>
