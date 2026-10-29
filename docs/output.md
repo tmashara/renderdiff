@@ -264,7 +264,8 @@ red when it fails or errored; a route takes its worst width's colour. Without a 
 any difference fails, so there is no amber. The summary on top counts routes, shots,
 differing shots, errors, accepted and stale accepted; gives the mean and the worst score,
 linked to its card; and lists only the differing shots, by route. Findings repeated on two
-or more routes, and with `--computed` the style findings, sit collapsed under it. Then a card per shot, lowest score first.
+or more routes, and with `--computed` the style findings, sit collapsed under it. Then a
+card per shot, lowest score first.
 
 ## evidence.html
 

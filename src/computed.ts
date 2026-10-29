@@ -194,6 +194,13 @@ export function diffSnapshots(
 const computedOf = (rs: RouteResult[]) =>
   rs.filter((r): r is ComparedResult => r.status === "compared" && !!r.computed);
 
+export function addAt(at: Finding["at"], r: RouteResult) {
+  const url = name(r);
+  const seen = at.find((a) => a.url === url);
+  if (seen) seen.widths.push(r.width);
+  else at.push({ url, widths: [r.width] });
+}
+
 /** Every change across routes and widths, one per (key, property, values), most widespread first. */
 export function groupFindings(results: RouteResult[]): Finding[] {
   const out = new Map<string, Finding>();
@@ -202,10 +209,7 @@ export function groupFindings(results: RouteResult[]): Finding[] {
       const id = `${c.key}\0${c.prop}\0${c.values.join("\0")}`;
       const f = out.get(id) ?? { ...c, at: [] };
       out.set(id, f);
-      const url = name(r);
-      const at = f.at.find((a) => a.url === url);
-      if (at) at.widths.push(r.width);
-      else f.at.push({ url, widths: [r.width] });
+      addAt(f.at, r);
     }
   }
   const shots = (f: Finding) => f.at.reduce((n, a) => n + a.widths.length, 0);
@@ -214,9 +218,15 @@ export function groupFindings(results: RouteResult[]): Finding[] {
 
 /** Findings shown in the console summary; results.json has them all. */
 export const SHOWN = 20;
-export const AT_ROUTES = 3;
+const AT_ROUTES = 3;
 /** Unmatched routes, and keys per route, in the console summary. */
 const UNMATCHED_SHOWN = 5;
+
+export const fmtAt = (at: Finding["at"]) =>
+  at
+    .slice(0, AT_ROUTES)
+    .map((a) => `${a.url}@${a.widths.join(",")}`)
+    .join(" ") + (at.length > AT_ROUTES ? ` +${at.length - AT_ROUTES} routes` : "");
 
 /** The console block: dom per route, then one line per finding, `left→right` like `dom`. */
 export function fmtComputed(results: RouteResult[], routes: string[]): string[] {
@@ -243,14 +253,8 @@ export function fmtComputed(results: RouteResult[], routes: string[]): string[] 
       (differs.length ? `, differs ${differs.join(" ")}, so findings there are hints` : "") +
       (failed.length ? `; snapshot failed on ${failed.join(" ")}` : ""),
   ];
-  for (const f of findings.slice(0, SHOWN)) {
-    const at = f.at
-      .slice(0, AT_ROUTES)
-      .map((a) => `${a.url}@${a.widths.join(",")}`)
-      .join(" ");
-    const more = f.at.length > AT_ROUTES ? ` +${f.at.length - AT_ROUTES} routes` : "";
-    out.push(`  ${f.key} ${f.prop} ${f.values.join("→")}  ${at}${more}`);
-  }
+  for (const f of findings.slice(0, SHOWN))
+    out.push(`  ${f.key} ${f.prop} ${f.values.join("→")}  ${fmtAt(f.at)}`);
   if (findings.length > SHOWN) out.push(`  (+${findings.length - SHOWN} more in results.json)`);
   const cut = computedOf(rows).filter((r) => r.computed!.truncated);
   if (cut.length)

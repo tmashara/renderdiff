@@ -3,7 +3,8 @@ import path from "node:path";
 import sharp from "sharp";
 import type { Accepted } from "./accept.ts";
 import {
-  AT_ROUTES,
+  addAt,
+  fmtAt,
   fmtComputed,
   groupFindings,
   SHOWN,
@@ -181,10 +182,7 @@ export function pixelFindings(results: RouteResult[]): PixelFinding[] {
     for (const [finding, selector] of tokens) {
       const f = out.get(finding) ?? { finding, ...(selector ? { selector } : {}), at: [] };
       out.set(finding, f);
-      const url = name(r);
-      const at = f.at.find((a) => a.url === url);
-      if (at) at.widths.push(r.width);
-      else f.at.push({ url, widths: [r.width] });
+      addAt(f.at, r);
     }
   }
   const shots = (f: PixelFinding) => f.at.reduce((n, a) => n + a.widths.length, 0);
@@ -201,14 +199,8 @@ export function fmtPixelFindings(results: RouteResult[]): string[] {
   const findings = pixelFindings(results);
   if (!findings.length) return [];
   const out = [`findings: ${findings.length} repeated on 2+ routes`];
-  for (const f of findings.slice(0, SHOWN)) {
-    const at = f.at
-      .slice(0, AT_ROUTES)
-      .map((a) => `${a.url}@${a.widths.join(",")}`)
-      .join(" ");
-    const more = f.at.length > AT_ROUTES ? ` +${f.at.length - AT_ROUTES} routes` : "";
-    out.push(`  ${f.finding}  ×${f.at.length} routes  ${at}${more}`);
-  }
+  for (const f of findings.slice(0, SHOWN))
+    out.push(`  ${f.finding}  ×${f.at.length} routes  ${fmtAt(f.at)}`);
   if (findings.length > SHOWN) out.push(`  (+${findings.length - SHOWN} more in results.json)`);
   return out;
 }

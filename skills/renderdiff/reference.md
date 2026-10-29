@@ -316,9 +316,9 @@ For scripts and drilling into one route; the loop doesn't need it. One result pe
   `computedError`.
 - **`summary`:** `compared`, `errors`, `mean` and `worst` (accepted shots aside),
   `belowThreshold`, `differing` (unaccepted shots with any differing pixel; without
-  `--threshold`, any exits 1), `accepted`, `stale`, `findings` (each `dom` entry, text line or element-less band on 2+ routes
-  once: `finding`, `selector?`, `at: [{ url, widths }]`), and with `--computed` `computed` (each
-  change once with `at: [{ url, widths }]`).
+  `--threshold`, any exits 1), `accepted`, `stale`, `findings` (each `dom` entry, text line
+  or element-less band on 2+ routes once: `finding`, `selector?`, `at: [{ url, widths }]`),
+  and with `--computed` `computed` (each change once with `at: [{ url, widths }]`).
 - **`meta`:** origins, widths, threshold, `clock`, block patterns, hidden selectors, mask
   reasons, `browser` (`chromium`, or `chrome` after a fallback), storage state file names,
   `config` hash, `rightReplayedFrom`, `freezeVideo`, `platform`, `rerun` (`{ rerun, reused }` or
