@@ -28,7 +28,8 @@ export interface Shot {
 
 /**
  * Runs in the page, behind `prepare`'s init script: pause every video, open shadow roots
- * included. One that played anyway is rewound to frame 0; one that hasn't keeps its poster.
+ * included. Once its metadata loads (waited for up to 2s), each is seeked to 0, so it shows
+ * frame 0 at its own aspect ratio; one that never loads keeps its poster.
  */
 function freezeVideo() {
   const videos = (root: Document | ShadowRoot): HTMLVideoElement[] => [
@@ -38,14 +39,18 @@ function freezeVideo() {
     ),
   ];
   return Promise.all(
-    videos(document).map((v) => {
+    videos(document).map(async (v) => {
       v.autoplay = false;
       v.pause();
-      if (!v.readyState || (!v.played.length && !v.currentTime)) return;
-      const seeked = new Promise((r) => {
-        v.addEventListener("seeked", r, { once: true });
-        setTimeout(r, 2_000);
-      });
+      const until = (...events: string[]) =>
+        new Promise((r) => {
+          for (const e of events) v.addEventListener(e, r, { once: true });
+          setTimeout(r, 2_000);
+        });
+      if (!v.readyState && v.networkState === v.NETWORK_LOADING)
+        await until("loadedmetadata", "error");
+      if (!v.readyState) return;
+      const seeked = until("seeked");
       v.currentTime = 0;
       return seeked;
     }),
@@ -141,7 +146,7 @@ export async function prepare(page: Page, cfg: ResolvedConfig, now: number): Pro
   }
   // Time flows, so Date-based debounce and busy-waits work; `capture` rewinds it per load.
   await page.clock.install({ time: now });
-  // From the first script on, so no video starts and each keeps its poster however fast it loads.
+  // From the first script on, so no video starts however fast it loads.
   if (cfg.freezeVideo)
     await page.addInitScript(() => {
       HTMLMediaElement.prototype.play = () => Promise.resolve();

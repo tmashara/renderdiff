@@ -17,7 +17,7 @@ honestly. This is what renderdiff does to make sure of that.
 - **Pins what varies between loads**, identically on both sides: the clock starts at one
   instant per run (floored to the minute) on every load and then runs, `Math.random` is
   seeded, timezone (UTC), locale (en-US), colour scheme (light) and
-  `prefers-reduced-motion` are fixed, and videos are kept from playing (each shows its poster) with video.js captions and control bars hidden (`--no-freeze-video` opts out). A clock that shows
+  `prefers-reduced-motion` are fixed, and videos are kept from playing and, once their metadata loads, rewound to frame 0 (one that never loads shows its poster) with video.js captions and control bars hidden (`--no-freeze-video` opts out). A clock that shows
   seconds can still tick between the two sides and may need a mask.
 - **Kills animation, transitions and caret blink**, and hides common consent banners and
   dev toolbars. Animated images (GIF, WebP, APNG) and SVG animations show their first frame;

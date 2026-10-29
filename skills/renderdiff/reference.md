@@ -180,8 +180,9 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
 
 - Every mask is coverage surrendered and listed in the report with its reason. `--mask-media`
   gives up every iframe. Video is not masked: it is frozen by default (no `video` plays, each
-  shows its poster, video.js captions and control bars hidden), so its box is still compared.
-  `--no-freeze-video` lets it play: expect `unstable` or `did not settle`.
+  shows frame 0, or its poster if it never loads, video.js captions and control bars hidden),
+  so its box is still compared. `--no-freeze-video` lets it play: expect `unstable` or
+  `did not settle`.
 - Masks hide text too, so masked text leaves the text diff.
 - Pages see `window.__RENDERDIFF__ === true` before their first script; anything hidden on it
   must be hidden in both builds.

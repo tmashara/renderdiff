@@ -80,8 +80,8 @@ export default {
   // a selector list cannot express.
   extraCss: `.chat-launcher { visibility: hidden !important }`,
 
-  // Videos are kept from playing (each shows its poster) and video.js captions and
-  // control bars are hidden. false, or --no-freeze-video, lets them play.
+  // Videos are kept from playing on frame 0 (their poster if they never load) and video.js
+  // captions and control bars are hidden. false, or --no-freeze-video, lets them play.
   freezeVideo: true,
 
   // Mask every iframe on every route (embeds that differ per load). Same as --mask-media.
