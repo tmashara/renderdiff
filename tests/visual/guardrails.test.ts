@@ -1170,13 +1170,33 @@ describe("shot deadline", () => {
         widths: [1440],
         concurrency: 1,
       }),
-      { env: { RENDERDIFF_SHOT_TIMEOUT: "3" }, timeoutMs: 60_000 },
+      { env: { RENDERDIFF_SHOT_TIMEOUT: "5" }, timeoutMs: 60_000 },
     );
     assert.equal(run.code, 3, context(run));
     const report = parseReport(run.report()!);
     assert.equal(report.errors.length, 1, context(run));
-    assert.match(report.errors[0]!.message, /^timeout after 3s at settle on left$/);
+    assert.match(report.errors[0]!.message, /^timeout after 5s at settle on left$/);
     // Same worker, replaced page: the next route still compares.
     assert.equal(cardFor(run, "/home").diffPixels, 0, context(run));
+  });
+
+  test("a hook that never resolves errors at the deadline, and is not retried", async () => {
+    const file = path.join(tempDir(), "hook.mjs");
+    fs.writeFileSync(file, "export default { before: () => new Promise(() => {}) };\n");
+    const before = site.hits("/menu");
+    const run = await runCli(
+      renderdiffArgs({
+        left: site.left,
+        right: site.right,
+        routes: ["/menu"],
+        widths: [1440],
+        config: file,
+      }),
+      { env: { RENDERDIFF_SHOT_TIMEOUT: "2" }, timeoutMs: 60_000 },
+    );
+    assert.equal(run.code, 3, context(run));
+    const [r] = results(run.outDir).results;
+    assert.equal(r?.status === "error" && r.error, "timeout after 2s at before hook on left");
+    assert.equal(site.hits("/menu") - before, 2, `the hook was retried${context(run)}`);
   });
 });

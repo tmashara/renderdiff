@@ -37,7 +37,7 @@ const LOCATE_TIMEOUT = 5_000;
 /** A full-page walk reads every element's style; past this, report the snapshot as failed. */
 const COMPUTED_TIMEOUT = 15_000;
 /** Bounds one capture: a renderer that dies or never returns from an evaluate would hang the run. */
-const SHOT_TIMEOUT = (Number(process.env.RENDERDIFF_SHOT_TIMEOUT) || 120) * 1000;
+const SHOT_TIMEOUT = (Math.max(0, Number(process.env.RENDERDIFF_SHOT_TIMEOUT)) || 120) * 1000;
 
 /** Past this share of a page unstable, too little was measured for a score to mean anything. */
 const MAX_UNSTABLE_SHARE = 0.25;
@@ -623,7 +623,8 @@ async function shoot(
     await page.close();
     pages[side] = await page.context().newPage();
     await prepare(pages[side], cfg, now);
-    throw new errors.TimeoutError(`timeout after ${SHOT_TIMEOUT / 1000}s at ${at} on ${side}`);
+    const E = at === "before hook" ? HookError : errors.TimeoutError;
+    throw new E(`timeout after ${SHOT_TIMEOUT / 1000}s at ${at} on ${side}`);
   };
   try {
     return await once();
