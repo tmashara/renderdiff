@@ -22,6 +22,7 @@ import {
 } from "./config.ts";
 import { fmtBand, fmtElements, fmtFailed, fmtLine, fmtRegion, pct, signed } from "./format.ts";
 import {
+  fails,
   stats,
   writeReport,
   writeResults,
@@ -110,12 +111,6 @@ const broken = (r: ComparedResult) => !!(r.failed?.left.length || r.failed?.righ
 export const reusable = (r: RouteResult) =>
   r.status === "compared" &&
   ((r.diffPixels === 0 && r.unstablePixels === 0 && !broken(r)) || r.accepted);
-
-/** A shot that exits 1: unaccepted and differing, or with a threshold, scoring below it. */
-export const fails = (r: RouteResult, threshold: number | null) =>
-  r.status === "compared" &&
-  !r.accepted &&
-  (threshold === null ? r.diffPixels > 0 : r.score < threshold);
 
 const files = (r: RouteResult) =>
   r.status === "compared" ? [...Object.values(r.images), ...r.crops.map((c) => c.path)] : [];
@@ -526,7 +521,7 @@ export async function run({
     rightReplayedFrom: replays.sort()[0] ?? null,
     rerun: prev ? { rerun: jobs.length, reused: results.length - jobs.length } : null,
   };
-  const reportPath = await writeReport(results, meta, cfg, stale);
+  const reportPath = await writeReport(results, meta, cfg.outDir, stale);
   const resultsPath = writeResults(results, meta, cfg.outDir, stale);
 
   if (prev) {

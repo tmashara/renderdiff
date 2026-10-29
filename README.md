@@ -215,7 +215,9 @@ platform that checks, and the cache:
 
 Everything lands in the out dir (`./renderdiff-out` by default):
 
-- `report.html`: the scored report.
+- `report.html`: the scored report. A sidebar lists every route with a link per width,
+  filterable, coloured green (clean or accepted), amber (differs within `--threshold`) or
+  red (fails or errored); the summary on top lists only the shots that differ.
 - `{slug}.{width}.{left,right,diff}.png`: full-page shots and the diff. `/` slugs to
   `index`, `/blog/foo` to `blog-foo`, other characters to `_`, a pair `/a::/b` to `a~b`; a
   clash gets a `-2` suffix.
@@ -225,9 +227,9 @@ Everything lands in the out dir (`./renderdiff-out` by default):
   result per line. Its types (`Results` and friends) are exported from the package; fields:
   [docs/output.md](https://github.com/tmashara/renderdiff/blob/main/docs/output.md#resultsjson).
 
-`renderdiff report <out> --verdict verdict.md --title "<task>"` then writes `evidence.html`
-there: one self-contained page (a Parity / Differs / Not verified banner, your verdict, crops
-embedded) to attach to a ticket or publish as proof:
+`renderdiff report <out> --verdict verdict.md --title "<task>"` then rewrites `report.html`
+and writes `evidence.html` there: one self-contained page (a Parity / Differs / Not verified
+banner, your verdict, crops embedded) to attach to a ticket or publish as proof:
 [docs/output.md](https://github.com/tmashara/renderdiff/blob/main/docs/output.md#evidencehtml).
 
 ## Why a clean result is trustworthy

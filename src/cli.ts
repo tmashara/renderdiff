@@ -13,6 +13,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { ACCEPTED_FILE } from "./accept.ts";
+import type { Results } from "./report.ts";
 import {
   label,
   loadConfig,
@@ -189,8 +190,9 @@ const HELP = `
   the config, or in cwd); later runs report them as accepted, and anything new still shows.
   --rerun-failed reruns only what the previous run in --out didn't find clean or accepted.
 
-  renderdiff report reads results.json in <out-dir> and writes evidence.html beside it: one
-  self-contained page (crops embedded) with a parity banner and the --verdict file's text.
+  renderdiff report reads results.json in <out-dir>, rewrites report.html, and writes
+  evidence.html beside it: one self-contained page (crops embedded) with a parity banner and
+  the --verdict file's text.
 
   Writes report.html, results.json and crops of each change to --out. Exits 1 if any
   shot differs and isn't accepted (with --threshold, only if one scores below it;
@@ -283,7 +285,7 @@ async function preflight(left: string, right: string) {
   process.exit(2);
 }
 
-/** `renderdiff report <out-dir>`: evidence.html from an existing results.json, no browser. */
+/** `renderdiff report <out-dir>`: report.html and evidence.html from results.json, no browser. */
 async function report(argv: string[]): Promise<never> {
   try {
     let dir: string | undefined;
@@ -304,13 +306,10 @@ async function report(argv: string[]): Promise<never> {
     if (!fs.existsSync(file)) throw new Error(`no ${file}; run renderdiff with --out ${dir} first`);
     const verdict =
       opt["--verdict"] === undefined ? null : fs.readFileSync(opt["--verdict"], "utf8");
-    const { writeEvidence } = await import("./report.ts");
-    const out = await writeEvidence(
-      JSON.parse(fs.readFileSync(file, "utf8")),
-      dir,
-      verdict,
-      opt["--title"],
-    );
+    const { writeEvidence, writeReport } = await import("./report.ts");
+    const data: Results = JSON.parse(fs.readFileSync(file, "utf8"));
+    console.log(await writeReport(data.results, data.meta, dir, data.summary.stale));
+    const out = await writeEvidence(data, dir, verdict, opt["--title"]);
     console.log(`${out} (${Math.ceil(fs.statSync(out).size / 1024)} KB)`);
     process.exit(0);
   } catch (e) {

@@ -1,6 +1,6 @@
 /**
- * `renderdiff report`: evidence.html from a hand-written results.json and one generated crop.
- * No browser.
+ * `renderdiff report`: report.html and evidence.html from a hand-written results.json and one
+ * generated crop. No browser.
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -8,7 +8,9 @@ import path from "node:path";
 import { after, before, describe, test } from "node:test";
 import sharp from "sharp";
 import {
+  verdict,
   writeEvidence,
+  writeReport,
   type ComparedResult,
   type Results,
   type RouteResult,
@@ -146,5 +148,109 @@ describe("writeEvidence", () => {
     const html = await evidence([differs("/<script>x</script>")], {}, "<script>alert(1)</script>");
     assert.doesNotMatch(html, /<script/);
     assert.match(html, /&lt;script&gt;alert\(1\)/);
+  });
+});
+
+describe("verdict", () => {
+  const error = { ...shot("/e"), status: "error", error: "boom" } as RouteResult;
+  const at = (score: number) => shot("/a", { score, diffPixels: 1 });
+
+  test("identical or accepted is green, an error is red", () => {
+    assert.equal(verdict(shot("/"), 0.9), "good");
+    assert.equal(verdict({ ...at(0.5), accepted: true } as RouteResult, 0.9), "good");
+    assert.equal(verdict(error, null), "bad");
+  });
+
+  test("a diff is amber at or above the threshold, red below it or with no threshold", () => {
+    assert.equal(verdict(at(0.9), 0.9), "warn");
+    assert.equal(verdict(at(0.89), 0.9), "bad");
+    assert.equal(verdict(at(0.9999), null), "bad");
+  });
+});
+
+describe("writeReport", () => {
+  const stem = (url: string, width: number) => `${url.slice(1) || "index"}.${width}`;
+  const at = (url: string, width: number, over: Partial<ComparedResult> = {}) =>
+    shot(url, {
+      width,
+      images: {
+        left: `${stem(url, width)}.left.png`,
+        right: `${stem(url, width)}.right.png`,
+        diff: `${stem(url, width)}.diff.png`,
+      },
+      ...over,
+    });
+
+  async function report(results: RouteResult[], m: Partial<RunMeta> = {}) {
+    return fs.readFileSync(await writeReport(results, meta(m), dir, []), "utf8");
+  }
+
+  const route = (html: string, rt: string) =>
+    html.match(new RegExp(`<li data-route="${rt.toLowerCase()}">[\\s\\S]*?</li>`))![0];
+
+  test("every card has an id, and the sidebar links each width to it", async () => {
+    const html = await report([at("/", 1440), at("/", 375), at("/Docs", 1440)]);
+    for (const id of ["index.1440", "index.375", "Docs.1440"]) {
+      assert.match(html, new RegExp(`<article class="card" id="${id}">`));
+    }
+    assert.match(
+      route(html, "/"),
+      /href="#index\.1440" title="100\.00%">1440<\/a>.*href="#index\.375"[^>]*>375<\/a>/,
+    );
+    assert.match(route(html, "/Docs"), /href="#Docs\.1440"/);
+  });
+
+  test("the filter box filters lowercased route names, client-side", async () => {
+    const html = await report([at("/Docs", 1440)]);
+    assert.match(
+      html,
+      /<input id="q" type="search" aria-label="Filter routes" placeholder="Filter 1 route\(s\)"/,
+    );
+    assert.match(html, /<li data-route="\/docs">/);
+    assert.match(html, /li\.dataset\.route\.includes\(v\)/);
+  });
+
+  test("a route takes its worst shot's colour; an error links to the errors list", async () => {
+    const html = await report(
+      [
+        at("/a", 1440),
+        at("/a", 375, { score: 0.95, diffPixels: 9 }),
+        at("/b", 1440),
+        { ...at("/b", 375), status: "error", error: "boom" } as RouteResult,
+        at("/c", 1440, { score: 0.5, diffPixels: 9, accepted: true }),
+      ],
+      { threshold: 0.9 },
+    );
+    assert.match(
+      route(html, "/a"),
+      /class="rt warn"[\s\S]*class="good"[^>]*>1440[\s\S]*class="warn"/,
+    );
+    assert.match(
+      route(html, "/b"),
+      /class="rt bad" href="#b\.1440"[\s\S]*class="bad" href="#errors" title="boom">375/,
+    );
+    assert.match(route(html, "/c"), /class="rt good"/);
+    assert.match(html, /class="warn"><b>1<\/b> differ/);
+    assert.match(html, /<section id="errors">/);
+  });
+
+  test("the summary counts, links the worst shot, and lists only the differing ones", async () => {
+    const html = await report(
+      [at("/a", 1440, { score: 0.8, diffPixels: 9 }), at("/b", 1440), at("/c", 1440)],
+      { threshold: 0.9 },
+    );
+    const summary = html.match(/<section class="summary">[\s\S]*?<\/section>/)![0];
+    assert.match(summary, /<b>3<\/b> route\(s\)/);
+    assert.match(summary, /class="bad"><b>1<\/b> differ/);
+    assert.match(summary, /worst <b class="bad">80\.00%<\/b>\s*<a href="#a\.1440">\/a @1440<\/a>/);
+    const differs = summary.match(/<ul class="differs">[\s\S]*?<\/ul>/)![0];
+    assert.match(differs, /\/a/);
+    assert.doesNotMatch(differs, /<code>\/[bc]</);
+    assert.doesNotMatch(summary, /<details>/);
+  });
+
+  test("evidence.html carries no script or sidebar", async () => {
+    const html = await evidence([differs("/a")]);
+    assert.doesNotMatch(html, /<script|<nav|id="q"/);
   });
 });

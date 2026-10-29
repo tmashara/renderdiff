@@ -9,7 +9,7 @@
     "noEmit": true,
     "rootDir": ".",
     // The fixture pages are served to a browser, so their generators reference DOM globals.
-    "lib": ["ES2023", "DOM"]
+    "lib": ["ES2024", "DOM"]
   },
   "include": ["src", "tests"]
 }
