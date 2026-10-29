@@ -41,9 +41,9 @@ Report colouring (`--open`, for a human): green above 99.5%, amber to 97%, red b
 | "It's probably just fonts / antialiasing." | "Probably" is exactly what the crop resolves. Look. |
 | "`dom` says margin, done." | It's a computed value. Confirm the source rule changed on purpose, and still open the crop when the region is large or `dom` names nothing. |
 | "The crops looked fine, done." | There are at most three: bands, then the largest regions. Check the region count, any `clipped` crop in results.json, and open the diff PNG for the rest and for any height delta: padding is never cropped. |
-| "Masking the header gets this to 100%." | Every mask is coverage surrendered. Mask only content *proven* to vary per load (clocks, star counts, rotating quotes), with a `reason`, which the report prints verbatim. |
+| "Masking the header gets this to 100%." | Every mask is coverage surrendered. Mask only content *proven* to vary per load (clocks, star counts, rotating quotes), with a `reason`, which the report prints verbatim. Differing base vs base is that proof; `--mask-media` still gives up every iframe and video. |
 | "I'll `--accept` it so the run is green." | Accept only differences you opened and that exist before your change (or are intended), with a reason that says which. |
-| "I'll lower `--threshold` until it passes." | Threshold is a CI gate, not a dial for reaching green. |
+| "I'll lower `--threshold` until it passes." | `--threshold` relaxes the exit code; the difference is still there. It's a CI gate, not a dial for reaching green. |
 | "That route errors, I'll drop it from the list." | Shrinking the route list shrinks what you verified. Fix it, or say it's unverified. |
 | "One width is enough." | Migrations break at one width and not others. That's why there are five defaults. |
 | "A `before` hook that hides that element on the left gets this clean." | That hook is a mask with no `reason` in the report. A hook brings both sides to the same *state* (opens the menu, dismisses a modal both show, logs in); it never edits one side to match the other. |
@@ -58,8 +58,9 @@ insertion point, `layout` `stacked` = left on top or `side` = left on the left, 
 `clipped`), `selector` (`{ left, right }` or null), with `--computed` a `computed` per result
 (`dom`, the count of elements whose markup differs, with 0 meaning identical; `changes`
 `{ key, prop, values }`, the first 500, `truncated` counting the rest; `unmatched` keys per side; null if the snapshot failed, with `computedError`), one result per line, so `grep '"url":"/about"'` pulls a route.
-Paths are relative to the out dir. `summary` has `compared`, `errors`, `mean`, `worst` and
-`belowThreshold`, plus `computed` with `--computed`: every change once, with the routes and widths it was seen at. `meta` records origins, widths, threshold, the pinned clock, block
+Paths are relative to the out dir. `summary` has `compared`, `errors`, `mean`, `worst`,
+`belowThreshold` and `differing` (unaccepted shots with any differing pixel: without
+`--threshold`, any exits 1), plus `computed` with `--computed`: every change once, with the routes and widths it was seen at. `meta` records origins, widths, threshold, the pinned clock, block
 patterns, hidden selectors, mask reasons, the browser (`chromium`, or `chrome` when it fell
 back to the system Chrome), each side's storage state file name, and `rightReplayedFrom`
 (with `--cache-right`, when the replayed recording was made; also on each replayed result). `hook: true` marks a
@@ -87,7 +88,9 @@ export default {
 
 A mask takes exactly one of `selector` or `locate: (page) => Locator`; without `urlPath` it
 applies to every route, and on a pair it matches either side's path and paints both. A plain
-`export default {}` needs no import; a type import from "renderdiff" is for editor types only. [`renderdiff.config.example.ts`](https://github.com/tmashara/renderdiff/blob/main/renderdiff.config.example.ts)
+`export default {}` needs no import; a type import from "renderdiff" is for editor types only. Without a config, `--mask <sel>` (repeatable) adds a mask on every
+route, after the config's; `--mask-media` (config `maskMedia: true`) adds one for
+`iframe, video, .vjs-text-track-display`. Both are listed in the report like any mask. [`renderdiff.config.example.ts`](https://github.com/tmashara/renderdiff/blob/main/renderdiff.config.example.ts)
 annotates every field.
 
 Two rules for `hideSelectors`: match the element **exactly** (consent scripts also stamp
@@ -97,6 +100,9 @@ cookie script ran wedges the renderer).
 
 ## Gotchas
 
+- **Reference choice:** base build vs change build, both local, is the default. Production as
+  the reference mixes in deploy drift, one-sided embeds (job boards, ads) and CSP blocks: use
+  it as a second pass, and say in the verdict which reference you used.
 - **stdout is compact when piped** (what an agent sees). `--progress` prints a line per
   shot instead; `--no-progress` forces the summary on a terminal.
 - **Accepted differences** (`--accept "<reason>"`) go to `renderdiff.accepted.json` next to the

@@ -15,8 +15,8 @@
  * that font rendering cannot flip them, but far below parity. The point is direction, not a
  * particular percentage.
  *
- * The second half checks the other half of the contract: a low score is only a *failure* when
- * a threshold asked for one.
+ * The second half checks the other half of the contract: any difference fails the run, unless
+ * a threshold relaxes that.
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -72,9 +72,8 @@ after(async () => {
   cleanupTempDirs();
 });
 
-test("a difference is not an error — the run still exits 0 without a threshold", () => {
-  // Scoring low is a measurement, not a failure. Only --threshold turns it into one.
-  assert.equal(run.code, 0, `expected exit 0 with no threshold set${context(run)}`);
+test("a difference exits 1 without a threshold, and is not an error", () => {
+  assert.equal(run.code, 1, `expected exit 1 with no threshold set${context(run)}`);
   assert.deepEqual(report.errors, []);
 });
 
@@ -309,6 +308,7 @@ test("results.json carries the run meta and a summary that matches the report", 
   assert.equal(summary.compared, report.cards.length);
   assert.equal(summary.errors, 0);
   assert.equal(summary.belowThreshold, 0);
+  assert.equal(summary.differing, rows.filter((r) => r.status === "compared").length);
   assert.equal(
     Number((summary.worst!.score * 100).toFixed(2)) / 100,
     Math.min(...report.cards.map((c) => c.score)),
@@ -363,7 +363,7 @@ test("--progress prints a line per shot with the score results.json has", async 
     ...renderdiffArgs({ left: site.left, right: site.right, routes: ["/nav"], widths: [1440] }),
     "--progress",
   ]);
-  assert.equal(r.code, 0, context(r));
+  assert.equal(r.code, 1, context(r));
   const [p] = parseProgress(r.stdout);
   const j = result(results(r.outDir), "/nav", 1440);
   assert.equal(p!.score, Number((j.score * 100).toFixed(2)) / 100, context(r));
@@ -461,7 +461,7 @@ test("--threshold turns a low score into a failure", async () => {
   assert.ok(r.report(), "no report on a threshold failure");
 });
 
-test("the same run passes when no threshold is set", async () => {
+test("any difference fails when no threshold is set", async () => {
   const r = await runCli(
     renderdiffArgs({
       left: site.left,
@@ -470,8 +470,21 @@ test("the same run passes when no threshold is set", async () => {
       widths: [1440],
     }),
   );
+  assert.equal(r.code, 1, context(r));
+  assert.match(r.stderr, /1 route\(s\) differ/);
+});
+
+test("--threshold 0 never fails on a difference", async () => {
+  const r = await runCli(
+    renderdiffArgs({
+      left: site.left,
+      right: site.right,
+      routes: ["/shifted"],
+      widths: [1440],
+      threshold: 0,
+    }),
+  );
   assert.equal(r.code, 0, context(r));
-  assert.doesNotMatch(r.stderr, /below/);
 });
 
 test("a threshold the run clears does not fail it", async () => {
@@ -497,7 +510,8 @@ test("--computed names the changed rule's property, once across widths, and the 
     }),
     "--computed",
   ]);
-  assert.equal(r.code, 0, context(r));
+  // Pixels decide the exit code: these routes differ, so 1, as without --computed.
+  assert.equal(r.code, 1, context(r));
   const { results: rows, summary } = results(r.outDir);
   const dom = (route: string) =>
     rows.filter((x) => x.url === route).map((x) => x.status === "compared" && x.computed?.dom);

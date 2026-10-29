@@ -57,6 +57,8 @@ describe("help and version", () => {
       "--accept",
       "--rerun-failed",
       "--computed",
+      "--mask",
+      "--mask-media",
     ]) {
       assert.ok(r.stdout.includes(flag), `--help does not mention ${flag}`);
     }
@@ -120,6 +122,18 @@ describe("flag validation", () => {
 
   test("a negative number is not mistaken for a value", () =>
     rejects(["/a", "--left", L, "--right", R, "--width", "-5"], "--width needs a value"));
+
+  test("--mask needs a value", async () => {
+    await rejects(["/a", "--left", L, "--right", R, "--dry-run", "--mask"], "--mask needs a value");
+    await rejects(
+      ["/a", "--left", L, "--right", R, "--dry-run", "--mask="],
+      "--mask needs a value",
+    );
+    await rejects(
+      ["/a", "--left", L, "--right", R, "--dry-run", "--mask", " "],
+      "--mask needs a value",
+    );
+  });
 
   test("--width rejects non-numbers", () =>
     rejects(

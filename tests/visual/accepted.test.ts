@@ -87,7 +87,10 @@ describe("accepted differences", () => {
     const res = results(run.outDir);
     assert.equal(result(res, "/color", 1440).accepted, true);
     assert.equal(result(res, "/color", 1440).regions[0]!.accepted, "known before the move");
-    assert.deepEqual([res.summary.accepted, res.summary.belowThreshold], [2, 0]);
+    assert.deepEqual(
+      [res.summary.accepted, res.summary.belowThreshold, res.summary.differing],
+      [2, 0, 0],
+    );
     const report = parseReport(run.report()!);
     assert.equal(card(report, "/nav", 1440).accepted, "known before the move");
     assert.equal(card(report, "/", 1440).accepted, null);
@@ -180,7 +183,7 @@ describe("--rerun-failed", () => {
     const dir = tempDir();
     const routes = ["/", "/color", "/nav"];
     const first = await runCli(args(routes, [], [1440, 375]));
-    assert.equal(first.code, 0, context(first));
+    assert.equal(first.code, 1, context(first));
     // Accept /color elsewhere: the rerun reads it from cwd and matches it against results.json.
     const accepted = await runCli(args(["/color"], ["--accept", "known"], [1440, 375]), {
       cwd: dir,
@@ -196,7 +199,7 @@ describe("--rerun-failed", () => {
       cwd: dir,
       outDir: first.outDir,
     });
-    assert.equal(run.code, 0, context(run));
+    assert.equal(run.code, 1, context(run));
     assert.deepEqual(
       [site.hits("/"), site.hits("/color")],
       [hits.home, hits.color],
@@ -222,7 +225,7 @@ describe("--rerun-failed", () => {
 
   test("a run that doesn't repeat the previous one is refused", async () => {
     const first = await runCli(args(["/color"]));
-    assert.equal(first.code, 0, context(first));
+    assert.equal(first.code, 1, context(first));
     const again = (a: string[]) => runCli(a, { outDir: first.outDir });
     for (const [a, needle] of [
       [args(["/color"], ["--rerun-failed"], [375]), /--rerun-failed: widths \[375\] differ/],
@@ -252,14 +255,14 @@ describe("--cache-right", () => {
   test("replays the right side's traffic on a repeat run, with the same results", async () => {
     const routes = ["/nav", "/color"];
     const first = await runCli(args(routes, ["--cache-right"]));
-    assert.equal(first.code, 0, context(first));
+    assert.equal(first.code, 1, context(first));
     assert.match(first.stdout, /^right: loaded live and recorded for --cache-right/m);
     const was = results(first.outDir);
     assert.equal(was.meta.rightReplayedFrom, null);
 
     const hits = site.hits("/nav");
     const again = await runCli(args(routes, ["--cache-right"]), { outDir: first.outDir });
-    assert.equal(again.code, 0, context(again));
+    assert.equal(again.code, 1, context(again));
     assert.equal(site.hits("/nav"), hits + 1, "only the left side is loaded");
     assert.match(again.stdout, /^right: replayed from a recording of \S+ \(--cache-right\)$/m);
     const now = results(again.outDir);
@@ -277,7 +280,7 @@ describe("--cache-right", () => {
     const wider = await runCli(args([...routes, "/"], ["--cache-right"]), {
       outDir: first.outDir,
     });
-    assert.equal(wider.code, 0, context(wider));
+    assert.equal(wider.code, 1, context(wider));
     assert.equal(site.hits("/nav"), hits + 3, "a shot the recording lacks loads it all live");
     assert.match(wider.stdout, /^right: loaded live and recorded/m);
   });
@@ -341,12 +344,12 @@ describe("--cache-right", () => {
         right,
       ];
       const first = await runCli(flaky);
-      assert.equal(first.code, 3, context(first));
+      assert.equal(first.code, 1, context(first));
       assert.match(first.stdout, /ERROR HTTP 500/, context(first));
 
       const replay = [...args(["/nav"], ["--cache-right"], [375]), "--right", right];
       const again = await runCli(replay, { outDir: first.outDir });
-      assert.equal(again.code, 0, context(again));
+      assert.equal(again.code, 1, context(again));
       assert.match(again.stdout, /^right: replayed from/m, context(again));
     } finally {
       proxy.closeAllConnections();

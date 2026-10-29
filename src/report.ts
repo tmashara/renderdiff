@@ -112,6 +112,8 @@ export interface Summary {
   worst: { url: string; width: number; score: number } | null;
   /** Comparisons under `meta.threshold`, accepted ones aside; 0 when no threshold was set. */
   belowThreshold: number;
+  /** Comparisons with any differing pixel, accepted ones aside. Without a threshold, any exits 1. */
+  differing: number;
   /** Comparisons whose every difference was accepted. */
   accepted: number;
   /** Accepted differences for a measured route and width that weren't seen: prune them. */
@@ -159,6 +161,7 @@ export function writeResults(
         meta.threshold === null
           ? 0
           : compared.filter((r) => !r.accepted && r.score < meta.threshold!).length,
+      differing: open.filter((r) => r.diffPixels > 0).length,
       accepted: compared.filter((r) => r.accepted).length,
       stale,
       ...(compared.some((r) => "computed" in r) ? { computed: groupFindings(results) } : {}),
