@@ -178,6 +178,19 @@ describe("accepted differences", () => {
   });
 });
 
+test("--accept says which differing shots it can't accept, and why", async () => {
+  const dir = tempDir();
+  const hook = leftCss(dir, "body { min-width: 2000px }");
+  const run = await runCli(args(["/color"], [...hook, "--accept", "wider"]), { cwd: dir });
+  assert.equal(run.code, 1, context(run));
+  assert.match(run.stdout, /^accepted 0 difference\(s\), pruned 0 stale/m, context(run));
+  assert.match(
+    run.stdout,
+    /^not accepted: 1 differing shot\(s\) can't be \(1 width change\) — reference\.md § Masks, accepts and thresholds$/m,
+    context(run),
+  );
+});
+
 describe("--rerun-failed", () => {
   test("reruns only what wasn't clean or accepted, and leaves the rest untouched", async () => {
     const dir = tempDir();

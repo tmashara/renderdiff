@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { chromium, errors, type Browser, type Page } from "playwright";
-import { applyAccepted, readAccepted, updateAccepted } from "./accept.ts";
+import { applyAccepted, readAccepted, unacceptable, updateAccepted } from "./accept.ts";
 import { CACHE_DIR, cacheFile, replayable, REPLAY_TTL, saveRecording, shotId } from "./cache.ts";
 import { cancelUnstable, capture, HookError, prepare, type Shot } from "./capture.ts";
 import { compare, crops, type Band, type Region } from "./compare.ts";
@@ -486,6 +486,19 @@ export async function run({
       ({ stale } = applyAccepted(results, readAccepted(acceptedFile)));
     }
     console.log(`accepted ${added.length} difference(s), pruned ${pruned} stale — ${acceptedFile}`);
+    const why = new Map<string, number>();
+    for (const r of results) {
+      const w = r.status === "compared" && r.diffPixels > 0 && !r.accepted && unacceptable(r);
+      if (w) why.set(w, (why.get(w) ?? 0) + 1);
+    }
+    const skipped = [...why.values()].reduce((a, b) => a + b, 0);
+    if (skipped) {
+      console.log(
+        `not accepted: ${skipped} differing shot(s) can't be (` +
+          [...why].map(([w, n]) => `${n} ${w}`).join(", ") +
+          `) — reference.md § Masks, accepts and thresholds`,
+      );
+    }
   }
 
   const { left, right, widths, ...rest } = setup;
