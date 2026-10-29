@@ -125,7 +125,7 @@ range rather than on a boundary, so a layout switch never flaps between runs.
 | Exit | Meaning |
 | --- | --- |
 | `0` | No route errored and no shot differs (with `--threshold`: none scored below it). Accepted differences don't count; nor do unstable pixels or a failed asset alone, which still get their own row. |
-| `1` | A shot differs, or with `--threshold` scored below it. Wins over `3` when both happen. |
+| `1` | A shot differs, or with `--threshold` scored below it. Wins over `3` when both happen. A difference that can't be accepted (unstable pixels beside it, a width change, a height change whose rows don't align) exits 1 even on the `--accept` run. |
 | `2` | Bad arguments, bad config, or an origin that isn't responding. |
 | `3` | A route errored, so it went unmeasured, or the run crashed (e.g. no Chromium). |
 
@@ -290,6 +290,7 @@ Everything lands in the out dir (`./renderdiff-out` by default):
     "compared": 1, "errors": 1, "mean": 0.9714,
     "worst": { "url": "/about", "width": 1440, "score": 0.9714 },
     "belowThreshold": 0,          // accepted shots aside
+    "differing": 1,               // shots with any differing pixel, accepted ones aside
     "accepted": 0,                // shots whose every difference was accepted
     "stale": []                   // accepted entries the run measured but didn't see
   }

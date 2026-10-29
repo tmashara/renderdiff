@@ -34,7 +34,8 @@ const MAX_CAPTURE_HEIGHT = 16_384;
 const TILE_HEIGHT = 16_000;
 
 /**
- * Sanity ceiling on the shot's area, so a narrow page may be taller than a wide one. Past
+ * Sanity ceiling on the shot's area, so a narrow page may be taller than a wide one; never
+ * under 40,000px tall, the old height ceiling, so a wide width loses nothing. Past
  * this a page is far likelier a broken/runaway layout than a real one, and we would rather
  * error than stitch a >200MB image. Named in the throw.
  */
@@ -121,7 +122,7 @@ export async function capture(
   now: number,
 ): Promise<Shot> {
   await page.setViewportSize({ width, height: 900 });
-  const maxHeight = Math.floor(MAX_PAGE_AREA / width);
+  const maxHeight = Math.max(40_000, Math.floor(MAX_PAGE_AREA / width));
   await page.clock.setSystemTime(now);
   // Here, not on framenavigated, which a pushState during hydration fires too.
   network.get(page)!.failed.clear();

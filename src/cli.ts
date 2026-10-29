@@ -98,7 +98,7 @@ function parseArgs(argv: string[]): Args {
     else if (v === "--out") a.outDir = next();
     else if (v === "--config") a.config = next();
     else if (v === "--mask") {
-      const s = next();
+      const s = next().trim();
       if (!s) throw new Error("--mask needs a value");
       (a.masks ??= []).push(s);
     } else if (v === "--selector" || v === "--left-selector" || v === "--right-selector") {

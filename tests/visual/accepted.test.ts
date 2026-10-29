@@ -87,7 +87,10 @@ describe("accepted differences", () => {
     const res = results(run.outDir);
     assert.equal(result(res, "/color", 1440).accepted, true);
     assert.equal(result(res, "/color", 1440).regions[0]!.accepted, "known before the move");
-    assert.deepEqual([res.summary.accepted, res.summary.belowThreshold], [2, 0]);
+    assert.deepEqual(
+      [res.summary.accepted, res.summary.belowThreshold, res.summary.differing],
+      [2, 0, 0],
+    );
     const report = parseReport(run.report()!);
     assert.equal(card(report, "/nav", 1440).accepted, "known before the move");
     assert.equal(card(report, "/", 1440).accepted, null);

@@ -272,6 +272,12 @@ describe("the area ceiling", () => {
     assert.ok(wide?.status === "error", context(run));
     assert.match(wide.error, /50000px tall at 1440px wide, past the 40000px sanity ceiling/);
   });
+
+  test("a width past 1440 still gets the 40,000px ceiling", async () => {
+    const run = await capture(["/long"], { widths: [2560] });
+    assert.equal(run.code, 0, context(run));
+    assert.equal((await sharp(run.file("long.2560.left.png")).metadata()).height, 30_000);
+  });
 });
 
 describe("the tiled capture path", () => {

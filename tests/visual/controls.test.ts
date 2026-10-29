@@ -308,6 +308,7 @@ test("results.json carries the run meta and a summary that matches the report", 
   assert.equal(summary.compared, report.cards.length);
   assert.equal(summary.errors, 0);
   assert.equal(summary.belowThreshold, 0);
+  assert.equal(summary.differing, rows.filter((r) => r.status === "compared").length);
   assert.equal(
     Number((summary.worst!.score * 100).toFixed(2)) / 100,
     Math.min(...report.cards.map((c) => c.score)),

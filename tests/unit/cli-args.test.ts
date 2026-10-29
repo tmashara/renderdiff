@@ -128,6 +128,10 @@ describe("flag validation", () => {
       ["/a", "--left", L, "--right", R, "--dry-run", "--mask="],
       "--mask needs a value",
     );
+    await rejects(
+      ["/a", "--left", L, "--right", R, "--dry-run", "--mask", " "],
+      "--mask needs a value",
+    );
   });
 
   test("--width rejects non-numbers", () =>
