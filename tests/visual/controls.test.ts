@@ -486,3 +486,42 @@ test("a threshold the run clears does not fail it", async () => {
   );
   assert.equal(r.code, 0, context(r));
 });
+
+test("--computed names the changed rule's property, once across widths, and the dom verdict", async () => {
+  const r = await runCli([
+    ...renderdiffArgs({
+      left: site.left,
+      right: site.right,
+      routes: ["/margin", "/color", "/inserted"],
+      widths: WIDTHS,
+    }),
+    "--computed",
+  ]);
+  assert.equal(r.code, 0, context(r));
+  const { results: rows, summary } = results(r.outDir);
+  const dom = (route: string) =>
+    rows.filter((x) => x.url === route).map((x) => x.status === "compared" && x.computed?.dom);
+  assert.deepEqual(dom("/margin"), [0, 0], context(r));
+  assert.deepEqual(dom("/color"), [0, 0]);
+  assert.ok(dom("/inserted").every((n) => typeof n === "number" && n > 0));
+  const blog = summary.computed!.find((f) => f.key.endsWith(`a[href="#blog"]`));
+  assert.deepEqual(blog && [blog.prop, blog.values, blog.at], [
+    "margin-left",
+    ["24px", "16px"],
+    [{ url: "/margin", widths: WIDTHS }],
+  ]);
+  assert.ok(
+    summary.computed!.some(
+      (f) => /swatch/.test(f.key) && f.prop === "background-color" && f.at[0]!.url === "/color",
+    ),
+  );
+  // /margin's Contact chip only moved, so it is no finding of its own.
+  assert.ok(!summary.computed!.some((f) => /#contact/.test(f.key)), context(r));
+  const inserted = rows.find((x) => x.url === "/inserted" && x.status === "compared");
+  assert.ok(inserted?.status === "compared" && inserted.computed!.unmatched.left.length === 1);
+  assert.match(
+    r.stdout,
+    /^computed: \d+ findings?; dom identical on 2 of 3 route\(s\), differs \/inserted/m,
+  );
+  assert.match(r.stdout, /a\[href="#blog"\] margin-left 24px→16px {2}\/margin@1440,375/);
+});

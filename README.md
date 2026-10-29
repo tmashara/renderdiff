@@ -107,6 +107,7 @@ renderdiff <left-origin> <right-origin> <route…> [options]
 | `--accept <reason>` | Record this run's differences as accepted, with a reason. See **Accepted differences and reruns**. |
 | `--rerun-failed` | Rerun only what the last run in `--out` didn't find clean or accepted, keeping the rest. |
 | `--cache-right` | Replay the right side's network traffic from the last `--cache-right` run in `--out`, when it's under an hour old and covers every shot; otherwise load it live and record it. Keeps `<out>/.cache/` when the out dir is wiped. See **Accepted differences and reruns**. |
+| `--computed` | Also diff the computed style of every rendered element and its `::before`/`::after`, and say per route whether the markup is identical apart from asset hashes. Pixels still decide the score and exit code. See [docs/output.md](docs/output.md#computed-styles---computed). |
 | `--dry-run` | Print the URL pairs and exit. No browser. |
 | `--open` | Open the report when the run finishes. |
 | `--progress` | A line per shot as it finishes, then the worst scores. The default on a terminal; piped, renderdiff prints one compact summary at the end. |
@@ -191,6 +192,7 @@ only.
 | `dom +sel` / `-sel` | Element only on the left / only on the right. |
 | `dom sel x+8` | It moved without its own style changing; the neighbour or parent listed after it is the cause. |
 | `dom sel` | On both sides and unchanged in style or position, so its own pixels changed (an image or canvas). |
+| `computed: N findings` | With `--computed`: each `key prop left→right` once, with the routes and widths it was seen at; `dom identical` routes differ only in CSS or script. |
 | `crops …` | Up to 3 PNGs per comparison, bands first, relative to `results.json`. Left is on top or on the left, and the change is boxed in red. |
 | `ERROR …` | Unmeasured, which is neither a pass nor a fail. Exits 3. |
 | `accepted:` / `stale accepted:` | Shots whose every difference was accepted, and accepted entries the run no longer saw. See below. |
@@ -273,6 +275,7 @@ Everything lands in the out dir (`./renderdiff-out` by default):
       }],
       "text": { "added": [], "removed": ["Pricing"] },   // added: left only; removed: right only
       "failed": { "left": [], "right": [] },   // stylesheets and font faces that didn't load: "font Inter 700", "stylesheet https://…"
+      "computed": { "dom": 1, "changes": [], "unmatched": { "left": [], "right": ["body > nav > a[href=\"/pricing\"]"] } },   // --computed only; null: snapshot failed
       "images": { "left": "about.1440.left.png", "right": "about.1440.right.png", "diff": "about.1440.diff.png" },
       "crops": [{
         "path": "about.1440.c1.png", "kind": "band",          // or "region"
@@ -288,7 +291,8 @@ Everything lands in the out dir (`./renderdiff-out` by default):
     "worst": { "url": "/about", "width": 1440, "score": 0.9714 },
     "belowThreshold": 0,          // accepted shots aside
     "accepted": 0,                // shots whose every difference was accepted
-    "stale": []                   // accepted entries the run measured but didn't see
+    "stale": [],                  // accepted entries the run measured but didn't see
+    "computed": []                // --computed: { key, prop, values: [left, right], at: [{ url, widths }] }
   }
 }
 ```

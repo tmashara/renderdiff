@@ -79,6 +79,10 @@ export default {
   // a selector list cannot express.
   extraCss: `.hero video { visibility: hidden !important }`,
 
+  // Also diff every element's computed style, and say whether the markup is identical
+  // apart from asset hashes. Same as --computed. Pixels still decide the score.
+  computed: false,
+
   // Content that renders on both sides but whose value drifts. Painted over on both,
   // so the noise cancels out instead of scoring against you.
   //

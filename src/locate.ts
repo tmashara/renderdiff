@@ -1,6 +1,7 @@
 import type { Locator, Page } from "playwright";
 import type { Shot } from "./capture.ts";
 import type { Box, Spot } from "./compare.ts";
+import type { Snapshot } from "./computed.ts";
 
 /** Names the DOM elements behind each change, from the pages still holding the shot's document. */
 
@@ -25,7 +26,7 @@ const PER_SPOT = 3;
 const MAX_CHANGED = 6;
 
 /** Layout first; width and height last, since they are usually a consequence. */
-const PROPS = [
+export const PROPS = [
   "display",
   "position",
   "float",
@@ -99,10 +100,12 @@ interface ProbeArgs {
   masked: Node[];
   props: string[];
   perSpot: number;
+  /** Snapshot every rendered element's `props` instead of picking. */
+  walk?: boolean;
 }
 
 /** Runs in the page. At scroll 0 a client rect is page px, below the fold too. */
-function probe({ boxes, find, masked, props, perSpot }: ProbeArgs) {
+function probe({ boxes, find, masked, props, perSpot, walk }: ProbeArgs) {
   const MAX_SCAN = 50_000;
   const HASHED = /\d{3,}|^(css|sc|jsx|svelte)-|__[\w-]{5,}$|^_/;
   const TEST = ["data-testid", "data-test", "data-test-id", "data-cy", "data-qa"];
@@ -186,6 +189,50 @@ function probe({ boxes, find, masked, props, perSpot }: ProbeArgs) {
   const hidden = new Set<Element>();
   for (const m of masked as Element[])
     [m, ...Array.from(m.querySelectorAll("*"))].forEach((e) => hidden.add(e));
+
+  if (walk) {
+    // STILL_CSS stops CSS animations; this settles ones started from script.
+    for (const a of document.getAnimations()) {
+      try {
+        a.finish();
+      } catch {
+        a.cancel();
+      }
+    }
+    const snap: Record<string, { html: string; styles: string[] }> = {};
+    let n = 0;
+    const visit = (e: Element, parent: string) => {
+      if (n++ >= MAX_SCAN || hidden.has(e) || (e as SVGElement).ownerSVGElement) return;
+      const cs = getComputedStyle(e);
+      if (cs.display === "none") return;
+      const seg =
+        e.id && !HASHED.test(e.id) ? `${CSS.escape(e.localName)}#${CSS.escape(e.id)}` : part(e);
+      const key = parent ? `${parent} > ${seg}` : seg;
+      // ponytail: first wins on a key collision; a sibling index if real pages collide
+      if (snap[key]) return;
+      const attrs = Array.from(
+        e.attributes,
+        (a) => ` ${a.name}="${a.value.replace(/"/g, "&quot;")}"`,
+      ).join("");
+      const text = Array.from(e.childNodes, (c) => (c.nodeType === 3 ? c.textContent : ""))
+        .join("")
+        .replace(/\s+/g, " ")
+        .trim();
+      snap[key] = {
+        html: `<${e.localName}${attrs}>${text}`,
+        styles: props.map((p) => cs.getPropertyValue(p)),
+      };
+      for (const pseudo of ["::before", "::after"]) {
+        const ps = getComputedStyle(e, pseudo);
+        const content = ps.getPropertyValue("content");
+        if (content !== "none" && content !== "normal")
+          snap[key + pseudo] = { html: "", styles: props.map((p) => ps.getPropertyValue(p)) };
+      }
+      for (const c of Array.from(e.children)) visit(c, key);
+    };
+    if (document.body) visit(document.body, "");
+    return { picks: [], found: [], snap };
+  }
   const els = document.body?.querySelectorAll("*") ?? [];
   for (let i = 0; i < els.length && i < MAX_SCAN; i++) {
     const e = els[i]!;
@@ -260,7 +307,7 @@ function probe({ boxes, find, masked, props, perSpot }: ProbeArgs) {
     return e ? hit(e) : null;
   });
 
-  return { picks, found };
+  return { picks, found, snap: null };
 }
 
 type Pair = [Seen | null, Seen | null];
@@ -293,6 +340,26 @@ const same = (a: Seen, b: Seen) =>
 
 const moved = (a: Box, b: Box) => a.x !== b.x || a.y !== b.y || a.w !== b.w || a.h !== b.h;
 
+const handles = async (ls: Locator[]) =>
+  (await Promise.all(ls.map((l) => l.elementHandles()))).flat();
+
+/**
+ * Every rendered element's computed `PROPS` and `content`, and its `::before`/`::after` when
+ * generated, keyed by a selector path; masked and `display: none` subtrees are skipped.
+ * Finishes the page's animations, so it runs after `locate`.
+ */
+export async function snapshot(page: Page, masks: Locator[]): Promise<Snapshot> {
+  const { snap } = await page.evaluate(probe, {
+    boxes: [],
+    find: [],
+    masked: await handles(masks),
+    props: [...PROPS, "content"],
+    perSpot: 0,
+    walk: true,
+  });
+  return snap!;
+}
+
 /**
  * The elements behind each of the first `MAX_SPOTS` spots, in spot order. Each side picks the
  * elements that best fill its box, then the other side looks for each by selector.
@@ -305,9 +372,7 @@ export async function locate(
 ): Promise<ElementDiff[][]> {
   const todo = spots.slice(0, MAX_SPOTS);
   if (!todo.length) return [];
-  const masked = await Promise.all(
-    masks.map(async (ls) => (await Promise.all(ls.map((l) => l.elementHandles()))).flat()),
-  );
+  const masked = await Promise.all(masks.map(handles));
   const boxes = (s: 0 | 1) =>
     todo.map((t) => {
       const b = s ? t.right : t.left;

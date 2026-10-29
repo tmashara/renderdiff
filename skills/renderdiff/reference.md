@@ -55,9 +55,11 @@ px), band, their `elements` (`selector`, `side`, each side's box, `changed`, `te
 `rightSelector` when the right was found under another selector; absent when not looked
 at, `[]` when nothing was named), full text diff, image path and crop (`kind`, each side's box with `h` 0 at an
 insertion point, `layout` `stacked` = left on top or `side` = left on the left, `scale`,
-`clipped`), `selector` (`{ left, right }` or null), one result per line, so `grep '"url":"/about"'` pulls a route.
+`clipped`), `selector` (`{ left, right }` or null), with `--computed` a `computed` per result
+(`dom`, the count of elements whose markup differs, with 0 meaning identical; `changes`
+`{ key, prop, values }`; `unmatched` keys per side; null if the snapshot failed), one result per line, so `grep '"url":"/about"'` pulls a route.
 Paths are relative to the out dir. `summary` has `compared`, `errors`, `mean`, `worst` and
-`belowThreshold`; `meta` records origins, widths, threshold, the pinned clock, block
+`belowThreshold`, plus `computed` with `--computed`: every change once, with the routes and widths it was seen at. `meta` records origins, widths, threshold, the pinned clock, block
 patterns, hidden selectors, mask reasons, the browser (`chromium`, or `chrome` when it fell
 back to the system Chrome), each side's storage state file name, and `rightReplayedFrom`
 (with `--cache-right`, when the replayed recording was made; also on each replayed result). `hook: true` marks a

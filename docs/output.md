@@ -120,6 +120,48 @@ band names only what one side added, not what it pushed down, so it can name not
 fixed chrome covers isn't named. Probing gives up after 5s, leaving the elements out. Shadow
 DOM and iframes aren't searched.
 
+## Computed styles (`--computed`)
+
+With `--computed`, after the shot renderdiff reads the computed style of every rendered
+element on both sides: the properties `dom` compares, plus `content`, and `::before` and
+`::after` wherever they generate content. Masked and `display: none` subtrees are skipped,
+and script-driven animations are finished first. The summary gets one block, after the rows:
+
+```
+computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so findings there are hints
+  body > div.page > nav.chips > a[href="#blog"] margin-left 24px→16px  /about@1440,375 /@1440,375
+  body > footer > a.cta::after content "→"→none  /about@1440
+  unmatched /pricing@1440 -body > main > section.plans:nth-of-type(3)
+```
+
+- Each finding is `key property left→right`, left first like `dom`, followed by every
+  route and width it was seen at. The same change on 300 pages is one line, most widespread
+  first. The summary shows 20; `summary.computed` in results.json has them all, and each
+  result's `computed.changes` has its own, up to 500.
+- The key is a selector path from `body`: tag, then id or up to two classes that don't look
+  generated, then `:nth-of-type` only where siblings would otherwise share it. Elements
+  are matched by key, not by position, so a cookie banner injected on one side doesn't
+  misalign everything after it. The key works with `querySelector`.
+- One change high in the tree is one finding. An inherited property (`font-*`,
+  `line-height`, `letter-spacing`, `text-*`, `white-space`, `color`, `visibility`) is
+  dropped where the parent has the same change, and `width`/`height` where the parent
+  resized too. So a `body` font change is one line, not one per element.
+- A `::before`/`::after` that only one side generates shows as `content` against `none`.
+  That is how a removed rule that drew an icon shows up.
+- `dom identical`: on every width, each element's tag, attributes and own text are the
+  same on both sides, with asset hashes in `src`/`href`/`srcset` ignored (`main.a1b2c3.css`,
+  `?v=…`). Any difference on that route then comes from CSS or script, not markup. `dom
+  differs (N)` counts the elements that differ. There, an insertion can shift a sibling's
+  `:nth-of-type` key, so treat that route's findings as hints. `unmatched` lists the
+  outermost elements only one side has: `+` left, `-` right.
+- The HTML report shows the same block and puts `dom identical` / `dom differs (N)` on each
+  card. Accepted shots are left out of the findings. A snapshot that fails or takes over
+  15s is reported as failed (`computed: null`), and the pixel result stands. Pixels still
+  decide the score and the exit code.
+
+`:hover`/`:focus` states aren't snapshotted. With `--selector`, the walk still covers the
+whole page.
+
 ## Text
 
 A line diff of each side's visible text (`document.body.innerText`, or the element's with a

@@ -56,6 +56,7 @@ describe("help and version", () => {
       "--right-storage-state",
       "--accept",
       "--rerun-failed",
+      "--computed",
     ]) {
       assert.ok(r.stdout.includes(flag), `--help does not mention ${flag}`);
     }

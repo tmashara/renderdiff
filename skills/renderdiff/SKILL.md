@@ -36,6 +36,9 @@ legitimate: [reference.md](reference.md).
 6. `dom` before crops. `sel prop l→r`: computed value, left first; find the *rule*.
    `+sel`/`-sel`: only left/right. `sel x+8`: moved; the cause is listed after it.
    Bare `sel`: its own pixels changed (image, canvas).
+   CSS refactor or dead-CSS removal: add `--computed`. Each `computed:` finding is
+   `key prop left→right`, collapsed across routes and widths. `dom identical` means the
+   cause is CSS or JS, not markup.
 7. `Read` the crops under each row (next to results.json) for what `dom` doesn't explain.
    Left is on top or left; red box = change, red seam = missing rows.
 8. Fix or justify every band, region and text line. After each migration step,
