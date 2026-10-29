@@ -119,7 +119,7 @@ Report (`--open`, for a human): green from 99.5%, amber to 97%, red below.
 | `HTTP 404 at …` (any ≥ 400) | That side answered an error: a route missing on one origin, or a server not ready. |
 | `not an HTML page: server sent … at …` | The route is a file (PDF, image, JSON, download), not a page. Drop it from the routes. Never retried. |
 | `page did not render on either side (…)` | Both sides under 200 chars of text and no visible image, SVG, canvas, video, iframe or form control. Usually a failed asset or an app that never mounted. One blank side isn't refused; it scores low. |
-| `page did not settle: Npx unstable at …` | Over 25% of the page kept changing. Mask or stop the moving part. |
+| `page did not settle: Npx unstable at …` | Over 25% of the page kept changing, on two loads. `<shot>.<side>.unsettled-a/-b.png` are the two differing frames, and the message gives the box they differ in. Mask or stop the moving part. |
 | `page is Npx tall at Wpx wide, past the …px sanity ceiling …` | Taller than 57,600,000px ÷ width (never under 40,000px): a runaway layout, not a page. |
 | `selector "…" matched N elements on left (/a), expected 1` | Make it unique (an id, `data-test`, `>> nth=0`), or list the route once per element. |
 | `selector "…" has no box on …` / `is off the page on …` | Matched an element not rendered (`display: none`, zero size) or outside the page. |
@@ -307,7 +307,7 @@ For scripts and drilling into one route; the loop doesn't need it. One result pe
 `grep '"url":"/about"'` pulls a route. Paths are relative to the out dir.
 
 - **Each result:** `url`, `left`, `right`, `selector` (`{ left, right }` or null), `hook`,
-  `width`, `status` (`compared` or `error` with `error`); `score`, `alignedScore`,
+  `width`, `status` (`compared`, or `error` with `error`, and `frames` when it did not settle); `score`, `alignedScore`,
   `diffPixels`, `totalPixels`, `unstablePixels`, `varies` and `variesPixels` (absent unless a
   recheck found some; regions with `elements`), `heightDelta`, `widthDelta`; `regions`
   (`x,y,w,h,pixels`, left-page px, `line` `{ y, h, side }`, `accepted` reason); `bands` (`side`,

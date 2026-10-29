@@ -47,6 +47,7 @@ const MAX_UNSTABLE_SHARE = 0.25;
 interface Job {
   route: Route;
   width: number;
+  retried?: boolean;
 }
 
 interface RunOpts {
@@ -98,13 +99,26 @@ function slugs(routes: Route[]): Map<string, string> {
   return out;
 }
 
+/** The smallest box holding every set pixel of a row-major `width`-wide mask. */
+function bbox(mask: Uint8Array, width: number) {
+  let [x0, y0, x1, y1] = [width, Infinity, -1, -1];
+  for (let i = 0; i < mask.length; i++) {
+    if (!mask[i]) continue;
+    const x = i % width,
+      y = Math.floor(i / width);
+    [x0, x1, y1] = [Math.min(x0, x), Math.max(x1, x), y];
+    if (y0 === Infinity) y0 = y;
+  }
+  return { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+}
+
 /** Only a directory holding nothing but files renderdiff writes is safe to wipe. */
 const ours = (f: string) =>
   f === "report.html" ||
   f === "evidence.html" ||
   f === "results.json" ||
   f === CACHE_DIR ||
-  /^[a-z0-9_~@-]+\.[\d.]+\.(left|right|diff|c\d+)\.png$/.test(f);
+  /^[a-z0-9_~@-]+\.[\d.]+\.((left|right)(\.unsettled-[ab])?|diff|c\d+)\.png$/.test(f);
 
 function wipeable(dir: string): boolean {
   if (!fs.existsSync(dir)) return true;
@@ -119,7 +133,9 @@ export const reusable = (r: RouteResult) =>
   ((r.diffPixels === 0 && r.unstablePixels === 0 && !broken(r)) || r.accepted);
 
 const files = (r: RouteResult) =>
-  r.status === "compared" ? [...Object.values(r.images), ...r.crops.map((c) => c.path)] : [];
+  r.status === "compared"
+    ? [...Object.values(r.images), ...r.crops.map((c) => c.path)]
+    : (r.frames ?? []);
 
 /** Everything that decides how a shot is taken, hook and `locate` sources included. */
 function configHash(cfg: ResolvedConfig, routes: Route[]): string {
@@ -302,6 +318,10 @@ export async function run({
       const tag = `${label(route)} @${width}`;
       // Its own line: parse.ts reads the route on the row as one \S+ token.
       const sel = route.selector ? `selector ${selectorText(route.selector)}` : "";
+      const base = `${stems.get(key)}.${width}`;
+      const write = (name: string, buf: Buffer) =>
+        fs.promises.writeFile(path.join(cfg.outDir, name), buf);
+      let frames: string[] | undefined;
       try {
         missed = 0;
         // allSettled, not all: a page must not start the next job while still loading this one.
@@ -329,7 +349,24 @@ export async function run({
 
         let { diffPng, spots, ...metrics } = await compare(leftShot, rightShot);
         if (unstablePixels > MAX_UNSTABLE_SHARE * metrics.totalPixels) {
-          throw new Error(`page did not settle: ${unstablePixels}px unstable at ${key}`);
+          if (!job.retried) {
+            queue.push({ ...job, retried: true });
+            continue;
+          }
+          const where = await Promise.all(
+            (["left", "right"] as const).map(async (side, s) => {
+              const shot = s ? rightShot : leftShot;
+              if (!shot.prev || !shot.unstable) return [];
+              const [a, b] = [`${base}.${side}.unsettled-a.png`, `${base}.${side}.unsettled-b.png`];
+              (frames ??= []).push(a, b);
+              await Promise.all([write(a, shot.prev), write(b, raw[s]!)]);
+              const { width: w } = await sharp(raw[s]!).metadata();
+              return [`${side}: ${a} vs -b differ within ${fmtRegion(bbox(shot.unstable, w))}`];
+            }),
+          );
+          throw new Error(
+            `page did not settle: ${unstablePixels}px unstable at ${key}, again on retry; ${where.flat().join("; ")}`,
+          );
         }
         let varies: Region[] = [];
         let variesPixels = 0;
@@ -392,14 +429,11 @@ export async function run({
         }
         const measured = metrics.totalPixels - unstablePixels - variesPixels;
         metrics.score = measured > 0 ? 1 - metrics.diffPixels / measured : 0;
-        const base = `${stems.get(key)}.${width}`;
         const images = {
           left: `${base}.left.png`,
           right: `${base}.right.png`,
           diff: `${base}.diff.png`,
         };
-        const write = (name: string, buf: Buffer) =>
-          fs.promises.writeFile(path.join(cfg.outDir, name), buf);
         // Both pages still hold this job's document: the next load waits for the loop.
         const [made, named] = await Promise.all([
           crops(leftShot.png, rightShot.png, spots),
@@ -496,6 +530,7 @@ export async function run({
           ...entry,
           status: "error",
           error: e instanceof Error ? e.message : String(e),
+          ...(frames && { frames }),
         });
         ++done;
         if (progress) {

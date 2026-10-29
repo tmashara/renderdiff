@@ -33,7 +33,7 @@ honestly. This is what renderdiff does to make sure of that.
   for tiled pages). Pixels still changing between the last two shots of the same load are
   noise from that origin: they're painted magenta on both sides, reported per comparison
   as `unstable`, and excluded from the measurement — the score is over the remaining
-  pixels. A route more than 25% unstable errors as `page did not settle`.
+  pixels. A route more than 25% unstable errors as `page did not settle` after one retry.
 - **Rechecks a differing shot** — reloads the right side once in a fresh context. The
   elements that differ between the two loads are `varies`: painted out on both sides like a
   mask, excluded from the score, and listed with the mask that would cover them. Off with

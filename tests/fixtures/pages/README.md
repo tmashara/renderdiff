@@ -19,7 +19,7 @@ Three groups:
   elements each change names (`margin`, `color`, `nav`), and a lost `::before` line and a
   re-parented pairing (`divider`).
 - **Guard rails** — `blank`, `tall`, `animated`, `lazy`, `lazy-deep`, `lazy-js`, `lazy-grow`, `consent`,
-  `drifting`, `tracker`, `clock`, `ticker`, `unsettled`, `sprite`, `short`, `tall-region`, `reorder`, `stripe`, `frameset`, `menu`, `signed-in`, `fixed`, `inserted`, `labelled`, `broken-asset`, `media`, `long`, `video`, `video-seek`, `hang`, `origin`, `cooperate`.
+  `drifting`, `tracker`, `clock`, `ticker`, `unsettled`, `unsettled-once`, `sprite`, `short`, `tall-region`, `reorder`, `stripe`, `frameset`, `menu`, `signed-in`, `fixed`, `inserted`, `labelled`, `broken-asset`, `media`, `long`, `video`, `video-seek`, `hang`, `origin`, `cooperate`.
   One per defence in `src/capture.ts` / `src/config.ts`.
 
 ## Authoring rules
@@ -59,8 +59,8 @@ Breaking any of these produces a flaky suite, and the flake looks like a renderd
    than 900px from fixed heights alone, as `inserted` does.
 9. **No animation** except in `animated`, which exists to prove `STILL_CSS` and the
    image-animation launch flag kill it, `ticker`, whose timer exists to be caught by the
-   stability check, and `unsettled`, which recolours the whole page to trip the
-   unstable-pixel cap.
+   stability check, `unsettled`, which recolours the whole page to trip the
+   unstable-pixel cap, and `unsettled-once`, which does so on its first render only.
 
 ## Adding a route
 
