@@ -107,6 +107,28 @@ function maskRects(els: Element[]) {
 }
 
 /**
+ * Runs in the page: once each light-DOM lottie-player loads (waited for up to 2s), stop it
+ * and seek it to `frame`. One that never loads is left alone.
+ */
+function freezeLottie(frame: number) {
+  type Player = Element & {
+    getLottie?(): { isLoaded?: boolean } | null | undefined;
+    stop(): void;
+    seek(f: number): void;
+  };
+  const tick = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  return Promise.all(
+    Array.from(document.querySelectorAll<Player>("lottie-player")).map(async (p) => {
+      for (let i = 0; i < 40 && !p.getLottie?.()?.isLoaded; i++) await tick(50);
+      if (!p.getLottie?.()?.isLoaded) return;
+      await tick(0); // lottie-web fires DOMLoaded, and with it autoplay's play(), a tick after isLoaded
+      p.stop();
+      p.seek(frame);
+    }),
+  );
+}
+
+/**
  * Chromium's screenshot backing store caps at this in any dimension; a single
  * `fullPage` or clip shot past it can come out truncated or wrapped. Rather than refuse, a
  * taller page or element is captured in vertical tiles of at most this height and stitched
@@ -305,6 +327,7 @@ export async function capture(
   if (cfg.freezeVideo) await page.evaluate(freezeVideo);
   const failed = [...new Set([...network.get(page)!.failed, ...fonts])];
   await page.addStyleTag({ content: cfg.neutralizeCss }); // anything injected late
+  if (cfg.lottieFrame !== undefined) await page.evaluate(freezeLottie, cfg.lottieFrame);
   await hook("beforeShot");
   step.set(page, "settle");
 
