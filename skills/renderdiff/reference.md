@@ -22,8 +22,10 @@ results.json · Gotchas.
   marketing one: `ln -s "$PWD/docs/dist" dist/docs`, redone after each rebuild (`rewrites`
   only remap paths inside the served dir). `redirects` and more: serve-handler's README.
 - **Routes** are literal (no globs, no discovery): every template or page the change can
-  reach, from the sitemap or router; skip search results, pagination and admin. For removed
-  CSS, every page where its selectors could match. Pages you don't list go under Not verified.
+  reach, from the sitemap or router; skip search results, pagination and admin. `--sitemap`
+  adds the right side's sitemap paths (files dropped); still list what it misses: the 404
+  page, states, moved pairs. For removed CSS, every page where its selectors could match.
+  Pages you don't list go under Not verified.
   Routes normalize to no trailing slash (`/` stays `/`). `--dry-run` shows how each was read.
 - **Baseline when the change is already made:** serve the base build twice, on two ports, and
   diff it against itself; whatever differs varies per load.

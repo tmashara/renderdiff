@@ -17,6 +17,7 @@ import type { Results } from "./report.ts";
 import {
   label,
   loadConfig,
+  normalize,
   parseRoutes,
   resolveConfig,
   selectorText,
@@ -43,6 +44,8 @@ interface Args extends CliOverrides {
   rerunFailed: boolean;
   cacheRight: boolean;
   recheck: boolean;
+  /** `true` for the right side's /sitemap.xml, else a URL or path read against right. */
+  sitemap?: string | true;
 }
 
 /** `Number(raw)`, but reject anything that isn't a finite number with a flag-named error. */
@@ -97,7 +100,10 @@ function parseArgs(argv: string[]): Args {
     else if (v === "--computed") a.computed = true;
     else if (v === "--mask-media") a.maskMedia = true;
     else if (v === "--no-freeze-video") a.freezeVideo = false;
-    else if (v === "--accept") {
+    else if (v === "--sitemap") {
+      if (inline === "") throw new Error("--sitemap= needs a URL or path");
+      a.sitemap = inline ?? true;
+    } else if (v === "--accept") {
       a.accept = next().trim();
       if (!a.accept) throw new Error("--accept needs a reason");
     } else if (v === "--left") a.left = next();
@@ -231,6 +237,8 @@ const HELP = `
                         varies per load. Off anyway under --cache-right.
     --computed          Also diff every element's computed style and ::before/::after,
                         and say whether the markup is identical. Pixels still decide.
+    --sitemap[=<url>]   Add the paths in the right side's sitemap (one index level, files
+                        dropped). Default <right>/sitemap.xml; give a URL or path with =.
     --dry-run           Print the URL pairs and exit. No browser.
     --open              Open the report when the run finishes.
     --progress          A line per shot as it finishes. The default on a terminal;
@@ -288,6 +296,56 @@ async function preflight(left: string, right: string) {
   console.error("  same assets as the other origin (a bare preview server that 404s images will");
   console.error("  collapse every page and diff as garbage).\n");
   process.exit(2);
+}
+
+const FILE =
+  /\.(pdf|xml|gz|zip|json|txt|csv|rss|atom|png|jpe?g|gif|svg|webp|avif|mp4|webm|mp3|docx?|xlsx?|pptx?)$/i;
+const ENTITY: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
+
+/** The `<loc>` paths of one sitemap, host dropped, and whether it is a sitemap index. */
+async function locs(url: URL): Promise<{ index: boolean; paths: string[] }> {
+  let res: Response;
+  try {
+    res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+  } catch (e) {
+    throw new Error(`sitemap: could not fetch ${url} (${e instanceof Error ? e.message : e})`);
+  }
+  if (res.status >= 400) throw new Error(`sitemap: HTTP ${res.status} at ${url}`);
+  const xml = await res.text();
+  if (!/<(urlset|sitemapindex)[\s>]/.test(xml)) throw new Error(`sitemap: ${url} is not a sitemap`);
+  const paths = [...xml.matchAll(/<loc>\s*(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?\s*<\/loc>/gs)].flatMap(
+    (m) => {
+      const loc = m[1]!.replace(/&(amp|lt|gt|quot|apos);/g, (_, e: string) => ENTITY[e]!);
+      if (!URL.canParse(loc, url)) return [];
+      // A local build's sitemap names the production host, so keep only the path.
+      const u = new URL(loc, url);
+      return [u.pathname + u.search];
+    },
+  );
+  return { index: /<sitemapindex[\s>]/.test(xml), paths };
+}
+
+/** Sitemap paths not already covered by `routes`, as routes; one level of index followed. */
+async function sitemapRoutes(spec: string | true, routes: Route[]): Promise<Route[]> {
+  const base = cfg.right + "/";
+  const url = new URL(spec === true ? "sitemap.xml" : spec, base);
+  const root = await locs(url);
+  const all = root.index
+    ? (await Promise.all(root.paths.map((p) => locs(new URL(p, base))))).flatMap((s) => s.paths)
+    : root.paths;
+  const unique = [...new Set(all.map(normalize))];
+  const pages = unique.filter((p) => !FILE.test(new URL(p, base).pathname));
+  const dropped = unique.length - pages.length;
+  if (!pages.length) throw new Error(`sitemap ${url} gave no routes`);
+  console.log(
+    `Sitemap: ${url}: ${pages.length} routes` + (dropped ? `, ${dropped} files dropped` : ""),
+  );
+  const covered = new Set(routes.flatMap((r) => [r.left, r.right]));
+  return parseRoutes(
+    pages.filter((p) => !covered.has(p)),
+    args.selector,
+    fileConfig.before,
+  );
 }
 
 /** `renderdiff report <out-dir>`: report.html and evidence.html from results.json, no browser. */
@@ -357,7 +415,7 @@ try {
 
 const rawRoutes = args.routes.length ? args.routes : (fileConfig.routes ?? []);
 
-if (!rawRoutes.length) {
+if (!rawRoutes.length && !args.sitemap) {
   die("no routes given.");
 }
 
@@ -369,6 +427,16 @@ try {
 }
 
 if (configPath) console.log(`Config: ${configPath}`);
+
+if (args.sitemap) {
+  try {
+    routes = [...routes, ...(await sitemapRoutes(args.sitemap, routes))];
+  } catch (e) {
+    console.error(`✗ ${e instanceof Error ? e.message : String(e)}`);
+    process.exit(2);
+  }
+}
+
 console.log(`Routes: ${routes.length}`);
 
 if (args.dryRun) {
