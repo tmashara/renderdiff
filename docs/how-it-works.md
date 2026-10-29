@@ -20,7 +20,8 @@ honestly. This is what renderdiff does to make sure of that.
   `prefers-reduced-motion` are fixed, and videos are kept from playing (each shows its poster) with video.js captions and control bars hidden (`--no-freeze-video` opts out). A clock that shows
   seconds can still tick between the two sides and may need a mask.
 - **Kills animation, transitions and caret blink**, and hides common consent banners and
-  dev toolbars.
+  dev toolbars. Animated images (GIF, WebP, APNG) and SVG animations show their first frame;
+  it is a Blink setting, so cross-origin and CSS background images freeze too.
 - **Settles the page** — makes native lazy images eager, scrolls every viewport-height
   slice a frame at a time, to the bottom even as the page grows, so script lazy loaders fire, waits for every image to decode,
   `document.fonts.ready` (at most 5s) and up to 3s for the network to go 250ms with nothing in flight

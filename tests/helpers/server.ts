@@ -33,6 +33,7 @@ const CONTENT_TYPES: Record<string, string> = {
   ".js": "text/javascript; charset=utf-8",
   ".svg": "image/svg+xml",
   ".png": "image/png",
+  ".gif": "image/gif",
   ".webm": "video/webm",
   ".html": "text/html; charset=utf-8",
   ".pdf": "application/pdf",

@@ -237,7 +237,7 @@ banner, your verdict, crops embedded) to attach to a ticket or publish as proof:
 - **Refuses to start** unless both origins answer: two error pages would score ~100%.
 - **Refuses a shot** with an HTTP status ≥ 400, or where both sides look blank.
 - **Blocks analytics, consent and A/B tooling** at the network layer, on both sides.
-- **Pins what varies between loads**: clock, `Math.random`, timezone, locale, colour scheme, reduced motion, video frames and video.js overlays.
+- **Pins what varies between loads**: clock, `Math.random`, timezone, locale, colour scheme, reduced motion, animated image frames, video frames and video.js overlays.
 - **Kills animation, transitions and caret blink**, and hides common consent banners and dev toolbars.
 - **Settles the page**: lazy images, fonts and network idle before the shot.
 - **Shoots until stable**, and excludes pixels still moving as `unstable`.

@@ -316,7 +316,8 @@ For scripts and drilling into one route; the loop doesn't need it. One result pe
 - **Browser:** if the bundled Chromium won't launch, the system Chrome is used on both sides
   and the run says so; otherwise it prints the `npx playwright install chromium` hint.
 - **Pinned on both sides:** clock (one instant per run, floored to the minute), seeded
-  `Math.random`, UTC, en-US, light scheme, reduced motion; animations and transitions stilled.
+  `Math.random`, UTC, en-US, light scheme, reduced motion; animations and transitions stilled,
+  animated images and SVG animations held on their first frame.
   A clock showing seconds can still tick between sides.
 - **Pixel sensitivity:** pixelmatch threshold 0.05, anti-aliasing ignored. A half-pixel shift
   (`translate(-50%)` landing on `.5`) shows as a thin region.
