@@ -36,6 +36,8 @@ interface BaseResult {
   /** A `before` or `beforeShot` hook ran on both sides before the shot, so the page was measured in its state. */
   hook: boolean;
   width: number;
+  /** With `renderdiff merge`: generatedAt of the run the shot came from; absent for the run in `meta`. */
+  from?: string;
 }
 
 /** A route that was captured on both sides and diffed. */
@@ -667,11 +669,15 @@ export async function writeEvidence(
       "shot(s) differ under threshold",
     ),
     ...count(meta.rerun?.reused ?? 0, "shot(s) reused by --rerun-failed"),
+    ...count(results.filter((r) => r.from).length, "shot(s) merged from a later run"),
     ...count(omitted, "crop(s) omitted (over the size budget or missing)"),
   ];
   const [cls, label] = compared.some((r) => fails(r, meta.threshold))
     ? ["bad", "Differs"]
-    : !results.length || meta.rerun?.reused || !results.every(reusable)
+    : !results.length ||
+        meta.rerun?.reused ||
+        results.some((r) => r.from) ||
+        !results.every(reusable)
       ? ["warn", "Not verified"]
       : ["good", "Parity"];
 

@@ -278,11 +278,26 @@ rewrites `report.html` from it, and writes `evidence.html` beside it: one file w
 outside references, so it can be attached to a ticket or published on its own. It opens with
 a banner: **Parity** (every shot clean or accepted, no errors), **Differs** (a shot that
 would exit 1), or **Not verified** (errors, unstable pixels, failed assets, diffs under
-`--threshold`, or a `--rerun-failed` run that reused shots). Then the `renderdiff:` line,
+`--threshold`, a `--rerun-failed` run that reused shots, or a merged run). Then the `renderdiff:` line,
 the verdict file as plain text, coverage (clean and accepted routes, errors, stale accepts),
 and a card per shot that isn't clean, then one per accepted shot, with crops embedded as
 WebP. Crops past 12MB, or missing from the out dir, are left out and the banner says so.
 Build it after a fresh full run.
+
+## merge
+
+`renderdiff merge <full-out> <partial-out> --out <dir>` writes a new out dir: the full run's
+results, each shot the partial run also took replaced by the partial run's (files included),
+and the partial run's other shots added after them. No browser. Each shot taken from the
+partial run gets `from`, that run's `generatedAt`. `meta` is the full run's, with `widths`,
+`masks`, `hideSelectors` and `blockUrlPatterns` the union of both, and `rightReplayedFrom`
+recomputed; the summary is recomputed against the full run's threshold. Each shot keeps the
+`accepted` flag its own run gave it: `renderdiff.accepted.json` is not reread. The shots
+were taken at different times, so `evidence.html` says Not verified; chain
+`renderdiff report <dir> --verdict …` for one. Exits 2 when the two runs compare different
+origins, `--out` is an input or holds files renderdiff didn't write, or two shots would
+write the same file (run both into one `--out` instead). A merged out dir can't be continued
+with `--rerun-failed`: rerun into a new `--out` and merge again.
 
 ## results.json
 
@@ -310,6 +325,7 @@ pulls a route), scores rounded down to four decimals (so a shot that differs nev
   "results": [
     {
       "url": "/about", "left": "/about", "right": "/about",   // a pair: "/a::/b", "/a", "/b"
+      "from": "…",               // renderdiff merge: generatedAt of the run this shot came from; absent otherwise
       "selector": null, "hook": false,                         // hook: a before or beforeShot hook ran
       "width": 1440, "status": "compared",
       "score": 0.9714,           // share of measured pixels that match

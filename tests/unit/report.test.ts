@@ -11,12 +11,13 @@ import {
   verdict,
   writeEvidence,
   writeReport,
+  writeResults,
   type ComparedResult,
   type Results,
   type RouteResult,
   type RunMeta,
 } from "../../src/report.ts";
-import { cleanupTempDirs, tempDir } from "../helpers/cli.ts";
+import { cleanupTempDirs, runCli, tempDir } from "../helpers/cli.ts";
 
 after(cleanupTempDirs);
 
@@ -252,5 +253,109 @@ describe("writeReport", () => {
   test("evidence.html carries no script or sidebar", async () => {
     const html = await evidence([differs("/a")]);
     assert.doesNotMatch(html, /<script|<nav|id="q"/);
+  });
+});
+
+describe("renderdiff merge", () => {
+  const imgs = (stem: string) => ({
+    left: `${stem}.left.png`,
+    right: `${stem}.right.png`,
+    diff: `${stem}.diff.png`,
+  });
+  const crop = (p: string) => ({ ...(differs("/") as ComparedResult).crops[0]!, path: p });
+  const files = (r: RouteResult) =>
+    r.status === "compared"
+      ? [...Object.values(r.images), ...r.crops.map((c) => c.path)]
+      : (r.frames ?? []);
+
+  function outDir(tag: string, results: RouteResult[], m: Partial<RunMeta> = {}) {
+    const d = path.join(tempDir(), "out");
+    fs.mkdirSync(d);
+    for (const r of results) for (const f of files(r)) fs.writeFileSync(path.join(d, f), tag);
+    writeResults(results, meta({ generatedAt: `${tag}-at`, widths: [1440, 375], ...m }), d, []);
+    return d;
+  }
+
+  const full = () =>
+    outDir("full", [
+      shot("/", {
+        score: 0.9,
+        diffPixels: 100,
+        images: imgs("index.1440"),
+        crops: [crop("index.1440.c1.png"), crop("index.1440.c2.png")],
+      }),
+      shot("/", { width: 375, images: imgs("index.375") }),
+      shot("/a", { images: imgs("a.1440") }),
+    ]);
+  const partial = (extra: RouteResult[] = [], m: Partial<RunMeta> = {}) =>
+    outDir(
+      "partial",
+      [
+        shot("/", { images: imgs("index.1440") }),
+        {
+          ...shot("/b"),
+          status: "error",
+          error: "unsettled",
+          frames: ["b.1440.left.unsettled-a.png", "b.1440.left.unsettled-b.png"],
+        } as RouteResult,
+        ...extra,
+      ],
+      { masks: [{ urlPath: "/", reason: "r" }], ...m },
+    );
+  const merge = (a: string, b: string, out: string) =>
+    runCli(["merge", a, b, "--out", out], { noOut: true });
+
+  test("replaces matching shots, adds the rest, and copies only what results.json references", async () => {
+    const [a, b] = [full(), partial()];
+    const out = path.join(tempDir(), "merged");
+    const r = await merge(a, b, out);
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(r.stdout, /merged 2 shot\(s\) .*\(1 replaced, 1 added\)/);
+    const got: Results = JSON.parse(fs.readFileSync(path.join(out, "results.json"), "utf8"));
+    assert.deepEqual(
+      got.results.map((x) => [x.url, x.width, x.from]),
+      [
+        ["/", 1440, "partial-at"],
+        ["/", 375, undefined],
+        ["/a", 1440, undefined],
+        ["/b", 1440, "partial-at"],
+      ],
+    );
+    assert.equal(got.summary.differing, 0);
+    assert.deepEqual(got.meta.masks, [{ urlPath: "/", reason: "r" }]);
+    assert.equal(got.meta.generatedAt, "full-at");
+    const read = (f: string) => fs.readFileSync(path.join(out, f), "utf8");
+    assert.equal(read("index.1440.left.png"), "partial");
+    assert.equal(read("index.375.left.png"), "full");
+    assert.equal(read("b.1440.left.unsettled-b.png"), "partial");
+    assert.equal(fs.existsSync(path.join(out, "index.1440.c2.png")), false);
+    assert.ok(fs.existsSync(path.join(out, "report.html")));
+    assert.equal(banner(read("evidence.html")), "Not verified");
+    assert.match(read("evidence.html"), /2 shot\(s\) merged from a later run/);
+    assert.equal((await merge(a, b, out)).code, 0);
+  });
+
+  test("refuses other origins, an input as --out, and a directory it didn't write", async () => {
+    const [a, b] = [full(), partial()];
+    const other = partial([], { right: "https://other.example" });
+    assert.match((await merge(a, other, path.join(tempDir(), "o"))).stderr, /✗ right differs/);
+    const self = await merge(a, b, a);
+    assert.equal(self.code, 2);
+    assert.match(self.stderr, /is an input/);
+    const foreign = tempDir();
+    fs.writeFileSync(path.join(foreign, "notes.txt"), "mine");
+    const r = await merge(a, b, foreign);
+    assert.equal(r.code, 2);
+    assert.match(r.stderr, /refusing to wipe/);
+    assert.equal(fs.readFileSync(path.join(foreign, "notes.txt"), "utf8"), "mine");
+  });
+
+  test("refuses two kept shots writing one file before touching --out", async () => {
+    const clash = shot("/A", { images: imgs("a.1440") });
+    const out = path.join(tempDir(), "o");
+    const r = await merge(full(), partial([clash]), out);
+    assert.equal(r.code, 2);
+    assert.match(r.stderr, /\/a@1440 and \/A@1440 both write a\.1440\.left\.png/);
+    assert.equal(fs.existsSync(out), false);
   });
 });
