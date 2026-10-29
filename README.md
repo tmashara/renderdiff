@@ -114,7 +114,7 @@ renderdiff <left-origin> <right-origin> <route…> [options]
 | `--rerun-failed` | Rerun only what the last run in `--out` didn't find clean or accepted, keeping the rest. |
 | `--cache-right` | Replay the right side's network traffic from the last `--cache-right` run in `--out`, when it's under an hour old and covers every shot; otherwise load it live and record it. Keeps `<out>/.cache/` when the out dir is wiped. See **Accepted differences and reruns**. |
 | `--no-recheck` | Don't reload a differing shot's right side to find content that varies per load. Off anyway under `--cache-right`. |
-| `--computed` | Also diff the computed style of every rendered element and its `::before`/`::after`, and say per route whether the markup is identical apart from asset hashes and origin. Pixels still decide the score and exit code. See [docs/output.md](docs/output.md#computed-styles---computed). |
+| `--computed` | Also diff the computed style of every rendered element and its `::before`/`::after`, and links' and controls' `:hover`/`:focus-visible`, and say per route whether the markup is identical apart from asset hashes and origin. Pixels still decide the score and exit code. See [docs/output.md](docs/output.md#computed-styles---computed). |
 | `--aria` | Also diff each route's ARIA snapshot (Playwright's accessibility tree) per width: left lines `+`, right `-`, asset hashes and origin normalized, masked elements left out. Pixels still decide. See [docs/output.md](docs/output.md#aria-snapshots---aria). |
 | `--sitemap[=<url>]` | Add the paths in the right side's sitemap. Default `<right>/sitemap.xml`; give another URL or path with `=`. |
 | `--dry-run` | Print the URL pairs and exit. No browser. |

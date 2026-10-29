@@ -30,7 +30,8 @@ results.json · Gotchas.
 - **Baseline when the change is already made:** serve the base build twice, on two ports, and
   diff it against itself; whatever differs varies per load.
 - **States:** only the loaded state is shot. Hover, focus, open menus and dialogs need a
-  `before` hook (§ Scoping); dead-CSS removal often breaks exactly those.
+  `before` hook (§ Scoping); dead-CSS removal often breaks exactly those. `--computed` diffs
+  links' and controls' hover and focus styles without shooting them.
 
 ## Output
 
@@ -168,7 +169,7 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
   `none`. An `auto` margin reads as `auto`, not the px it resolved to, which varies with
   layout.
 - A finding on a clean route is a change you can't see in this state: a hidden element
-  (closed menu), another breakpoint, `:hover`/`:focus` (not snapshotted). Decide it; a
+  (closed menu), another breakpoint, hover on non-interactive elements, open menus. Decide it; a
   `before` hook can open the state.
 - Fails per shot (reported, pixels stand) past 15s or 50,000 elements. Not walked: SVG
   internals, shadow DOM, iframes, masked and `display: none` subtrees.

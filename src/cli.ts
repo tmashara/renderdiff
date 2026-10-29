@@ -250,7 +250,8 @@ const HELP = `
     --no-recheck        Don't reload a differing shot's right side to find content that
                         varies per load. Off anyway under --cache-right.
     --computed          Also diff every element's computed style and ::before/::after,
-                        and say whether the markup is identical. Pixels still decide.
+                        and links' and controls' :hover/:focus-visible, and say whether
+                        the markup is identical. Pixels still decide.
     --aria              Also diff each page's accessibility tree (Playwright's ARIA
                         snapshot) line by line. Pixels still decide.
     --sitemap[=<url>]   Add the paths in the right side's sitemap (one index level, files

@@ -19,7 +19,7 @@ the § named at each step.
 
 | Change | Run |
 | --- | --- |
-| CSS only, markup untouched (refactor, dead-CSS removal, token swap) | pixels + `--computed`. Expect `dom identical` on every route: then each `computed:` finding is a real style change, even on a clean route. `dom differs`: often a wrapper's class changed, re-keying its subtree (§ `--computed`). Hover, focus and open menus aren't shot without a `before` hook, and dead-CSS removal breaks exactly those. |
+| CSS only, markup untouched (refactor, dead-CSS removal, token swap) | pixels + `--computed`. Expect `dom identical` on every route: then each `computed:` finding is a real style change, even on a clean route. `dom differs`: often a wrapper's class changed, re-keying its subtree (§ `--computed`). Hover menus and open menus aren't shot without a `before` hook, and dead-CSS removal breaks exactly those. |
 | Markup changes (framework, template or component migration) | pixels, plus `--aria`: `aria: identical` means a screen reader gets the same page. `--computed` findings would only be hints. |
 | Dependency or build upgrade | pixels, plus `--computed` if the markup should be identical. |
 | One component | pixels with `--selector <sel>` or `'/route @sel'`. |
@@ -71,8 +71,8 @@ unaccepted difference. § Exit codes.
 2. **What you saw**: per route and width, element and property ("/pricing @1440: `.cta`
    margin-left 24px→16px").
 3. **Not verified**: errors, unstable or failed-asset rows, skipped widths, masks, accepts,
-   hooks, unshot states (hover, open menus), unopened regions, unlisted pages, and the
-   reference (base build or production).
+   hooks, unshot states (hover on non-interactive elements, open menus, `:active`), unopened
+   regions, unlisted pages, and the reference (base build or production).
 4. **Call**: parity, regression, or expected change, and why.
 
 A score without looking is not a verdict: 99.6% can be a missing nav link.

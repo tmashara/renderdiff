@@ -10,7 +10,7 @@ import { CACHE_DIR, cacheFile, replayable, REPLAY_TTL, saveRecording, shotId } f
 import { cancelUnstable, capture, HookError, prepare, step, type Shot } from "./capture.ts";
 import { compare, crops, type Band, type Box, type Region } from "./compare.ts";
 import { diffAria, diffSnapshots, fmtAria, fmtComputed, pageError } from "./computed.ts";
-import { locate, snapshot, type ElementDiff } from "./locate.ts";
+import { locate, snapshotStates, type ElementDiff } from "./locate.ts";
 import {
   CONTEXT_OPTIONS,
   label,
@@ -465,7 +465,7 @@ export async function run({
         ]);
         named?.forEach((els, i) => (spots[i]!.target.elements = els));
         const snap = (page: Page, side: "left" | "right") =>
-          snapshot(
+          snapshotStates(
             page,
             masksFor(cfg, page, route),
             COMPUTED_TIMEOUT,
@@ -476,9 +476,11 @@ export async function run({
         const computed = cfg.computed
           ? await Promise.race([
               Promise.all([snap(pages.left, "left"), snap(pages.right, "right")]).then(
-                ([l, r]) => ({
-                  computed: diffSnapshots(l, r, [pages.left.url(), pages.right.url()]),
-                }),
+                ([l, r]) => {
+                  const d = diffSnapshots(l.snap, r.snap, [pages.left.url(), pages.right.url()]);
+                  const unchecked = Math.max(l.unchecked, r.unchecked);
+                  return { computed: unchecked ? { ...d, unchecked } : d };
+                },
                 (e: Error) => ({ computed: null, computedError: e.message }),
               ),
               sleep(COMPUTED_TIMEOUT + 5_000, null, { ref: false }).then(() => ({
