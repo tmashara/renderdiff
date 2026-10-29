@@ -448,7 +448,7 @@ export async function run({
           status: "compared",
           ...metrics,
           unstablePixels,
-          ...(varies.length ? { varies, variesPixels } : {}),
+          ...(variesPixels ? { varies, variesPixels } : {}),
           images,
           crops: cropped,
           accepted: false,
@@ -727,7 +727,9 @@ function fmtVaries(results: RouteResult[], routes: string[]): string[] {
   const rows = results.filter((r): r is ComparedResult => r.status === "compared" && !!r.varies);
   const selectors = (rs: ComparedResult[]) => [
     ...new Set(
-      rs.flatMap((r) => r.varies!.flatMap((g) => g.elements ?? []).map((e) => e.selector)),
+      rs.flatMap((r) =>
+        r.varies!.flatMap((g) => g.elements ?? []).map((e) => e.selector.replace(/::\w+$/, "")),
+      ),
     ),
   ];
   const out: string[] = [];
