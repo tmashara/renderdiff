@@ -19,6 +19,8 @@ export interface ElementDiff {
   text: string;
   /** The right side's selector, when it was found by its text under a different one. */
   rightSelector?: string;
+  /** Paired although its parent's or grandparent's tags differ, so the props may not be the cause. */
+  reparented?: true;
 }
 
 const MAX_SPOTS = 5;
@@ -76,6 +78,10 @@ interface Seen {
   text: string;
   box: Box;
   styles: string[];
+  /** Its grandparent's and parent's tags, e.g. `section>div`. */
+  up: string;
+  /** `::before` and `::after` when generated: their content, size, background and borders. */
+  pseudo: (Record<string, string> | null)[];
 }
 
 interface Hit extends Seen {
@@ -117,6 +123,11 @@ function probe({ boxes, find, masked, props, perSpot, walk, root }: ProbeArgs) {
   const unique = (s: string) => document.querySelectorAll(s).length === 1;
   const snippet = (e: Element) =>
     ((e as HTMLElement).innerText ?? e.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 40);
+  const generated = (e: Element, pseudo: string) => {
+    const ps = getComputedStyle(e, pseudo);
+    const c = ps.getPropertyValue("content");
+    return c !== "none" && c !== "normal" ? ps : null;
+  };
 
   /** Tag, a naming attribute and up to two classes that don't look generated. */
   const base = (e: Element, sorted: boolean) => {
@@ -186,6 +197,36 @@ function probe({ boxes, find, masked, props, perSpot, walk, root }: ProbeArgs) {
         h: Math.round(r.height),
       },
       styles: props.map((p) => cs.getPropertyValue(p)),
+      up: (() => {
+        const tags: string[] = [];
+        for (let n = e.parentElement; n && tags.length < 2; n = n.parentElement)
+          tags.unshift(n.localName);
+        return tags.join(">");
+      })(),
+      pseudo: ["::before", "::after"].map((p) => {
+        const ps = generated(e, p);
+        return (
+          ps &&
+          Object.fromEntries(
+            [
+              "content",
+              "width",
+              "height",
+              "background-color",
+              "background-image",
+              "border-top-width",
+              "border-top-color",
+              "border-bottom-width",
+              "border-bottom-color",
+              "box-shadow",
+            ].map((q) => [
+              q,
+              // A url() resolves against each side's origin.
+              ps.getPropertyValue(q).replaceAll(location.origin, ""),
+            ]),
+          )
+        );
+      }),
     };
   };
   const hit = (e: Element) => {
@@ -241,10 +282,8 @@ function probe({ boxes, find, masked, props, perSpot, walk, root }: ProbeArgs) {
       snap[key] = { html: html(e), styles: props.map((p) => cs.getPropertyValue(p)) };
       if (cs.display === "none") return;
       for (const pseudo of ["::before", "::after"]) {
-        const ps = getComputedStyle(e, pseudo);
-        const content = ps.getPropertyValue("content");
-        if (content !== "none" && content !== "normal")
-          snap[key + pseudo] = { html: "", styles: props.map((p) => ps.getPropertyValue(p)) };
+        const ps = generated(e, pseudo);
+        if (ps) snap[key + pseudo] = { html: "", styles: props.map((p) => ps.getPropertyValue(p)) };
       }
       // Indexed among every child, as :nth-of-type counts, so the key works with querySelector.
       const ofType = new Map<string, number>();
@@ -372,6 +411,32 @@ function element([l, r]: Pair, origins: Shot["origin"][]): ElementDiff {
   };
 }
 
+/** `sel::before` / `sel::after` where the pseudo-element exists on one side only, or differs. */
+function pseudos([l, r]: [Seen, Seen], origins: Shot["origin"][]): ElementDiff[] {
+  return ["::before", "::after"].flatMap((name, i) => {
+    const [p, q] = [l.pseudo[i], r.pseudo[i]];
+    if (!p && !q) return [];
+    const changed = Object.fromEntries(
+      p && q
+        ? Object.keys(p)
+            .filter((k) => p[k] !== q[k])
+            .map((k): [string, [string, string]] => [k, [p[k]!, q[k]!]])
+        : [],
+    );
+    if (p && q && !Object.keys(changed).length) return [];
+    const host = element([p ? l : null, q ? r : null], origins);
+    return [
+      {
+        ...host,
+        selector: host.selector + name,
+        changed,
+        text: "",
+        ...(host.rightSelector ? { rightSelector: host.rightSelector + name } : {}),
+      },
+    ];
+  });
+}
+
 /** Without text to compare, a selector naming both is only the same element if the box agrees. */
 const same = (a: Seen, b: Seen) =>
   !!(a.text || b.text) ||
@@ -482,7 +547,14 @@ export async function locate(
     const out: ElementDiff[] = [];
     for (const [a, b] of pairs.slice(0, PER_SPOT)) {
       const el = element([a, b], [shots[0].origin, shots[1].origin]);
+      if (a && b && a.up !== b.up) el.reparented = true;
       out.push(el);
+      if (a && b)
+        out.push(
+          ...pseudos([a, b], [shots[0].origin, shots[1].origin]).map((p) =>
+            el.reparented ? { ...p, reparented: el.reparented } : p,
+          ),
+        );
       // ponytail: one level of cause; a deeper cascade search if agents ask for it
       if (el.left && el.right && !Object.keys(el.changed).length && moved(el.left, el.right)) {
         for (const [p, q] of [

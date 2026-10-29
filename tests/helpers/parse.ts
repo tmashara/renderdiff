@@ -268,7 +268,7 @@ export interface ReportCard {
   /** Null when the card shows no aligned score. */
   alignedScore: number | null;
   /** The listed regions (the card caps the list), each with the elements line it shows, or null. */
-  regions: (Box & { pixels: number; dom: string | null })[];
+  regions: (Box & { pixels: number; line: string | null; dom: string | null })[];
   /** The listed bands: `+24px at y=196 (left)` and the elements line, or null. */
   bands: { text: string; dom: string | null }[];
   /** The text-diff lines listed on the card: left-only and right-only. */
@@ -349,7 +349,7 @@ export function parseReport(html: string): Report {
       alignedScore: aligned ? Number(aligned[1]) / 100 : null,
       regions: [
         ...card.matchAll(
-          /<li>(\d+)×(\d+) at \((\d+),(\d+)\) — ([\d,]+) px(?:<span class="dom"> — (.*?)<\/span>)?<\/li>/g,
+          /<li>(\d+)×(\d+) at \((\d+),(\d+)\) — ([\d,]+) px(?:, (line [^<]*))?(?:<span class="dom"> — (.*?)<\/span>)?<\/li>/g,
         ),
       ].map((m) => ({
         w: Number(m[1]),
@@ -357,7 +357,8 @@ export function parseReport(html: string): Report {
         x: Number(m[3]),
         y: Number(m[4]),
         pixels: num(m[5]!),
-        dom: m[6] ? unesc(m[6]) : null,
+        line: m[6] ?? null,
+        dom: m[7] ? unesc(m[7]) : null,
       })),
       bands: [
         ...card.matchAll(/<li>band ([^<]*)(?:<span class="dom"> — (.*?)<\/span>)?<\/li>/g),

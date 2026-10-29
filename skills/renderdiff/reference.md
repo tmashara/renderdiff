@@ -18,6 +18,9 @@ Left is your change, right is the reference: `+` is only/more on the left, `-` o
 | `unaligned` | The pages differ in height but share too few identical rows to align, so no bands. Either they are very different, the edits total more than 2,000 rows, or sub-threshold noise touches every row. Use the height delta and regions. |
 | `dom sel margin-left 24px→16px` | That element is on both sides and those computed values differ, left first. The value is a symptom: find the rule that sets it, and check it changed on purpose. |
 | `dom +sel "x"` / `dom -sel "x"` | That element exists only on the left (your change) / only on the right. |
+| `dom -sel::before` / `+sel::before` | That pseudo-element is generated only on the right / only on the left; `sel::before height 1px→2px` is one on both that differs. A lost divider often shows only here. |
+| `dom … (re-parented)` | Paired across a structure change (ancestor tags differ), so the listed properties may not be the cause. Open the crop. |
+| `line -1px@yN` | A 1–2px line across the page that only the right draws (`+`: only the left, no sign: both, differently). Small in pixels, large visually: a lost border or divider. Check `dom` for a `::before`/`::after`. |
 | `dom sel x+8` | It moved but no style of its own changed: the neighbour or parent listed after it is the cause; with none listed, look above it. |
 | `dom sel` (nothing after it) | On both sides, and no compared style changed and it didn't move: its own pixels did (an image's source, a canvas, an SVG). Open the crop. |
 | No `dom` line | Nothing was found under the change, a band whose rows hold nothing only one side has, past the first five bands and regions, or the probe timed out. Open the crop. |
@@ -51,8 +54,9 @@ Report colouring (`--open`, for a human): green above 99.5%, amber to 97%, red b
 ## results.json
 
 Scripts, and drilling into one route: every score, region (`x,y,w,h,pixels`, left-page
-px), band, their `elements` (`selector`, `side`, each side's box, `changed`, `text`, and
-`rightSelector` when the right was found under another selector; absent when not looked
+px, `line` `{ y, h, side }` when it is a thin line), band, their `elements` (`selector`, `side`, each side's box, `changed`, `text`, and
+`rightSelector` when the right was found under another selector, `reparented` when paired
+across a structure change; absent when not looked
 at, `[]` when nothing was named), full text diff, image path and crop (`kind`, each side's box with `h` 0 at an
 insertion point, `layout` `stacked` = left on top or `side` = left on the left, `scale`,
 `clipped`), `selector` (`{ left, right }` or null), with `--computed` a `computed` per result
