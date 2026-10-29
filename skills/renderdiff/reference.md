@@ -317,6 +317,16 @@ widths are unioned in `meta`; accepted flags stay as each run set them. `evidenc
 Not verified. Exits 2 on different origins, an `--out` that is or is inside an input or holds foreign
 files, or two shots writing one file. A merged out dir refuses `--rerun-failed`.
 
+## `probe`
+
+`renderdiff probe <url> [--width <n>] [--loads <n>]` loads one URL `--loads` times (default
+8, in parallel up to `--concurrency`), each in a fresh context with a cold cache, through the
+same capture as a run's left side (config masks, hooks, `--left-storage-state`). One line per
+varying element and property, `<key> <prop> <value> ×<loads>, ...`, most frequent first; `x`
+and `y` are its position in its parent, `present` means some loads lack it. First 20 shown.
+One width (the first default without `--width`), no `--selector`, no `--out`. Exits 0 stable,
+1 varies, 2 bad arguments or the origin down, 3 a load errored.
+
 ## results.json
 
 For scripts and drilling into one route; the loop doesn't need it. One result per line, so

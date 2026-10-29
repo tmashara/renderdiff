@@ -242,6 +242,12 @@ out dir with the shots a partial run also took (say, a few routes rerun under a 
 replaced by its, and its other shots added. Each merged shot carries `from`:
 [docs/output.md](https://github.com/tmashara/renderdiff/blob/main/docs/output.md#merge).
 
+`renderdiff probe <url> [--width <n>] [--loads <n>]` loads one URL 8 times (`--loads`), each
+in a fresh browser context as a run loads a side, and prints each element whose computed
+style or position in its parent varies between loads, with its values and how often each
+showed: what to mask when base against base differs with no `varies` line and nothing
+unstable. Exits 0 if nothing varies, 1 if something does, 3 if a load errored.
+
 ## Why a clean result is trustworthy
 
 - **Refuses to start** unless both origins answer: two error pages would score ~100%.

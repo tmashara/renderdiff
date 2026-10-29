@@ -90,7 +90,10 @@ export const pageError = (e: unknown) => {
  * With the snapshots, a box whose own size is set in px on either side is kept, and a
  * percentage height inside a px-height parent whose height changed is the one that follows.
  */
-export function collapseInherited(changes: StyleChange[], snaps: Snapshot[] = []): StyleChange[] {
+export function collapseInherited<C extends { key: string; prop: string; values: string[] }>(
+  changes: C[],
+  snaps: Snapshot[] = [],
+): C[] {
   const raw = new Set(changes.map((c) => `${c.key}\0${c.prop}\0${c.values.join("\0")}`));
   const wide = new Set(changes.filter((c) => c.prop === "width").map((c) => c.key));
   const tall = new Set(changes.filter((c) => c.prop === "height").map((c) => c.key));

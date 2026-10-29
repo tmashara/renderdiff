@@ -1392,3 +1392,21 @@ describe("shot deadline", () => {
     assert.equal(site.hits("/menu") - before, 2, `the hook was retried${context(run)}`);
   });
 });
+
+describe("probe", () => {
+  test("names the box whose height varies between loads, not its parent", async () => {
+    const before = site.hits("/bistable");
+    const args = ["probe", site.left + "/bistable", "--width", "1440", "--loads", "4"];
+    const run = await runCli(args, { noOut: true });
+    assert.equal(run.code, 1, context(run));
+    assert.ok(site.hits("/bistable") - before >= 4, context(run));
+    assert.match(run.stdout, /div\.player height (366|380)px ×\d+, (366|380)px ×\d+/, context(run));
+    assert.doesNotMatch(run.stdout, /div\.page height/, context(run));
+  });
+
+  test("a still page is stable", async () => {
+    const run = await runCli(["probe", site.left + "/", "--loads", "3"], { noOut: true });
+    assert.equal(run.code, 0, context(run));
+    assert.match(run.stdout, /stable over 3 loads/, context(run));
+  });
+});
