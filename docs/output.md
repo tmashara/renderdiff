@@ -213,10 +213,10 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
   wrapper with three descendants is `dom differs (8)`.
 - `unmatched` lists the outermost elements only one side has: `+` left, `-` right. The
   summary shows five routes, five each.
-- The HTML report shows the same block and puts `dom identical` / `dom differs (N)` on each
-  card. A snapshot that fails, takes over 15s or meets more than 50,000 elements is
-  reported as failed, with why (`computed: null`, `computedError`), and the pixel result
-  stands. Pixels still decide the score and the exit code.
+- The HTML report shows the same block, collapsed, and puts `dom identical` /
+  `dom differs (N)` on each card. A snapshot that fails, takes over 15s or meets more than
+  50,000 elements is reported as failed, with why (`computed: null`, `computedError`), and
+  the pixel result stands. Pixels still decide the score and the exit code.
 
 `:hover`/`:focus` states aren't snapshotted.
 
@@ -246,17 +246,30 @@ top (`stacked`, for wide changes) or on the left (`side`, for tall ones). A crop
 0.75×; a change too big for that keeps its top rows (or left columns) and is marked
 `clipped`. Height padding is never cropped.
 
+## report.html
+
+Written on every run, for browsing it; it loads the PNGs beside it. A sidebar lists every
+route, filterable by substring, with a link per width to that shot's card
+(`#{slug}.{width}`; an error links to the errors list). A width is green when the shot is
+identical or accepted, amber when it differs but doesn't fail (at or above `--threshold`),
+red when it fails or errored; a route takes its worst width's colour. Without a threshold
+any difference fails, so there is no amber. The summary on top counts routes, shots,
+differing shots, errors, accepted and stale accepted; gives the mean and the worst score,
+linked to its card; and lists only the differing shots, by route. With `--computed`, the
+style findings sit collapsed under it. Then a card per shot, lowest score first.
+
 ## evidence.html
 
-`renderdiff report <out-dir> [--verdict verdict.md] [--title "..."]` reads `results.json` and
-writes `evidence.html` beside it: one file with no outside references, so it can be attached
-to a ticket or published on its own. It opens with a banner: **Parity** (every shot clean or
-accepted, no errors), **Differs** (a shot that would exit 1), or **Not verified** (errors,
-unstable pixels, failed assets, diffs under `--threshold`, or a `--rerun-failed` run that
-reused shots). Then the `renderdiff:` line, the verdict file as plain text, coverage (clean
-and accepted routes, errors, stale accepts), and a card per shot that isn't clean, then one
-per accepted shot, with crops embedded as WebP. Crops past 12MB, or missing from the out dir,
-are left out and the banner says so. Build it after a fresh full run.
+`renderdiff report <out-dir> [--verdict verdict.md] [--title "..."]` reads `results.json`,
+rewrites `report.html` from it, and writes `evidence.html` beside it: one file with no
+outside references, so it can be attached to a ticket or published on its own. It opens with
+a banner: **Parity** (every shot clean or accepted, no errors), **Differs** (a shot that
+would exit 1), or **Not verified** (errors, unstable pixels, failed assets, diffs under
+`--threshold`, or a `--rerun-failed` run that reused shots). Then the `renderdiff:` line,
+the verdict file as plain text, coverage (clean and accepted routes, errors, stale accepts),
+and a card per shot that isn't clean, then one per accepted shot, with crops embedded as
+WebP. Crops past 12MB, or missing from the out dir, are left out and the banner says so.
+Build it after a fresh full run.
 
 ## results.json
 
