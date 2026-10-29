@@ -37,7 +37,7 @@ interface Args extends CliOverrides {
   version: boolean;
   config?: string;
   routes: string[];
-  /** From --selector / --left-selector / --right-selector; replaces every route's own. */
+  /** From --selector / --left-selector / --right-selector; replaces a config route object's own. */
   selector?: Sides;
   /** The reason to accept this run's differences with. */
   accept?: string;

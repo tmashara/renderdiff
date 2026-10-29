@@ -66,8 +66,9 @@ export const name = (r: Pick<Route, "left" | "right" | "selector">) =>
  * Specs -> normalized, deduplicated routes; throws on an empty side or a glob. A string is a
  * pair when it has a `::` followed by `/` (or ending it, so `/a::` is an empty side, not a
  * literal), which keeps `?q=std::vector` and `/wiki/Talk:Foo` single routes. Each side may end
- * in whitespace + `@sel` (the whitespace keeps `/@user` a path), which beats a CLI `selector`;
- * that replaces a config object's own; a route's own `before` (or `beforeShot`) replaces the top-level one.
+ * in whitespace + `@sel` (the whitespace keeps `/@user` a path), which beats a CLI `selector`,
+ * which beats a config object's own. A route's own `before` (or `beforeShot`) replaces the
+ * top-level one.
  */
 export function parseRoutes(
   specs: RouteSpec[],
