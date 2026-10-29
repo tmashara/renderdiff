@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Video seek guard rail</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for the seek after metadata. The poster is 16:10 and the clip 16:9, so the box is
+   400px tall while it shows the poster and 360px once a seek follows metadata. The left side
+   seeks after metadata, the right before it; frozen, both are seeked after metadata. */
+video { display: block; width: 640px; margin-top: var(--gap); }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Video seek guard rail</h1>
+<p class="lede">One video with a poster and no set height, so its box takes the aspect ratio of whatever it shows. The page rewinds it to the start, on one side before its metadata loads and on the other after.</p>
+<video id="v" muted poster="/shared/img/azure.svg" src="/shared/video/clip.webm"></video>
+<script>document.getElementById("v").currentTime = 0;</script>
+</div>
+</body>
+</html>

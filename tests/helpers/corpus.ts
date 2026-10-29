@@ -53,6 +53,7 @@ export const GUARDRAILS = [
   "media",
   "long",
   "video",
+  "video-seek",
   "hang",
   "origin",
   "cooperate",

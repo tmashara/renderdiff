@@ -266,7 +266,7 @@ export interface RenderdiffConfig {
   computed?: boolean;
   /** Mask every `iframe` on every route. */
   maskMedia?: boolean;
-  /** Keep every video from playing, so it shows its poster, and hide video.js overlays. Default true. */
+  /** Keep every video paused on frame 0 (its poster if it never loads) and hide video.js overlays. Default true. */
   freezeVideo?: boolean;
 }
 

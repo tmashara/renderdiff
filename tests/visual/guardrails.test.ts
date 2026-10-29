@@ -505,10 +505,17 @@ describe("selector masks", () => {
     ]);
   });
 
-  test("autoplaying, script-played and late videos keep their poster on both sides", async () => {
+  test("autoplaying, script-played and late videos stay on frame 0 on both sides", async () => {
     const run = await capture(["/video"]);
     assert.equal(run.code, 0, context(run));
     const r = result(results(run.outDir), "/video", 1440);
+    assert.deepEqual([r.diffPixels, r.unstablePixels], [0, 0], context(run));
+  });
+
+  test("a video seeked before its metadata on one side and after it on the other shows frame 0 on both", async () => {
+    const run = await capture(["/video-seek"]);
+    assert.equal(run.code, 0, context(run));
+    const r = result(results(run.outDir), "/video-seek", 1440);
     assert.deepEqual([r.diffPixels, r.unstablePixels], [0, 0], context(run));
   });
 
