@@ -47,6 +47,7 @@ accepted: /blog
     dom -nav > a[href="/pricing"] "Pricing"
     crops about.1440.c1.png
   @375  ERROR HTTP 404 at http://localhost:3001/about
+findings: …                       (a change seen on 2+ routes)
 computed: …                       (with --computed, see below)
 renderdiff: 1 of 3 routes differ (1 of 15 shots), 1 error, worst 97.41% /about@1440 — …/results.json
 ```
@@ -85,6 +86,7 @@ on stderr: `✗ 2 routes differ (10 shots).` (`below 97.00%` with `--threshold`)
 | `unstable 1,204px` | Pixels that kept changing between shots of the same load on one origin (ticker, carousel, video with `--no-freeze-video`). Painted out on both sides, excluded from the score; the route is never clean. Large: a big area went unmeasured, look at the magenta in the full shots. |
 | `1 accepted` | That many of the shot's bands and regions are accepted; the rest are new. `dom` names only the new. |
 | `text +"x" -"y"` | Lines of visible text only on the left (`+`) / right (`-`), added first. Up to three, then `(+N more)`. Masked elements are left out. |
+| `findings: N repeated on 2+ routes` | After the routes: each `dom` entry, text line or element-less `band -24px` seen on 2+ routes once, `×N routes  /a@1440,375 …`, most widespread first, accepted aside; top 20, all in `summary.findings`. One cause: fix it once. The same selector can be a different element per route: check one crop. |
 
 **`dom` entries** (left first, `;`-separated)
 
@@ -314,7 +316,8 @@ For scripts and drilling into one route; the loop doesn't need it. One result pe
   `computedError`.
 - **`summary`:** `compared`, `errors`, `mean` and `worst` (accepted shots aside),
   `belowThreshold`, `differing` (unaccepted shots with any differing pixel; without
-  `--threshold`, any exits 1), `accepted`, `stale`, and with `--computed` `computed` (each
+  `--threshold`, any exits 1), `accepted`, `stale`, `findings` (each `dom` entry, text line or element-less band on 2+ routes
+  once: `finding`, `selector?`, `at: [{ url, widths }]`), and with `--computed` `computed` (each
   change once with `at: [{ url, widths }]`).
 - **`meta`:** origins, widths, threshold, `clock`, block patterns, hidden selectors, mask
   reasons, `browser` (`chromium`, or `chrome` after a fallback), storage state file names,

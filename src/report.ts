@@ -2,7 +2,14 @@ import fs from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
 import type { Accepted } from "./accept.ts";
-import { fmtComputed, groupFindings, type ComputedDiff, type Finding } from "./computed.ts";
+import {
+  AT_ROUTES,
+  fmtComputed,
+  groupFindings,
+  SHOWN,
+  type ComputedDiff,
+  type Finding,
+} from "./computed.ts";
 import type { Band, Box, Region, TextDiff } from "./compare.ts";
 import { CONTEXT_OPTIONS, name, type Sides } from "./config.ts";
 import type { ElementDiff } from "./locate.ts";
@@ -137,8 +144,17 @@ export interface Summary {
   accepted: number;
   /** Accepted differences for a measured route and width that weren't seen: prune them. */
   stale: Accepted[];
+  /** Each pixel finding seen on two or more routes, once, with the routes and widths it was seen at. */
+  findings: PixelFinding[];
   /** With `--computed`: each style change once, with the routes and widths it was seen at. */
   computed?: Finding[];
+}
+
+/** An element change, text line or element-less band delta, as the summary prints it. */
+export interface PixelFinding {
+  finding: string;
+  selector?: string;
+  at: Finding["at"];
 }
 
 /** The shape of `results.json`, written to the out dir on every run. */
@@ -146,6 +162,55 @@ export interface Results {
   meta: RunMeta;
   results: RouteResult[];
   summary: Summary;
+}
+
+/** Unaccepted findings that repeat on two or more routes, most widespread first. */
+export function pixelFindings(results: RouteResult[]): PixelFinding[] {
+  const out = new Map<string, PixelFinding>();
+  for (const r of results) {
+    if (r.status !== "compared" || r.accepted) continue;
+    const tokens = new Map<string, string | undefined>();
+    for (const g of [...(r.bands ?? []), ...r.regions]) {
+      if (g.accepted) continue;
+      for (const e of g.elements ?? []) tokens.set(fmtElements([e]), e.selector);
+      if ("side" in g && !g.elements?.length)
+        tokens.set(`band ${g.side === "left" ? "+" : "-"}${g.h}px`, undefined);
+    }
+    for (const t of r.text.added) tokens.set(`+"${t}"`, undefined);
+    for (const t of r.text.removed) tokens.set(`-"${t}"`, undefined);
+    for (const [finding, selector] of tokens) {
+      const f = out.get(finding) ?? { finding, ...(selector ? { selector } : {}), at: [] };
+      out.set(finding, f);
+      const url = name(r);
+      const at = f.at.find((a) => a.url === url);
+      if (at) at.widths.push(r.width);
+      else f.at.push({ url, widths: [r.width] });
+    }
+  }
+  const shots = (f: PixelFinding) => f.at.reduce((n, a) => n + a.widths.length, 0);
+  return [...out.values()]
+    .filter((f) => f.at.length >= 2)
+    .sort(
+      (a, b) =>
+        b.at.length - a.at.length || shots(b) - shots(a) || a.finding.localeCompare(b.finding),
+    );
+}
+
+/** The console block: one line per repeated finding, then where it was seen. */
+export function fmtPixelFindings(results: RouteResult[]): string[] {
+  const findings = pixelFindings(results);
+  if (!findings.length) return [];
+  const out = [`findings: ${findings.length} repeated on 2+ routes`];
+  for (const f of findings.slice(0, SHOWN)) {
+    const at = f.at
+      .slice(0, AT_ROUTES)
+      .map((a) => `${a.url}@${a.widths.join(",")}`)
+      .join(" ");
+    const more = f.at.length > AT_ROUTES ? ` +${f.at.length - AT_ROUTES} routes` : "";
+    out.push(`  ${f.finding}  ×${f.at.length} routes  ${at}${more}`);
+  }
+  if (findings.length > SHOWN) out.push(`  (+${findings.length - SHOWN} more in results.json)`);
+  return out;
 }
 
 /** Sort ascending by score; surface the mean and the worst (lowest-scoring) row. */
@@ -197,6 +262,7 @@ export function writeResults(
       differing: open.filter((r) => r.diffPixels > 0).length,
       accepted: compared.filter((r) => r.accepted).length,
       stale,
+      findings: pixelFindings(results),
       ...(compared.some((r) => "computed" in r) ? { computed: groupFindings(results) } : {}),
     },
   };
@@ -261,6 +327,7 @@ function summary(results: RouteResult[], meta: RunMeta, stale: Accepted[]): stri
   const byRoute = Map.groupBy(stats(differing).sorted, name);
   const routes = [...new Set(results.map(name))];
   const computed = fmtComputed(results, routes);
+  const repeated = fmtPixelFindings(results);
   return `<section class="summary">
 <p class="counts">
   ${count(routes.length, "route(s)")}
@@ -288,6 +355,12 @@ ${
         )
         .join("\n")}</ul>`
     : `<p class="good">No differing shots.</p>`
+}
+${
+  repeated.length
+    ? `<details><summary>Findings: ${repeated[0]!.slice("findings: ".length)}</summary>
+<pre class="computed">${esc(repeated.slice(1).join("\n"))}</pre></details>`
+    : ""
 }
 ${
   computed.length

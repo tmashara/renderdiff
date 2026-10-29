@@ -58,6 +58,7 @@ the per-shot output when piped, `--no-progress` the summary on a terminal.
 | `dom sel` | On both sides and unchanged in style or position, so its own pixels changed (an image or canvas). |
 | `(re-parented)` | After a `dom` entry: paired across a structure change, so its properties may not be the cause. |
 | `1 accepted` | That many of the shot's changes are accepted; the rest are new. |
+| `findings: N repeated on 2+ routes` | After the routes: the same `dom` entry, text line or element-less band delta (`band -24px`) on two or more routes, once per line with `×N routes` and where (`/a@1440,375`, then `+N routes`), most widespread first, accepted ones aside. Top 20; `summary.findings` in results.json has them all. One cause behind many rows: fix it once. A selector names an element per page, so the same path may be a different element on another route: check one crop. |
 | `computed: N findings` | With `--computed`: each `key prop left→right` once, with the routes and widths it was seen at; `dom identical`: the markup matches apart from asset hashes and generated class names, so look at CSS or script. See [below](#computed-styles---computed). |
 | `crops …` | Up to 3 PNGs per comparison, bands first, relative to `results.json`. Left is on top or on the left, and the change is boxed in red. |
 | `ERROR …` | Unmeasured, which is neither a pass nor a fail. Exits 3. |
@@ -262,8 +263,8 @@ identical or accepted, amber when it differs but doesn't fail (at or above `--th
 red when it fails or errored; a route takes its worst width's colour. Without a threshold
 any difference fails, so there is no amber. The summary on top counts routes, shots,
 differing shots, errors, accepted and stale accepted; gives the mean and the worst score,
-linked to its card; and lists only the differing shots, by route. With `--computed`, the
-style findings sit collapsed under it. Then a card per shot, lowest score first.
+linked to its card; and lists only the differing shots, by route. Findings repeated on two
+or more routes, and with `--computed` the style findings, sit collapsed under it. Then a card per shot, lowest score first.
 
 ## evidence.html
 
@@ -341,6 +342,7 @@ pulls a route), scores rounded down to four decimals (so a shot that differs nev
     "differing": 1,               // shots with any differing pixel, accepted ones aside
     "accepted": 0,                // shots whose every difference was accepted
     "stale": [],                  // accepted entries the run measured but didn't see
+    "findings": [],               // { finding, selector?, at: [{ url, widths }] }, seen on 2+ routes
     "computed": []                // --computed: { key, prop, values: [left, right], at: [{ url, widths }] }
   }
 }

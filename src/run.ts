@@ -24,6 +24,7 @@ import {
 import { fmtBand, fmtElements, fmtFailed, fmtLine, fmtRegion, pct, signed } from "./format.ts";
 import {
   fails,
+  fmtPixelFindings,
   stats,
   writeReport,
   writeResults,
@@ -790,6 +791,8 @@ function summarize(
     for (const e of errors) console.log(`  ${name(e)}@${e.width}: ${e.error}`);
   }
 
+  const repeated = fmtPixelFindings(results);
+  if (repeated.length) console.log(`\n${repeated.join("\n")}`);
   const computed = fmtComputed(results, routes);
   if (computed.length) console.log(`\n${computed.join("\n")}`);
   const varies = fmtVaries(results, routes);
@@ -886,7 +889,11 @@ export function compact(
   }
   if (accepted.length) out.unshift(`accepted: ${accepted.join(" ")}`);
   if (clean.length) out.unshift(`clean: ${clean.join(" ")}`);
-  out.push(...fmtComputed(results, routes), ...fmtVaries(results, routes));
+  out.push(
+    ...fmtPixelFindings(results),
+    ...fmtComputed(results, routes),
+    ...fmtVaries(results, routes),
+  );
   const all = results.filter((r): r is ComparedResult => r.status === "compared");
   const compared = all.filter((r) => !r.accepted);
   const shots = compared.filter((r) => r.diffPixels > 0).length;

@@ -213,8 +213,8 @@ export function groupFindings(results: RouteResult[]): Finding[] {
 }
 
 /** Findings shown in the console summary; results.json has them all. */
-const SHOWN = 20;
-const AT_ROUTES = 3;
+export const SHOWN = 20;
+export const AT_ROUTES = 3;
 /** Unmatched routes, and keys per route, in the console summary. */
 const UNMATCHED_SHOWN = 5;
 
