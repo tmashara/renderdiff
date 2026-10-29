@@ -102,6 +102,8 @@ renderdiff <left-origin> <right-origin> <route…> [options]
 | `--config <path>` | Config file. Default: `renderdiff.config.{ts,mts,js,mjs}` in cwd. |
 | `--selector <sel>` | Compare the one element this Playwright selector matches, on both sides, instead of the whole page. Applies to every route, over the config's per-route `selector`. |
 | `--left-selector <sel>`, `--right-selector <sel>` | That side's selector, over `--selector`. One without the other side (or `--selector`) is an error. |
+| `--mask <sel>` | Paint this Playwright selector over on both sides, on every route; repeatable. Added to the config's masks and listed in the report as coverage given up. |
+| `--mask-media` | Mask every `iframe`, `video` and `.vjs-text-track-display` (video.js text tracks) on every route, as config `maskMedia: true` does. |
 | `--storage-state <file>` | Start both sides with this Playwright storage state (cookies, localStorage), e.g. signed in. Relative to cwd. Over the config's `storageState`. |
 | `--left-storage-state <file>`, `--right-storage-state <file>` | That side's storage state, over `--storage-state`. One side alone is fine. |
 | `--accept <reason>` | Record this run's differences as accepted, with a reason. See **Accepted differences and reruns**. |
@@ -149,7 +151,7 @@ screenshots and text) out of git too. Details: [docs/scoping.md](https://github.
 ## Config file
 
 Flags cover a one-off run. A `renderdiff.config.{ts,mts,js,mjs}` in the working directory
-covers a repo you diff repeatedly, and expresses what flags can't: **masks** for content
+covers a repo you diff repeatedly, and expresses what flags can't: **per-route masks** for content
 that legitimately drifts, extra selectors to hide, extra URLs to block, `before` hooks.
 
 ```ts

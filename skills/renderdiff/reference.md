@@ -85,7 +85,9 @@ export default {
 
 A mask takes exactly one of `selector` or `locate: (page) => Locator`; without `urlPath` it
 applies to every route, and on a pair it matches either side's path and paints both. A plain
-`export default {}` needs no import; a type import from "renderdiff" is for editor types only. [`renderdiff.config.example.ts`](https://github.com/tmashara/renderdiff/blob/main/renderdiff.config.example.ts)
+`export default {}` needs no import; a type import from "renderdiff" is for editor types only. Without a config, `--mask <sel>` (repeatable) adds a mask on every
+route, after the config's; `--mask-media` (config `maskMedia: true`) adds one for
+`iframe, video, .vjs-text-track-display`. Both are listed in the report like any mask. [`renderdiff.config.example.ts`](https://github.com/tmashara/renderdiff/blob/main/renderdiff.config.example.ts)
 annotates every field.
 
 Two rules for `hideSelectors`: match the element **exactly** (consent scripts also stamp

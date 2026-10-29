@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layout parity</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for --mask-media. Each embed differs per side; --mask-media must paint them all. */
+iframe, video, .player { display: block; width: 640px; height: 360px; border: 0; margin-top: var(--gap); }
+video { background: #d4e4ff; }
+.player { position: relative; background: var(--fill); }
+.vjs-text-track-display { position: absolute; inset: auto 0 16px; text-align: center; font: 24px/32px sans-serif; padding: 8px; }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Media guard rail</h1>
+<p class="lede">An iframe, a video and a video.js text track, each different on the two sides. Every one of them is third-party or per-load content on a real site, which is why the preset exists.</p>
+<iframe srcdoc="&lt;body style='margin:0;background:#d4e4ff'&gt;&lt;/body&gt;"></iframe>
+<video></video>
+<div class="player"><div class="vjs-text-track-display">First caption</div></div>
+</div>
+</body>
+</html>

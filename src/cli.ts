@@ -89,6 +89,7 @@ function parseArgs(argv: string[]): Args {
     else if (v === "--no-progress") a.progress = false;
     else if (v === "--rerun-failed") a.rerunFailed = true;
     else if (v === "--cache-right") a.cacheRight = true;
+    else if (v === "--mask-media") a.maskMedia = true;
     else if (v === "--accept") {
       a.accept = next().trim();
       if (!a.accept) throw new Error("--accept needs a reason");
@@ -96,7 +97,11 @@ function parseArgs(argv: string[]): Args {
     else if (v === "--right") a.right = next();
     else if (v === "--out") a.outDir = next();
     else if (v === "--config") a.config = next();
-    else if (v === "--selector" || v === "--left-selector" || v === "--right-selector") {
+    else if (v === "--mask") {
+      const s = next();
+      if (!s) throw new Error("--mask needs a value");
+      (a.masks ??= []).push(s);
+    } else if (v === "--selector" || v === "--left-selector" || v === "--right-selector") {
       const s = next();
       if (!s) throw new Error(`${v} needs a value`);
       sel[v === "--selector" ? "both" : v === "--left-selector" ? "left" : "right"] = s;
@@ -195,6 +200,8 @@ const HELP = `
     --selector <sel>    Compare one element (a Playwright selector) on both sides.
     --left-selector <sel>, --right-selector <sel>
                         That side's selector, over --selector.
+    --mask <sel>        Paint this selector over on both sides, every route; repeatable.
+    --mask-media        Mask iframe, video and .vjs-text-track-display on every route.
     --storage-state <file>
                         Start both sides with this storage state JSON. Never commit it.
     --left-storage-state <file>, --right-storage-state <file>
@@ -215,7 +222,7 @@ const HELP = `
 
   Default widths: 1440, 1152, 896, 704, 375
 
-  Masks, hidden selectors, blocked URLs and route lists go in a config file; CLI flags
+  Per-route masks, hidden selectors, blocked URLs and route lists go in a config file; CLI flags
   win over it. See https://github.com/tmashara/renderdiff#readme
 `;
 

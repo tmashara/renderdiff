@@ -225,6 +225,12 @@ export type Mask = {
   | { /** The escape hatch for what a selector can't say. */ locate: (page: Page) => Locator }
 );
 
+/** The `maskMedia` / `--mask-media` preset: embeds and players that differ per load. */
+export const MEDIA_MASK: Mask = {
+  selector: "iframe, video, .vjs-text-track-display",
+  reason: "iframes, video and video.js text tracks (--mask-media)",
+};
+
 /** The shape a `renderdiff.config.*` file default-exports. Every field is optional. */
 export interface RenderdiffConfig {
   /** Left origin, e.g. `http://localhost:3000`. A trailing slash is stripped. */
@@ -256,6 +262,8 @@ export interface RenderdiffConfig {
   extraCss?: string;
   /** Per-route regions painted over on both sides. */
   masks?: Mask[];
+  /** Mask every `iframe`, `video` and video.js text track on every route. */
+  maskMedia?: boolean;
 }
 
 /** A fully merged config. Everything the run needs, nothing optional. */
@@ -469,6 +477,7 @@ function validate(c: Record<string, unknown>, file: string) {
       }
     });
   }
+  if (c.maskMedia !== undefined && typeof c.maskMedia !== "boolean") bad("maskMedia", "a boolean");
 }
 
 /** CLI-supplied values. `undefined` means "not passed", so the config file wins. */
@@ -481,6 +490,9 @@ export interface CliOverrides {
   concurrency?: number;
   /** Per side, from --storage-state / --left-storage-state / --right-storage-state. */
   storageState?: { left?: string; right?: string };
+  /** From --mask, appended to the config's masks. */
+  masks?: string[];
+  maskMedia?: boolean;
 }
 
 /** Merge built-in defaults, the config file, and CLI flags into one resolved config. */
@@ -517,9 +529,13 @@ export function resolveConfig(file: RenderdiffConfig, cli: CliOverrides): Resolv
     hideSelectors,
     neutralizeCss:
       STILL_CSS + `${hideSelectors.join(",")}{display:none!important}\n` + (file.extraCss ?? ""),
-    masks: (file.masks ?? []).map((m) =>
-      m.urlPath === undefined ? m : { ...m, urlPath: normalize(m.urlPath) },
-    ),
+    masks: [
+      ...(file.masks ?? []).map((m) =>
+        m.urlPath === undefined ? m : { ...m, urlPath: normalize(m.urlPath) },
+      ),
+      ...(cli.masks ?? []).map((selector) => ({ selector, reason: `${selector} (--mask)` })),
+      ...(cli.maskMedia || file.maskMedia ? [MEDIA_MASK] : []),
+    ],
     storageState: {
       left: storageFile(cli.storageState?.left ?? fileState?.left),
       right: storageFile(cli.storageState?.right ?? fileState?.right),

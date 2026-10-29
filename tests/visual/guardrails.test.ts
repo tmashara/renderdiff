@@ -60,7 +60,7 @@ after(async () => {
 /** One CLI run against the fixture site. */
 const capture = (
   routes: string[],
-  opts: { widths?: number[]; config?: string; selector?: string } = {},
+  opts: { widths?: number[]; config?: string; selector?: string; extra?: string[] } = {},
 ) =>
   runCli([
     ...renderdiffArgs({
@@ -72,6 +72,7 @@ const capture = (
       config: opts.config,
     }),
     ...(opts.selector ? ["--selector", opts.selector] : []),
+    ...(opts.extra ?? []),
   ]);
 
 /** The report card for a route, with the run's context attached to any failure. */
@@ -398,6 +399,32 @@ describe("selector masks", () => {
     const r = result(results(run.outDir), "/drifting", 1440);
     assert.equal(r.diffPixels, 0, `the selector mask did not cover the value${context(run)}`);
     assert.deepEqual([r.text.added, r.text.removed], [[], []], context(run));
+  });
+
+  test("--mask masks a selector on every route, without a config", async () => {
+    const run = await capture(["/drifting"], { extra: ["--mask", "[data-drift]"] });
+    assert.equal(run.code, 0, context(run));
+    assert.equal(result(results(run.outDir), "/drifting", 1440).diffPixels, 0, context(run));
+    assert.deepEqual(parseReport(run.report()!).maskReasons, ["[data-drift] (--mask)"]);
+  });
+
+  test("--mask adds to the config's masks", async () => {
+    const run = await capture(["/drifting"], {
+      config: path.join(CONFIGS, "mask-selector.mjs"),
+      extra: ["--mask", "iframe"],
+    });
+    assert.deepEqual(parseReport(run.report()!).maskReasons, [
+      "render counter, by selector",
+      "iframe (--mask)",
+    ]);
+  });
+
+  test("--mask-media paints iframes, video and video.js text tracks", async () => {
+    const bare = await capture(["/media"]);
+    assert.ok(result(results(bare.outDir), "/media", 1440).diffPixels > 0, context(bare));
+    const run = await capture(["/media"], { extra: ["--mask-media"] });
+    assert.equal(run.code, 0, context(run));
+    assert.equal(result(results(run.outDir), "/media", 1440).diffPixels, 0, context(run));
   });
 });
 
