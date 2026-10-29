@@ -100,12 +100,14 @@ interface ProbeArgs {
   masked: Node[];
   props: string[];
   perSpot: number;
-  /** Snapshot every rendered element's `props` instead of picking, giving up after this many ms. */
+  /** Snapshot every element's `props` instead of picking, giving up after this many ms. */
   walk?: number;
+  /** Where the walk starts, keyed `:scope`; the body, keyed `body`, when null. */
+  root?: Node | null;
 }
 
 /** Runs in the page. At scroll 0 a client rect is page px, below the fold too. */
-function probe({ boxes, find, masked, props, perSpot, walk }: ProbeArgs) {
+function probe({ boxes, find, masked, props, perSpot, walk, root }: ProbeArgs) {
   const MAX_SCAN = 50_000;
   const HASHED = /\d{3,}|^(css|sc|jsx|svelte)-|__[\w-]{5,}$|^_/;
   const TEST = ["data-testid", "data-test", "data-test-id", "data-cy", "data-qa"];
@@ -116,7 +118,8 @@ function probe({ boxes, find, masked, props, perSpot, walk }: ProbeArgs) {
   const snippet = (e: Element) =>
     ((e as HTMLElement).innerText ?? e.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 40);
 
-  const part = (e: Element) => {
+  /** Tag, a naming attribute and up to two classes that don't look generated. */
+  const base = (e: Element, sorted: boolean) => {
     const tag = e.localName;
     let s = CSS.escape(tag);
     const href = e.getAttribute("href");
@@ -132,12 +135,20 @@ function probe({ boxes, find, masked, props, perSpot, walk }: ProbeArgs) {
       }
     }
     // ponytail: hashed-class heuristic, attributes and nth-of-type are the fallback
-    s += Array.from(e.classList)
-      .filter((c) => !HASHED.test(c))
-      .sort()
-      .slice(0, 2)
-      .map((c) => `.${CSS.escape(c)}`)
-      .join("");
+    const classes = Array.from(e.classList).filter((c) => !HASHED.test(c));
+    if (sorted) classes.sort();
+    return (
+      s +
+      classes
+        .slice(0, 2)
+        .map((c) => `.${CSS.escape(c)}`)
+        .join("")
+    );
+  };
+
+  const part = (e: Element) => {
+    const tag = e.localName;
+    let s = base(e, false);
     const siblings = e.parentElement ? Array.from(e.parentElement.children) : [];
     if (siblings.some((c) => c !== e && c.matches(s))) {
       s += `:nth-of-type(${siblings.filter((c) => c.localName === tag).indexOf(e) + 1})`;
@@ -201,20 +212,11 @@ function probe({ boxes, find, masked, props, perSpot, walk }: ProbeArgs) {
       }
     }
     const snap: Record<string, { html: string; styles: string[] }> = {};
+    const SKIP = new Set(["script", "style", "link", "meta", "template", "noscript"]);
     let n = 0;
     const end = performance.now() + walk;
-    const visit = (e: Element, parent: string) => {
-      if (n++ >= MAX_SCAN) throw new Error(`more than ${MAX_SCAN} elements`);
-      if (performance.now() > end) throw new Error(`walk took over ${walk}ms`);
-      if (hidden.has(e) || (e as SVGElement).ownerSVGElement) return;
-      const cs = getComputedStyle(e);
-      if (cs.display === "none") return;
-      const seg =
-        e.id && !HASHED.test(e.id) ? `${CSS.escape(e.localName)}#${CSS.escape(e.id)}` : part(e);
-      const key = parent ? `${parent} > ${seg}` : seg;
-      // ponytail: first wins on a key collision; a sibling index if real pages collide
-      if (snap[key]) return;
-      // Generated class names change with the CSS, so they aren't markup changes.
+    // Generated class names change with the CSS, so they aren't markup changes.
+    const html = (e: Element) => {
       const attrs = Array.from(e.attributes, (a) => {
         const v =
           a.name === "class"
@@ -229,19 +231,45 @@ function probe({ boxes, find, masked, props, perSpot, walk }: ProbeArgs) {
         .join("")
         .replace(/\s+/g, " ")
         .trim();
-      snap[key] = {
-        html: `<${e.localName}${attrs}>${text}`,
-        styles: props.map((p) => cs.getPropertyValue(p)),
-      };
+      return `<${e.localName}${attrs}>${text}`;
+    };
+    // A display:none element is kept, so a rule that hid it is a style change; its subtree isn't.
+    const visit = (e: Element, key: string) => {
+      if (++n > MAX_SCAN) throw new Error(`more than ${MAX_SCAN} elements`);
+      if (performance.now() > end) throw new Error(`took over ${walk}ms`);
+      const cs = getComputedStyle(e);
+      snap[key] = { html: html(e), styles: props.map((p) => cs.getPropertyValue(p)) };
+      if (cs.display === "none") return;
       for (const pseudo of ["::before", "::after"]) {
         const ps = getComputedStyle(e, pseudo);
         const content = ps.getPropertyValue("content");
         if (content !== "none" && content !== "normal")
           snap[key + pseudo] = { html: "", styles: props.map((p) => ps.getPropertyValue(p)) };
       }
-      for (const c of Array.from(e.children)) visit(c, key);
+      // Indexed among every child, as :nth-of-type counts, so the key works with querySelector.
+      const ofType = new Map<string, number>();
+      const kids = Array.from(e.children, (c) => {
+        const k = (ofType.get(c.localName) ?? 0) + 1;
+        ofType.set(c.localName, k);
+        return { c, k };
+      }).filter(
+        ({ c }) => !hidden.has(c) && !SKIP.has(c.localName) && !(c as SVGElement).ownerSVGElement,
+      );
+      // The id, or the tag with a naming attribute and classes; with the index where siblings share it.
+      const segs = kids.map(({ c }) =>
+        c.id && !HASHED.test(c.id)
+          ? `${CSS.escape(c.localName)}#${CSS.escape(c.id)}`
+          : base(c, true),
+      );
+      const count = new Map<string, number>();
+      for (const g of segs) count.set(g, (count.get(g) ?? 0) + 1);
+      kids.forEach(({ c, k }, i) => {
+        const g = segs[i]!;
+        visit(c, `${key} > ${count.get(g)! > 1 ? `${g}:nth-of-type(${k})` : g}`);
+      });
     };
-    if (document.body) visit(document.body, "");
+    const start = (root as Element | null) ?? document.body;
+    if (start) visit(start, root ? ":scope" : "body");
     return { picks: [], found: [], snap };
   }
   const els = document.body?.querySelectorAll("*") ?? [];
@@ -359,8 +387,14 @@ const handles = async (ls: Locator[]) =>
  * generated, keyed by a selector path; masked and `display: none` subtrees are skipped.
  * Finishes the page's animations, so it runs after `locate`.
  */
-export async function snapshot(page: Page, masks: Locator[], budget: number): Promise<Snapshot> {
+export async function snapshot(
+  page: Page,
+  masks: Locator[],
+  budget: number,
+  root: Locator | null,
+): Promise<Snapshot> {
   const { snap } = await page.evaluate(probe, {
+    root: root && (await root.elementHandle()),
     boxes: [],
     find: [],
     masked: await handles(masks),

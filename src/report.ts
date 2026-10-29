@@ -48,8 +48,9 @@ export interface ComparedResult extends BaseResult {
   failed: { left: string[]; right: string[] };
   /** With `--cache-right`: when the recording the right side was replayed from was made, ISO. */
   rightReplayedFrom?: string;
-  /** With `--computed`: the computed-style diff; null when the snapshot failed or timed out. */
+  /** With `--computed`: the computed-style diff; null when the snapshot failed, with `computedError` saying why. */
   computed?: ComputedDiff | null;
+  computedError?: string;
 }
 
 /** A crop of one change: left and right panels, a 1px red box round it, or a 2px red seam. */

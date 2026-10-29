@@ -124,8 +124,9 @@ DOM and iframes aren't searched.
 
 With `--computed`, after the shot renderdiff reads the computed style of every rendered
 element on both sides: the properties `dom` compares, plus `content`, and `::before` and
-`::after` wherever they generate content. Masked and `display: none` subtrees are skipped,
-and script-driven animations are finished first. The summary gets one block, after the rows:
+`::after` wherever they generate content. Masked subtrees and `script`/`style`-like tags
+are skipped; a `display: none` element is read, its subtree isn't. Script-driven
+animations are finished first. The summary gets one block, after the rows:
 
 ```
 computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so findings there are hints
@@ -136,11 +137,14 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
 
 - Each finding is `key property left→right`, left first like `dom`, followed by every
   route and width it was seen at. The same change on 300 pages is one line, most widespread
-  first. The summary shows 20; `summary.computed` in results.json has them all, and each
-  result's `computed.changes` has its own, up to 500.
-- The key is a selector path from `body`. Each step is the tag, then the id or up to two
-  classes that don't look generated (sorted), then `:nth-of-type` only where siblings would
-  otherwise share it. The key works with `querySelector`.
+  first, accepted shots included. The summary shows 20; `summary.computed` in results.json
+  has them all. Each result's `computed.changes` keeps its first 500, and `truncated`
+  counts the rest (the summary says where).
+- The key is a selector path from `body`, or from `:scope` with `--selector`, where only
+  the selected element's subtree is walked. Each step is the id, or the tag with a naming
+  attribute and up to two classes that don't look generated (sorted). `:nth-of-type` is
+  added only where siblings would otherwise share the step, a duplicated id included. The
+  key works with `querySelector`.
   - Elements are matched by key, not by position, so a cookie banner injected on one side
     doesn't misalign everything after it.
   - An inserted sibling of the same tag and classes still shifts the `:nth-of-type` of the
@@ -148,8 +152,11 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
   - A class renamed on an ancestor unmatches its whole subtree.
 - One change high in the tree is one finding. An inherited property (`font-*`,
   `line-height`, `letter-spacing`, `text-*`, `white-space`, `color`, `visibility`) is
-  dropped where the parent has the same change, and `width`/`height` where the parent
-  resized too. So a `body` font change is one line, not one per element.
+  dropped where the parent has the same change, so a `body` font change is one line, not
+  one per element. A `width` is dropped inside a parent whose width changed, and a
+  `height` around a child whose height changed, so the box that caused it is what's left.
+- An element shown on one side and `display: none` on the other is one `display` finding;
+  its subtree counts neither as unmatched nor against `dom identical`.
 - A `::before`/`::after` that only one side generates shows as `content` against `none`.
   That is how a removed rule that drew an icon shows up.
 - `dom identical` means that on every width, each walked element's tag, attributes and own
@@ -158,18 +165,18 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
     so are generated class names (`css-1q2w3e`, `Button_root__a1b2c`).
   - A pixel difference on such a route comes from CSS or script, not from walked markup.
     SVG internals, shadow DOM, iframes and `display: none` subtrees aren't walked.
+  - Hash-shaped tokens only: 8 or more letters and digits that alternate, between
+    separators in a file name. `team_photo_2024.jpg` and `/p/abcdef123456` count as changes.
 - `dom differs (N)` counts the elements that differ or that one side lacks. Treat that
   route's findings as hints.
 - `unmatched` lists the outermost elements only one side has: `+` left, `-` right. The
   summary shows five routes, five each.
 - The HTML report shows the same block and puts `dom identical` / `dom differs (N)` on each
-  card. Accepted shots are left out of the findings. A snapshot that fails, takes over 15s
-  or meets more than 50,000 elements is reported as failed (`computed: null`), and the
-  pixel result stands. Pixels still
-  decide the score and the exit code.
+  card. A snapshot that fails, takes over 15s or meets more than 50,000 elements is
+  reported as failed, with why (`computed: null`, `computedError`), and the pixel result
+  stands. Pixels still decide the score and the exit code.
 
-`:hover`/`:focus` states aren't snapshotted. With `--selector`, the walk still covers the
-whole page.
+`:hover`/`:focus` states aren't snapshotted.
 
 ## Text
 

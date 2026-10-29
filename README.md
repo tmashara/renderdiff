@@ -275,7 +275,7 @@ Everything lands in the out dir (`./renderdiff-out` by default):
       }],
       "text": { "added": [], "removed": ["Pricing"] },   // added: left only; removed: right only
       "failed": { "left": [], "right": [] },   // stylesheets and font faces that didn't load: "font Inter 700", "stylesheet https://…"
-      "computed": { "dom": 1, "changes": [], "unmatched": { "left": [], "right": ["body > nav > a[href=\"/pricing\"]"] } },   // --computed only; null: snapshot failed
+      "computed": { "dom": 1, "changes": [], "truncated": 0, "unmatched": { "left": [], "right": ["body > nav > a[href=\"/pricing\"]"] } },   // --computed only; null: snapshot failed, "computedError" says why
       "images": { "left": "about.1440.left.png", "right": "about.1440.right.png", "diff": "about.1440.diff.png" },
       "crops": [{
         "path": "about.1440.c1.png", "kind": "band",          // or "region"

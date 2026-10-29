@@ -342,17 +342,30 @@ export async function run({
           ]),
         ]);
         named?.forEach((els, i) => (spots[i]!.target.elements = els));
+        const snap = (page: Page, side: "left" | "right") =>
+          snapshot(
+            page,
+            masksFor(cfg, page, route),
+            COMPUTED_TIMEOUT,
+            route.selector ? page.locator(route.selector[side]) : null,
+          ).catch((e: unknown) => {
+            // page.evaluate prefixes the page's own error: keep only its message.
+            throw new Error(
+              String(e instanceof Error ? e.message : e).replace(/^[\s\S]*Error: /, ""),
+            );
+          });
         const computed = cfg.computed
           ? await Promise.race([
-              Promise.all([
-                snapshot(leftPage, masksFor(cfg, leftPage, route), COMPUTED_TIMEOUT),
-                snapshot(rightPage, masksFor(cfg, rightPage, route), COMPUTED_TIMEOUT),
-              ])
-                .then(([l, r]) => diffSnapshots(l, r))
-                .catch(() => null),
-              sleep(COMPUTED_TIMEOUT + 5_000, null, { ref: false }),
+              Promise.all([snap(leftPage, "left"), snap(rightPage, "right")]).then(
+                ([l, r]) => ({ computed: diffSnapshots(l, r) }),
+                (e: Error) => ({ computed: null, computedError: e.message }),
+              ),
+              sleep(COMPUTED_TIMEOUT + 5_000, null, { ref: false }).then(() => ({
+                computed: null,
+                computedError: `took over ${(COMPUTED_TIMEOUT + 5_000) / 1000}s`,
+              })),
             ])
-          : undefined;
+          : null;
         const cropped = made.map(({ png, ...c }, i) => ({ path: `${base}.c${i + 1}.png`, ...c }));
         await Promise.all([
           write(images.left, leftShot.png),
@@ -371,7 +384,7 @@ export async function run({
           crops: cropped,
           accepted: false,
           failed: { left: leftShot.failed, right: rightShot.failed },
-          ...(computed !== undefined ? { computed } : {}),
+          ...computed,
           ...(replayedAt ? { rightReplayedFrom: new Date(replayedAt).toISOString() } : {}),
         });
         const { regions, bands, alignedScore, text } = metrics;
@@ -390,9 +403,11 @@ export async function run({
             ? `text: ${text.added.length} added, ${text.removed.length} removed`
             : "",
           dom.length ? `dom ${fmtElements(dom)}` : "",
-          computed === null ? "computed: snapshot failed" : "",
-          computed
-            ? `computed ${computed.dom ? `dom differs (${computed.dom})` : "dom identical"}, ${computed.changes.length} change(s)`
+          computed && !computed.computed
+            ? `computed: snapshot failed, ${computed.computedError}`
+            : "",
+          computed?.computed
+            ? `computed ${computed.computed.dom ? `dom differs (${computed.computed.dom})` : "dom identical"}, ${computed.computed.changes.length + computed.computed.truncated} change(s)`
             : "",
         ].filter(Boolean);
         ++done;

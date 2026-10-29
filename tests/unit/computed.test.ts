@@ -46,7 +46,7 @@ describe("diffSnapshots", () => {
     );
   });
 
-  test("a property that doesn't inherit is never collapsed; a size only at its outermost box", () => {
+  test("a property that doesn't inherit is never collapsed; a width only at its outermost box", () => {
     const changes = collapseInherited([
       { key: "body > div", prop: "margin-left", values: ["0px", "8px"] },
       { key: "body > div > p", prop: "margin-left", values: ["0px", "8px"] },
@@ -57,6 +57,49 @@ describe("diffSnapshots", () => {
       changes.map((c) => `${c.key} ${c.prop}`),
       ["body > div margin-left", "body > div > p margin-left", "body > div width"],
     );
+  });
+
+  test("a height only at its innermost box: an auto height grows with what it holds", () => {
+    // `.a { height: 50px }` removed: .a is the cause, its ancestors only follow.
+    const changes = collapseInherited([
+      { key: "body", prop: "height", values: ["50px", "18px"] },
+      { key: "body > div", prop: "height", values: ["50px", "18px"] },
+      { key: "body > div > div.a", prop: "height", values: ["50px", "18px"] },
+    ]);
+    assert.deepEqual(
+      changes.map((c) => c.key),
+      ["body > div > div.a"],
+    );
+  });
+
+  test("an element one side hides is a display change, not a markup difference", () => {
+    const left: Snapshot = {
+      body: el("<body>"),
+      "body > div.promo": el("<div>", { display: "none" }),
+    };
+    const right: Snapshot = {
+      body: el("<body>"),
+      "body > div.promo": el("<div>", { display: "block" }),
+      "body > div.promo > p": el("<p>Sale"),
+    };
+    assert.deepEqual(diffSnapshots(left, right), {
+      dom: 0,
+      changes: [{ key: "body > div.promo", prop: "display", values: ["none", "block"] }],
+      truncated: 0,
+      unmatched: { left: [], right: [] },
+    });
+  });
+
+  test("past 500 changes the rest are counted, not kept", () => {
+    const side = (v: string): Snapshot =>
+      Object.fromEntries(
+        Array.from({ length: 600 }, (_, i) => [
+          `body > p:nth-of-type(${i + 1})`,
+          el("<p>", { opacity: v }),
+        ]),
+      );
+    const d = diffSnapshots(side("1"), side("0.5"));
+    assert.deepEqual([d.changes.length, d.truncated], [500, 100]);
   });
 
   test("a :: inside an attribute is not a pseudo-element", () => {
@@ -74,6 +117,7 @@ describe("diffSnapshots", () => {
     assert.deepEqual(diffSnapshots(left, right), {
       dom: 0,
       changes: [{ key: "body > a::before", prop: "content", values: ["none", '"→"'] }],
+      truncated: 0,
       unmatched: { left: [], right: [] },
     });
   });
@@ -97,10 +141,16 @@ describe("diffSnapshots", () => {
       "body > p": el(`<p>${text}`),
     });
     assert.equal(diffSnapshots(page("/main.3f9a8c1d.png"), page("/main.d4e5f6a7.png")).dom, 0);
-    assert.equal(diffSnapshots(page("/hero-BxQrZkAb.webp"), page("/hero-Cy_r3-Qa.webp")).dom, 0);
+    assert.equal(
+      diffSnapshots(page("/app.3f9a8c1d.chunk.js"), page("/app.d4e5f6a7.chunk.js")).dom,
+      0,
+    );
     assert.equal(diffSnapshots(page("/a.png?v=12"), page("/a.png?v=13")).dom, 0);
     assert.equal(diffSnapshots(page("/a.png"), page("/b.png")).dom, 1);
     assert.equal(diffSnapshots(page("/hero-image1.png"), page("/hero-image2.png")).dom, 1);
+    assert.equal(diffSnapshots(page("/team_photo_2023.jpg"), page("/team_photo_2024.jpg")).dom, 1);
+    assert.equal(diffSnapshots(page("/hero-banner2023.jpg"), page("/hero-banner2024.jpg")).dom, 1);
+    assert.equal(diffSnapshots(page("/p/abcdef123456"), page("/p/abcdef123457")).dom, 1);
     assert.equal(diffSnapshots(page("/blog/20231015-a"), page("/blog/20231016-a")).dom, 1);
     assert.equal(diffSnapshots(page("/a.png", "20240101"), page("/a.png", "20240102")).dom, 1);
   });
@@ -131,7 +181,12 @@ const margin = {
 };
 
 describe("groupFindings", () => {
-  const diff = (dom = 0) => ({ dom, changes: [margin], unmatched: { left: [], right: [] } });
+  const diff = (dom = 0) => ({
+    dom,
+    changes: [margin],
+    truncated: 0,
+    unmatched: { left: [], right: [] },
+  });
   const results = [
     shot("/a", 1440, { computed: diff() }),
     shot("/a", 375, { computed: diff() }),
@@ -139,13 +194,14 @@ describe("groupFindings", () => {
     shot("/c", 1440, { computed: diff(), accepted: true }),
   ];
 
-  test("the same change across routes and widths is one finding; accepted shots are left out", () => {
+  test("the same change across routes and widths is one finding, accepted shots included", () => {
     assert.deepEqual(groupFindings(results), [
       {
         ...margin,
         at: [
           { url: "/a", widths: [1440, 375] },
           { url: "/b", widths: [1440] },
+          { url: "/c", widths: [1440] },
         ],
       },
     ]);
@@ -153,10 +209,18 @@ describe("groupFindings", () => {
 
   test("fmtComputed names the dom verdict, then one line per finding", () => {
     assert.deepEqual(
-      fmtComputed([...results, shot("/d", 1440, { computed: null })], ["/a", "/b", "/c", "/d"]),
+      fmtComputed(
+        [
+          ...results,
+          shot("/d", 1440, { computed: null, computedError: "more than 50000 elements" }),
+          shot("/e", 1440, { computed: { ...diff(), truncated: 7 } }),
+        ],
+        ["/a", "/b", "/c", "/d", "/e"],
+      ),
       [
-        "computed: 1 finding; dom identical on 2 of 3 route(s), differs /b (1), so findings there are hints; snapshot failed on /d",
-        "  body > a margin-left 24px→16px  /a@1440,375 /b@1440",
+        "computed: 1 finding; dom identical on 3 of 4 route(s), differs /b (1), so findings there are hints; snapshot failed on /d@1440 (more than 50000 elements)",
+        "  body > a margin-left 24px→16px  /a@1440,375 /b@1440 /c@1440 +1 routes",
+        "  truncated: only the first 500 changes kept on /e@1440 (+7)",
       ],
     );
   });
