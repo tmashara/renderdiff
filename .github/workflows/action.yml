@@ -8,6 +8,8 @@ on:
 jobs:
   self-test:
     runs-on: ubuntu-latest
+    env:
+      RENDERDIFF_COMMENT_DRY_RUN: "1"
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -42,6 +44,7 @@ jobs:
           threshold: "0.999"
           out: differ-out
           artifact-name: differ
+          comment: "true"
 
       - id: accept
         uses: ./
@@ -76,3 +79,5 @@ jobs:
           test "$DOWN" = 2
           node -e 'const r = require("./differ-out/results.json").results; for (const p of ["/color", "/tint"]) if (!(r.find((x) => x.url === p)?.score < 0.999)) throw p'
           grep -q '"/color"' accept-out/renderdiff.accepted.json
+          grep -q '<!-- renderdiff:differ -->' "$RUNNER_TEMP/renderdiff-comment-differ.md"
+          grep -q '/color' "$RUNNER_TEMP/renderdiff-comment-differ.md"
