@@ -58,7 +58,8 @@ only the reference has (`band -24`) are missing at y=196. With those rows cut ou
 matches exactly (`aligned 100.00%`). The missing rows are the "Pricing" nav link, which
 exists only on the reference (`-`). Open `renderdiff-out/about.1440.c1.png` to see it.
 
-**Without `--threshold`, a diff still exits 0**, so read the summary.
+**Any difference exits 1.** `--threshold <0..1>` relaxes that to scores below it
+(`--threshold 0` never fails on a difference). Read the summary either way.
 
 ### For coding agents
 
@@ -96,7 +97,7 @@ renderdiff <left-origin> <right-origin> <route…> [options]
 | `--left <url>` | Left origin, instead of the first positional one. Giving both is an error. |
 | `--right <url>` | Right origin, instead of the second positional one. |
 | `--width <n>` | Viewport width; repeatable. Replaces the defaults. |
-| `--threshold <0..1>` | Exit non-zero if any comparison scores below this. |
+| `--threshold <0..1>` | Exit 1 only if a comparison scores below this, instead of on any difference. `0` never fails on one. |
 | `--out <dir>` | Output directory, wiped at the start of a run. Default `./renderdiff-out`. A directory holding files renderdiff didn't write is refused. |
 | `--concurrency <n>` | Parallel workers. Default half the CPU cores, between 2 and 8. Lower it when one side is someone's live site. |
 | `--config <path>` | Config file. Default: `renderdiff.config.{ts,mts,js,mjs}` in cwd. |
@@ -123,8 +124,8 @@ range rather than on a boundary, so a layout switch never flaps between runs.
 
 | Exit | Meaning |
 | --- | --- |
-| `0` | No route errored and none scored below `--threshold`. Without one, a diff still exits 0. |
-| `1` | A route scored below `--threshold`. Wins over `3` when both happen. |
+| `0` | No route errored and no shot differs (with `--threshold`: none scored below it). Accepted differences don't count; nor do unstable pixels or a failed asset alone, which still get their own row. |
+| `1` | A shot differs, or with `--threshold` scored below it. Wins over `3` when both happen. |
 | `2` | Bad arguments, bad config, or an origin that isn't responding. |
 | `3` | A route errored, so it went unmeasured, or the run crashed (e.g. no Chromium). |
 
@@ -215,7 +216,7 @@ renderdiff http://localhost:3000 https://example.com / /about --rerun-failed
 
 `--accept "<reason>"` writes every difference the run saw to `renderdiff.accepted.json` (next
 to the config, or in cwd); commit it. Later, a shot whose every difference matches an entry is
-listed on an `accepted:` line and counts neither as differing nor toward `--threshold`;
+listed on an `accepted:` line and counts neither as differing nor toward the exit code;
 anything new on the same page still shows. `--rerun-failed` reruns only what the last run in
 `--out` didn't find clean or accepted and merges it back; it exits 2 if the run differs from
 the previous one. Matching rules, what can still hide, and stale entries:

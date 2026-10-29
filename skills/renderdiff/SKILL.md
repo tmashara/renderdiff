@@ -45,8 +45,8 @@ legitimate: [reference.md](reference.md).
    `--cache-right`. For a multi-width row, open the widest and narrowest crop.
    `accepted:` routes are known; a row saying `1 accepted` still has something new.
 
-Exit: 0 nothing below `--threshold` (**without it, a diff still exits 0**) · 1 below
-threshold · 2 bad args/config/origin down · 3 a route errored (unmeasured) or crash.
+Exit: 0 no differing pixels, or all accepted (unstable pixels or a failed asset alone still
+exit 0: read their rows) · 1 a difference (with `--threshold`: below it) · 2 bad args/config/origin down · 3 a route errored (unmeasured) or crash. 1 wins over 3.
 All clean? Confirm both sides actually rendered.
 
 **Before you mask, lower the threshold, drop a route or skip widths,** read

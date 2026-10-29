@@ -25,7 +25,7 @@ exits non-zero.
 | `routes` | Separated by spaces or newlines; pairs (`/pricing::/plans`) work. Optional when the config lists routes. |
 | `config` | Config file path. Default: `renderdiff.config.{ts,mts,js,mjs}` in the workspace. |
 | `widths` | Spaces or commas. Default renderdiff's five. |
-| `threshold` | Fail below this score. Without it, only errors (exit 2 or 3) fail the job. |
+| `threshold` | Fail only below this score. Without it, any difference fails the job (exit 1); `"0"` never fails on one. |
 | `concurrency` | Parallel workers, which is also the most page loads production sees at once. Default 2 on a hosted runner. |
 | `storage-state` | Contents of a Playwright storage-state JSON, from a secret. Written to a 0600 file in the runner's temp dir and deleted when renderdiff exits. |
 | `accept` | Record this run's differences as accepted, with this reason. See below. |
@@ -37,7 +37,7 @@ To run the action twice in one job, give each run its own `out` and `artifact-na
 matrix, put the matrix value in `artifact-name`. The action sets up Node 24, which later
 steps in the job then use.
 
-Outputs: `exit-code` (0 pass, 1 below threshold, 2 bad input or an origin down, 3 a route
+Outputs: `exit-code` (0 pass, 1 a difference or below `threshold`, 2 bad input or an origin down, 3 a route
 errored) and `results` (the path to `results.json`).
 
 A Vercel preview behind Deployment Protection answers the runner with its login page: a
@@ -92,7 +92,8 @@ The action waits for `left` to answer, so the server can still be starting.
 
 ### Dependency upgrades from Renovate or Dependabot
 
-A dependency bump should change nothing, so fail on any difference:
+A dependency bump should change nothing. That's the default without `threshold`: any
+difference fails.
 
 ```yaml
     if: github.actor == 'renovate[bot]' || github.actor == 'dependabot[bot]'
@@ -101,7 +102,6 @@ A dependency bump should change nothing, so fail on any difference:
         with:
           left: http://localhost:3000
           right: https://example.com
-          threshold: "1"
 ```
 
 ## Accepted differences: accept in CI

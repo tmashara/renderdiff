@@ -15,7 +15,7 @@ the reason. Scope it the way you scope any run: pass only the routes and `--widt
 Commit the file; it is one entry per line, so its diff reads as what was accepted.
 
 A shot whose every difference matches an accepted one is `accepted`: it is listed on an
-`accepted:` line like `clean:`, doesn't count as differing or toward `--threshold`, and has
+`accepted:` line like `clean:`, doesn't count as differing or toward the exit code, and has
 `"accepted": true` in `results.json` and a badge in the report. Anything else on the page
 still shows: a row with some changes accepted says `1 accepted`, and its `dom` line skips
 them. A shot with unstable pixels is never accepted, since part of it went unmeasured.

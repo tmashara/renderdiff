@@ -248,7 +248,7 @@ export interface RenderdiffConfig {
   storageState?: string | { left?: string; right?: string };
   /** Viewport widths. Replaces {@link DEFAULT_WIDTHS} outright. */
   widths?: number[];
-  /** Fail the run if any comparison scores below this, 0..1. */
+  /** Fail only when a comparison scores below this (0..1), instead of on any diff. */
   threshold?: number;
   /** Where to write screenshots and `report.html`. Relative paths resolve from cwd. */
   outDir?: string;

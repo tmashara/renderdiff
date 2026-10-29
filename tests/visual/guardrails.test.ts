@@ -496,7 +496,7 @@ describe("component scope", () => {
 
   test("an element with no text that differs only in colour is scored, not refused as blank", async () => {
     const run = await scoped(["/stripe"], ["--selector", ".plain"]);
-    assert.equal(run.code, 0, context(run));
+    assert.equal(run.code, 1, context(run));
     const r = result(results(run.outDir), "/stripe", 1440);
     assert.ok(r.score < 1 && r.diffPixels > 0, context(run));
   });
@@ -523,7 +523,7 @@ describe("component scope", () => {
 
   test("the recoloured swatch alone scores low, with its region in the element's own pixels", async () => {
     const run = await scoped(["/color"], ["--selector", SWATCH, "--progress"]);
-    assert.equal(run.code, 0, context(run));
+    assert.equal(run.code, 1, context(run));
     const r = result(results(run.outDir), "/color", 1440);
     assert.deepEqual(r.selector, { left: SWATCH, right: SWATCH });
     assert.equal(r.totalPixels, 208 * 160, context(run));
@@ -557,7 +557,7 @@ describe("component scope", () => {
       ],
       { noOut: true },
     );
-    assert.equal(again.code, 0, context(again));
+    assert.equal(again.code, 1, context(again));
   });
 
   test("a mask is painted in the element's coordinates", async () => {
@@ -578,7 +578,7 @@ describe("component scope", () => {
       [PAIR],
       ["--left-selector", ".swatch >> nth=0", "--right-selector", ".swatch >> nth=1"],
     );
-    assert.equal(run.code, 0, context(run));
+    assert.equal(run.code, 1, context(run));
     const r = result(results(run.outDir), PAIR, 1440);
     assert.deepEqual(r.selector, { left: ".swatch >> nth=0", right: ".swatch >> nth=1" });
     assert.deepEqual([r.text.added, r.text.removed], [["One"], ["Two"]], context(run));
@@ -628,7 +628,7 @@ describe("before hooks", () => {
     const run = await hooked(
       '{ routes: [{ left: "/menu", before: async (page) => { await page.click("#toggle"); } }] }',
     );
-    assert.equal(run.code, 0, context(run));
+    assert.equal(run.code, 1, context(run));
     const r = result(results(run.outDir), "/menu", 1440);
     // Each side's panel says something different, so this only differs if both opened.
     assert.ok(r.diffPixels > 0, `the hook did not run before the shot${context(run)}`);
@@ -648,7 +648,7 @@ describe("before hooks", () => {
         'await page.locator("h1").evaluate((h, t) => (h.textContent = t), `${side} ${route} ${width}`); } }',
       ["/menu"],
     );
-    assert.equal(run.code, 0, context(run));
+    assert.equal(run.code, 1, context(run));
     const r = result(results(run.outDir), "/menu", 1440);
     assert.deepEqual(
       [r.text.added, r.text.removed],
@@ -730,7 +730,7 @@ describe("storage state", () => {
       ],
       { cwd },
     );
-    assert.equal(run.code, 0, context(run));
+    assert.equal(run.code, 1, context(run));
     const res = results(run.outDir);
     const r = result(res, "/signed-in", 1440);
     assert.deepEqual(
@@ -747,7 +747,7 @@ describe("storage state", () => {
     const dir = authIn(tempDir());
     fs.writeFileSync(path.join(dir, "c.mjs"), 'export default { storageState: "auth.json" };\n');
     const run = await capture(["/signed-in"], { config: path.join(dir, "c.mjs") });
-    assert.equal(run.code, 0, context(run));
+    assert.equal(run.code, 1, context(run));
     const res = results(run.outDir);
     const r = result(res, "/signed-in", 1440);
     assert.deepEqual(
@@ -867,7 +867,7 @@ describe("network blocking", () => {
 describe("crops", () => {
   test("a change too tall for one legible crop is clipped to its top, not shrunk or split", async () => {
     const run = await capture(["/tall-region"]);
-    assert.equal(run.code, 0, context(run));
+    assert.equal(run.code, 1, context(run));
     const r = result(results(run.outDir), "/tall-region", 1440);
     assert.equal(r.crops.length, 1, context(run));
     const [c] = r.crops;
@@ -920,7 +920,7 @@ describe("element attribution", () => {
     const [e] = result(results(run.outDir), "/labelled", 1440).regions[0]!.elements!;
     assert.match(e!.selector, /aria-label="Second\\a block"/, context(run));
     const again = await capture(["/labelled"], { selector: e!.selector });
-    assert.equal(again.code, 0, context(again));
+    assert.equal(again.code, 1, context(again));
     assert.equal(result(results(again.outDir), "/labelled", 1440).selector?.left, e!.selector);
   });
 });
@@ -1042,19 +1042,19 @@ describe("the output directory", () => {
   test("a previous run with region crops and results.json is wiped and reused", async () => {
     const dir = path.join(tempDir(), "out");
     const first = await into(dir, ["/color"]);
-    assert.equal(first.code, 0, context(first));
+    assert.equal(first.code, 1, context(first));
     assert.ok(fs.existsSync(path.join(dir, "color.1440.c1.png")), context(first));
     assert.ok(fs.existsSync(path.join(dir, "results.json")));
     const second = await into(dir, ["/color"]);
-    assert.equal(second.code, 0, context(second));
+    assert.equal(second.code, 1, context(second));
   });
 
   test("a previous run of a route pair is wiped and reused", async () => {
     const dir = path.join(tempDir(), "out");
     const first = await into(dir, ["/flex-vs-grid::/float-vs-flex"]);
-    assert.equal(first.code, 0, context(first));
+    assert.equal(first.code, 1, context(first));
     const second = await into(dir, ["/flex-vs-grid::/float-vs-flex"]);
-    assert.equal(second.code, 0, context(second));
+    assert.equal(second.code, 1, context(second));
     assert.doesNotMatch(second.stderr, /refusing to wipe/, context(second));
   });
 

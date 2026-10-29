@@ -22,7 +22,7 @@ inputs:
     description: Viewport widths separated by spaces or commas. Default renderdiff's five.
     default: ""
   threshold:
-    description: Fail when any comparison scores below this (0..1). Without it only errors fail the job.
+    description: Fail only when a comparison scores below this (0..1). Without it any difference fails the job; 0 never fails on one.
     default: ""
   concurrency:
     description: Parallel workers, which is also the most loads production sees at once.
@@ -45,7 +45,7 @@ inputs:
 
 outputs:
   exit-code:
-    description: renderdiff's exit code. 0 pass, 1 below threshold, 2 bad input or origin down, 3 a route errored.
+    description: renderdiff's exit code. 0 pass, 1 a difference (or below threshold), 2 bad input or origin down, 3 a route errored.
     value: ${{ steps.run.outputs.exit-code }}
   results:
     description: Path to results.json.
@@ -143,7 +143,7 @@ runs:
 
         case $code in
           0) verdict="✅ No visual change" ;;
-          1) verdict="❌ Below threshold" ;;
+          1) verdict="❌ Visual change" ;;
           2) verdict="⚠️ Bad input or an origin is down" ;;
           *) verdict="⚠️ A route errored or the run crashed" ;;
         esac

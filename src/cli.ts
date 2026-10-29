@@ -185,15 +185,16 @@ const HELP = `
   the config, or in cwd); later runs report them as accepted, and anything new still shows.
   --rerun-failed reruns only what the previous run in --out didn't find clean or accepted.
 
-  Writes report.html, results.json and crops of each change to --out. Exits 1 if a
-  route falls below --threshold, 3 if one errored (unmeasured) or the run crashed, 2 on
-  bad arguments, bad config or an origin that is down. A diff without --threshold exits 0.
+  Writes report.html, results.json and crops of each change to --out. Exits 1 if any
+  shot differs (with --threshold, only if one scores below it; --threshold 0 never fails
+  on a diff), 3 if a route errored (unmeasured) or the run crashed, 2 on bad arguments,
+  bad config or an origin that is down.
 
   Options
     --left <url>        Left origin, instead of the first positional one.
     --right <url>       Right origin, instead of the second positional one.
     --width <n>         Viewport width; repeatable. Replaces the defaults.
-    --threshold <0..1>  Fail if any comparison scores below this.
+    --threshold <0..1>  Fail only if a comparison scores below this, not on any diff.
     --out <dir>         Output directory                   (default: ./renderdiff-out)
     --concurrency <n>   Parallel workers              (default: half the cores, 2–8)
     --config <path>     Config file. Default: renderdiff.config.{ts,mts,js,mjs} in cwd.

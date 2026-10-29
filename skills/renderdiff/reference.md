@@ -43,7 +43,7 @@ Report colouring (`--open`, for a human): green above 99.5%, amber to 97%, red b
 | "The crops looked fine, done." | There are at most three: bands, then the largest regions. Check the region count, any `clipped` crop in results.json, and open the diff PNG for the rest and for any height delta: padding is never cropped. |
 | "Masking the header gets this to 100%." | Every mask is coverage surrendered. Mask only content *proven* to vary per load (clocks, star counts, rotating quotes), with a `reason`, which the report prints verbatim. |
 | "I'll `--accept` it so the run is green." | Accept only differences you opened and that exist before your change (or are intended), with a reason that says which. |
-| "I'll lower `--threshold` until it passes." | Threshold is a CI gate, not a dial for reaching green. |
+| "I'll lower `--threshold` until it passes." | `--threshold` relaxes the exit code; the difference is still there. It's a CI gate, not a dial for reaching green. |
 | "That route errors, I'll drop it from the list." | Shrinking the route list shrinks what you verified. Fix it, or say it's unverified. |
 | "One width is enough." | Migrations break at one width and not others. That's why there are five defaults. |
 | "A `before` hook that hides that element on the left gets this clean." | That hook is a mask with no `reason` in the report. A hook brings both sides to the same *state* (opens the menu, dismisses a modal both show, logs in); it never edits one side to match the other. |
