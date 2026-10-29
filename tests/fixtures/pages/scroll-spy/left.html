@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Scroll spy</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for beforeShot hooks. A scroll-spy nav keeps the last section a scroll event saw,
+   so renderdiff's scroll pass leaves Later active; Soon's status differs between the sides, so
+   the pair differs only if a hook set Soon after the scroll pass. */
+button { width: 160px; height: 40px; font: 16px/24px ui-monospace, monospace; }
+button.active { background: var(--accent); color: #ffffff; }
+.section { width: var(--content); height: 1000px; }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Scroll spy</h1>
+<nav>
+<button type="button" id="now" class="active" onclick="activate('now')">Now</button>
+<button type="button" id="soon" onclick="activate('soon')">Soon</button>
+<button type="button" id="later" onclick="activate('later')">Later</button>
+</nav>
+<p id="status">Active: Now</p>
+<p class="lede">A page whose nav follows the scroll. Scrolling to the bottom leaves Later active, so only a hook that runs after the scroll can show Soon.</p>
+<section class="notes">
+<p>The status line names the active section; it is the only text a hook changes.</p>
+</section>
+<div class="section" id="section-now"><p>Now</p></div>
+<div class="section" id="section-soon"><p>Soon</p></div>
+<div class="section" id="section-later"><p>Later</p></div>
+</div>
+<script>
+const texts = { now: "Active: Now", soon: "Active: Soon, built by the left side", later: "Active: Later" };
+function activate(id) {
+  document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("active", b.id === id));
+  document.getElementById("status").textContent = texts[id];
+}
+addEventListener("scroll", () => {
+  if (!scrollY) return;
+  let last = "now";
+  for (const id of Object.keys(texts)) {
+    if (document.getElementById("section-" + id).getBoundingClientRect().top < innerHeight) last = id;
+  }
+  activate(last);
+});
+</script>
+</body>
+</html>

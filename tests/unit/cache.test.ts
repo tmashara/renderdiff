@@ -104,6 +104,8 @@ describe("keys", () => {
     const hooked = parseRoutes(["/a"], undefined, async () => {})[0]!;
     const paired = parseRoutes(["/b::/a"])[0]!;
     assert.notEqual(shotId(route!, 1440), shotId(hooked, 1440));
+    const shotHooked = parseRoutes(["/a"], undefined, undefined, async () => {})[0]!;
+    assert.notEqual(shotId(route!, 1440), shotId(shotHooked, 1440));
     assert.notEqual(shotId(route!, 1440), shotId(route!, 375));
     assert.equal(shotId(route!, 1440), shotId(paired, 1440), "the left path doesn't matter");
   });

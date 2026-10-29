@@ -805,6 +805,46 @@ describe("before hooks", () => {
     assert.equal(r?.hook, true);
     assert.equal(site.hits("/menu") - before, 2, `the hook was retried${context(run)}`);
   });
+
+  test("a before hook can't hold a state the scroll pass changes", async () => {
+    const run = await hooked('{ before: async (page) => { await page.click("#soon"); } }', [
+      "/scroll-spy",
+    ]);
+    assert.equal(run.code, 0, context(run));
+    const r = result(results(run.outDir), "/scroll-spy", 1440);
+    assert.equal(r.diffPixels, 0, `the scroll pass left Soon active${context(run)}`);
+    assert.equal(r.hook, true);
+  });
+
+  test("a route's beforeShot runs after the scroll pass on both sides, over the top-level one, and on the recheck", async () => {
+    const run = await hooked(
+      '{ beforeShot: async () => { throw new Error("top-level ran"); }, routes: [{ left: "/scroll-spy", beforeShot: async (page) => { await page.click("#soon"); } }] }',
+    );
+    assert.equal(run.code, 1, context(run));
+    const r = result(results(run.outDir), "/scroll-spy", 1440);
+    assert.deepEqual(r.text.added, ["Active: Soon, built by the left side"], context(run));
+    assert.deepEqual(r.text.removed, ["Active: Soon, built by the right side"], context(run));
+    assert.equal(r.varies, undefined, `the recheck skipped the hook${context(run)}`);
+    assert.equal(r.hook, true);
+    assert.equal(cardFor(run, "/scroll-spy").hook, true, context(run));
+  });
+
+  test("a beforeShot that throws is a route error naming it, and is not retried", async () => {
+    const before = site.hits("/menu");
+    const run = await hooked(
+      '{ beforeShot: async () => { throw new Error("net::ERR_FAKE from the hook"); } }',
+      ["/menu"],
+    );
+    assert.equal(run.code, 3, context(run));
+    const [r] = results(run.outDir).results;
+    assert.equal(
+      r?.status === "error" && r.error,
+      "beforeShot hook failed on left: net::ERR_FAKE from the hook",
+      context(run),
+    );
+    assert.equal(r?.hook, true);
+    assert.equal(site.hits("/menu") - before, 2, `the hook was retried${context(run)}`);
+  });
 });
 
 describe("storage state", () => {
@@ -1297,6 +1337,26 @@ describe("shot deadline", () => {
     assert.equal(run.code, 3, context(run));
     const [r] = results(run.outDir).results;
     assert.equal(r?.status === "error" && r.error, "timeout after 2s at before hook on left");
+    assert.equal(site.hits("/menu") - before, 2, `the hook was retried${context(run)}`);
+  });
+
+  test("a beforeShot that never resolves errors at the deadline, and is not retried", async () => {
+    const file = path.join(tempDir(), "hook.mjs");
+    fs.writeFileSync(file, "export default { beforeShot: () => new Promise(() => {}) };\n");
+    const before = site.hits("/menu");
+    const run = await runCli(
+      renderdiffArgs({
+        left: site.left,
+        right: site.right,
+        routes: ["/menu"],
+        widths: [1440],
+        config: file,
+      }),
+      { env: { RENDERDIFF_SHOT_TIMEOUT: "2" }, timeoutMs: 60_000 },
+    );
+    assert.equal(run.code, 3, context(run));
+    const [r] = results(run.outDir).results;
+    assert.equal(r?.status === "error" && r.error, "timeout after 2s at beforeShot hook on left");
     assert.equal(site.hits("/menu") - before, 2, `the hook was retried${context(run)}`);
   });
 });

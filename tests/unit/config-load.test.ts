@@ -110,7 +110,7 @@ describe("validation", () => {
     ["bad-left.mjs", /`left` must be a string/],
     [
       "bad-routes.mjs",
-      /`routes\[0\]` must be a string or an object \{ left, right\?, selector\?, before\? \}/,
+      /`routes\[0\]` must be a string or an object \{ left, right\?, selector\?, before\?, beforeShot\? \}/,
     ],
     ["bad-widths.mjs", /`widths` must be an array of positive numbers/],
     ["bad-threshold.mjs", /`threshold` must be a number between 0 and 1/],
@@ -167,9 +167,18 @@ describe("validation", () => {
     ['{ before: "click" }', /`before` must be a function/],
     [
       '{ routes: ["/a", { left: "/a", before: async () => {} }] }',
-      /two routes both read as \/a; they have different before hooks — merge them into one route/,
+      /two routes both read as \/a; they have different hooks — merge them into one route/,
     ],
     ['{ routes: [{ left: "/a", before: {} }] }', /`routes\[0\]\.before` must be a function/],
+    ['{ beforeShot: "x" }', /`beforeShot` must be a function/],
+    [
+      '{ routes: [{ left: "/a", beforeShot: {} }] }',
+      /`routes\[0\]\.beforeShot` must be a function/,
+    ],
+    [
+      '{ routes: ["/a", { left: "/a", beforeShot: async () => {} }] }',
+      /different hooks — merge them/,
+    ],
     ['{ maskMedia: "yes" }', /`maskMedia` must be a boolean/],
     ['{ freezeVideo: "no" }', /`freezeVideo` must be a boolean/],
     ["{ storageState: 1 }", /`storageState` must be a non-empty path/],

@@ -68,8 +68,10 @@ it, with the clock and seeded `Math.random` already in force:
 export default {
   routes: [
     { left: "/", before: async (page) => { await page.click("[aria-label=Menu]"); } },
+    { left: "/docs", beforeShot: async (page) => { await page.click("[data-tab=intro]"); } },
   ],
-  // For every route without its own `before` (which replaces it), CLI routes included.
+  // For every route without its own `before` (which replaces it), CLI routes included;
+  // a top-level `beforeShot` works the same way.
   before: async (page, { side, route, width }) => {
     const accept = page.getByRole("button", { name: "Accept" });
     if (await accept.isVisible()) await accept.click();
@@ -80,10 +82,17 @@ export default {
 `side` is `"left"` or `"right"`, `route` the route's name (`/a` or `/a::/b`), `width` the
 viewport width. Use `side` only where the markup legitimately differs (the button has a
 different selector on each side), never to make the sides look alike. A hook that throws
-is a route error, `before hook failed on left: …`, and isn't retried. A route that ran one
-has `"hook": true` in `results.json` and a `before hook` badge on its report card.
+is a route error, `before hook failed on left: …` (or `beforeShot …`), and isn't retried.
+A route that ran one has `"hook": true` in `results.json` and a `hook` badge on its report
+card.
 Actions in a hook use Playwright's 30s default timeout, so check before clicking what may
-not be there (as above); `hideSelectors` and `extraCss` apply after the hook.
+not be there (as above); `hideSelectors` and `extraCss` apply after `before` and before `beforeShot`.
+
+The settle scrolls the whole page to load lazy content, so a state the scroll changes (a
+scroll-spy nav, a container re-measured on scroll) doesn't survive a `before` hook. Set it in
+a `beforeShot` hook instead: same signature, but it runs after the settle, right before masks
+and the shot. renderdiff doesn't settle again after it, so await whatever it changes. On a
+`selector` route the element is still scrolled into view after it.
 
 ## Signed-in pages
 

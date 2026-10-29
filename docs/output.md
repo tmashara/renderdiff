@@ -310,7 +310,7 @@ pulls a route), scores rounded down to four decimals (so a shot that differs nev
   "results": [
     {
       "url": "/about", "left": "/about", "right": "/about",   // a pair: "/a::/b", "/a", "/b"
-      "selector": null, "hook": false,                         // hook: a before hook ran
+      "selector": null, "hook": false,                         // hook: a before or beforeShot hook ran
       "width": 1440, "status": "compared",
       "score": 0.9714,           // share of measured pixels that match
       "alignedScore": 1,         // score over the aligned rows; null unless there are bands

@@ -123,8 +123,8 @@ Report (`--open`, for a human): green from 99.5%, amber to 97%, red below.
 | `page is Npx tall at Wpx wide, past the …px sanity ceiling …` | Taller than 57,600,000px ÷ width (never under 40,000px): a runaway layout, not a page. |
 | `selector "…" matched N elements on left (/a), expected 1` | Make it unique (an id, `data-test`, `>> nth=0`), or list the route once per element. |
 | `selector "…" has no box on …` / `is off the page on …` | Matched an element not rendered (`display: none`, zero size) or outside the page. |
-| `before hook failed on left: …` | The hook threw. Never retried. |
-| `timeout after 120s at settle on left` | That side never finished the step (`load`, `before hook`, `settle`, `screenshot`): a hung script, a dead renderer, a hook that never resolves. Retried once in a fresh page, except a hung hook. For a page that is just very slow, raise `RENDERDIFF_SHOT_TIMEOUT` (seconds). |
+| `before hook failed on left: …` | The hook threw (`beforeShot hook failed …` for that hook). Never retried. |
+| `timeout after 120s at settle on left` | That side never finished the step (`load`, `before hook`, `settle`, `beforeShot hook`, `screenshot`): a hung script, a dead renderer, a hook that never resolves. Retried once in a fresh page, except a hung hook. For a page that is just very slow, raise `RENDERDIFF_SHOT_TIMEOUT` (seconds). |
 
 A failed `--computed` snapshot (`snapshot failed on /a@1440 (…)` on the `computed:` line) is
 not a route error: the pixel result stands.
@@ -258,6 +258,8 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
   banner *both* sides show, sign in, set a carousel to slide 1 on both. Not: branching on
   `side` to make the sides look alike, hiding or removing an element on one side. `side` is for
   markup that legitimately differs. Say in the verdict that a hook ran (`hook: true`).
+  `beforeShot` (same forms) runs after settle, right before masks and the shot: for state the
+  settle's scroll pass changes, e.g. a scroll-spy nav. Nothing settles after it, so await it.
 - **Signed-in pages:** `npx playwright codegen --save-storage=auth.json <login url>`, then
   `--storage-state auth.json` (or `--left-storage-state`/`--right-storage-state`, or config
   `storageState`, relative to the config file). The file holds live session tokens: never
@@ -287,7 +289,7 @@ export default {
 A mask takes exactly one of `selector` or `locate: (page) => Locator`; without `urlPath` it
 applies to every route, and on a pair it matches either side's path. `--mask <sel>` adds to the
 config's masks. Also: `threshold`, `outDir`, `concurrency`, `extraCss`, `before`,
-`storageState`. `hideSelectors`: match the element **exactly** (consent scripts stamp classes on
+`beforeShot`, `storageState`. `hideSelectors`: match the element **exactly** (consent scripts stamp classes on
 `<html>`; a loose selector blanks the whole document and blank matches blank), and they hide
 rather than remove.
 

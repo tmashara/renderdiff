@@ -10,7 +10,12 @@ export const REPLAY_TTL = 60 * 60_000;
 
 /** A shot's identity in a recording: what decides which requests its load makes. */
 export const shotId = (route: Route, width: number) =>
-  JSON.stringify([route.right, width, route.before && String(route.before)]);
+  JSON.stringify([
+    route.right,
+    width,
+    route.before && String(route.before),
+    route.beforeShot && String(route.beforeShot),
+  ]);
 
 /** Everything that changes what the right origin serves, so one recording never answers another. */
 export function cacheFile(cfg: ResolvedConfig, browser: { name: string; version: string }): string {
