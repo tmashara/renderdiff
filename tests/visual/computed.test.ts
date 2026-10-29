@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { chromium, type Browser, type Page } from "playwright";
 import { diffSnapshots } from "../../src/computed.ts";
-import { locate, snapshot } from "../../src/locate.ts";
+import { locate, PROPS, snapshot } from "../../src/locate.ts";
 import type { Shot } from "../../src/capture.ts";
 import type { Region } from "../../src/compare.ts";
 
@@ -86,6 +86,22 @@ test("a removed hiding rule is a display change, and the dom stays identical", a
       ["body > div.promo", "display", ["none", "block"]],
     ],
   );
+});
+
+test("an auto margin reads as auto, whatever px the layout resolves it to", async () => {
+  const body = `<div class="c">x</div>`;
+  const css = "body { margin: 0 } .c { width: 100px; margin: 0 auto }";
+  const margins = (d: Awaited<ReturnType<typeof diff>>["d"]) =>
+    d.changes.filter((c) => c.prop.startsWith("margin-")).map((c) => [c.key, c.prop, c.values]);
+  // A grid item's auto margins resolve to 0px, a block's to the centring px.
+  const centred = await diff(body, body, [css, `${css} body { display: grid }`]);
+  assert.deepEqual(margins(centred.d), []);
+  assert.equal(centred.snaps[0]["body > div.c"]!.styles[PROPS.indexOf("margin-left")], "auto");
+  const fixed = await diff(body, body, [css, `${css} .c { margin: 0 60px }`]);
+  assert.deepEqual(margins(fixed.d), [
+    ["body > div.c", "margin-right", ["auto", "60px"]],
+    ["body > div.c", "margin-left", ["auto", "60px"]],
+  ]);
 });
 
 test("with a selector the walk covers only that subtree, keyed from :scope", async () => {

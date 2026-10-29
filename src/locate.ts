@@ -183,6 +183,12 @@ function probe({ boxes, find, masked, props, perSpot, walk, root }: ProbeArgs) {
     return path;
   };
 
+  // A resolved auto margin's px depends on the layout path: a grid item's reads 0px.
+  const styles = (e: Element, cs: CSSStyleDeclaration, m = e.computedStyleMap?.()) =>
+    props.map((p) =>
+      p.startsWith("margin-") && String(m?.get(p)) === "auto" ? "auto" : cs.getPropertyValue(p),
+    );
+
   const seen = (e: Element) => {
     const r = e.getBoundingClientRect();
     const cs = getComputedStyle(e);
@@ -196,7 +202,7 @@ function probe({ boxes, find, masked, props, perSpot, walk, root }: ProbeArgs) {
         w: Math.round(r.width),
         h: Math.round(r.height),
       },
-      styles: props.map((p) => cs.getPropertyValue(p)),
+      styles: styles(e, cs),
       up: (() => {
         const tags: string[] = [];
         for (let n = e.parentElement; n && tags.length < 2; n = n.parentElement)
@@ -283,7 +289,7 @@ function probe({ boxes, find, masked, props, perSpot, walk, root }: ProbeArgs) {
       const m = e.computedStyleMap?.();
       snap[key] = {
         html: html(e),
-        styles: props.map((p) => cs.getPropertyValue(p)),
+        styles: styles(e, cs, m),
         ...(m ? { size: [String(m.get("width")), String(m.get("height"))] } : {}),
       };
       if (cs.display === "none") return;
