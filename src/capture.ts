@@ -190,8 +190,11 @@ export async function capture(
     // The fake clock drives rAF too, so add wall time for a real paint per slice.
     const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 32)));
     Array.from(document.images).forEach((img) => (img.loading = "eager"));
-    const h = Math.min(document.documentElement.scrollHeight, maxHeight);
-    for (let y = 0; y < h; y += window.innerHeight) {
+    for (
+      let y = 0;
+      y < Math.min(document.documentElement.scrollHeight, maxHeight);
+      y += window.innerHeight
+    ) {
       window.scrollTo(0, y);
       await frame();
     }

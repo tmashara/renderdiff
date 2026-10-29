@@ -31,6 +31,7 @@ export const GUARDRAILS = [
   "lazy",
   "lazy-deep",
   "lazy-js",
+  "lazy-grow",
   "consent",
   "drifting",
   "tracker",

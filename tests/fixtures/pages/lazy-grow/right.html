@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layout parity</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+.spacer { height: 1800px; margin: 0 0 32px; background: var(--fill); border: 1px solid var(--line); }
+.spacer.more { height: 2400px; }
+.gallery { display: flex; flex-direction: column; gap: var(--gap); }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Growing page guard rail</h1>
+<p class="lede">A section appended when the bottom scrolls into view, with four images more than four thousand pixels down, loaded by an IntersectionObserver on this side and directly on the other.</p>
+
+<div class="spacer"></div>
+<div id="more"><div class="spacer more"></div>
+<div class="gallery">
+  <img class="shot" src="/shared/img/slate.svg" alt="slate">
+  <img class="shot" src="/shared/img/azure.svg" alt="azure">
+  <img class="shot" src="/shared/img/moss.svg" alt="moss">
+  <img class="shot" src="/shared/img/slate.svg" alt="slate">
+</div></div>
+<div id="end"></div>
+
+<section class="notes">
+<h2>Notes</h2>
+<p>Parity here means the capture followed the page down as it grew and every image it added was fetched and decoded before the shot.</p>
+</section>
+</div>
+</body>
+</html>
