@@ -222,7 +222,7 @@ describe("diffSnapshots", () => {
       truncated: 0,
       unmatched: { left: [], right: [] },
     });
-    const port = diffSnapshots(page("127.0.0.1:46110"), page("127.0.0.1:4612"), origins);
+    const port = diffSnapshots(page("127.0.0.1:46110"), page("127.0.0.1:46120"), origins);
     assert.deepEqual([port.dom, port.unmatched.left.length], [3, 1]);
     const path = diffSnapshots(page("127.0.0.1:4611", "/c.png"), page("127.0.0.1:4612"), origins);
     assert.deepEqual([path.dom, path.changes.map((c) => c.prop)], [1, ["background-image"]]);
