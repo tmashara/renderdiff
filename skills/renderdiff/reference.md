@@ -13,8 +13,16 @@ results.json · Gotchas.
   one-sided embeds (job boards, ads) and CSP blocks: a second pass only, and say which you used.
 - **Production builds on both sides.** Dev overlays exist on one side only; Next's and
   Astro's are hidden by default, others go in `hideSelectors`.
-- **Routes** are literal (no globs, no discovery): one per template or layout. They normalize
-  to no trailing slash (`/` stays `/`). `--dry-run` shows how each was read.
+- **Static builds:** `npx serve -l 3002 dist` (or any static server). Match the real host's
+  clean URLs and trailing slashes, or a route 404s or redirects on one side only.
+- **Routes** are literal (no globs, no discovery): every template or page the change can
+  reach, from the sitemap or router; skip search results, pagination and admin. For removed
+  CSS, every page where its selectors could match. Pages you don't list go under Not verified.
+  Routes normalize to no trailing slash (`/` stays `/`). `--dry-run` shows how each was read.
+- **Baseline when the change is already made:** serve the base build twice, on two ports, and
+  diff it against itself; whatever differs varies per load.
+- **States:** only the loaded state is shot. Hover, focus, open menus and dialogs need a
+  `before` hook (§ Scoping); dead-CSS removal often breaks exactly those.
 
 ## Output
 
