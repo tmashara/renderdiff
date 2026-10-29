@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Accepted } from "./accept.ts";
+import { fmtComputed, groupFindings, type ComputedDiff, type Finding } from "./computed.ts";
 import type { Band, Box, Region, TextDiff } from "./compare.ts";
 import { CONTEXT_OPTIONS, name, type ResolvedConfig, type Sides } from "./config.ts";
 import type { ElementDiff } from "./locate.ts";
@@ -47,6 +48,9 @@ export interface ComparedResult extends BaseResult {
   failed: { left: string[]; right: string[] };
   /** With `--cache-right`: when the recording the right side was replayed from was made, ISO. */
   rightReplayedFrom?: string;
+  /** With `--computed`: the computed-style diff; null when the snapshot failed, with `computedError` saying why. */
+  computed?: ComputedDiff | null;
+  computedError?: string;
 }
 
 /** A crop of one change: left and right panels, a 1px red box round it, or a 2px red seam. */
@@ -114,6 +118,8 @@ export interface Summary {
   accepted: number;
   /** Accepted differences for a measured route and width that weren't seen: prune them. */
   stale: Accepted[];
+  /** With `--computed`: each style change once, with the routes and widths it was seen at. */
+  computed?: Finding[];
 }
 
 /** The shape of `results.json`, written to the out dir on every run. */
@@ -158,6 +164,7 @@ export function writeResults(
       differing: open.filter((r) => r.diffPixels > 0).length,
       accepted: compared.filter((r) => r.accepted).length,
       stale,
+      ...(compared.some((r) => "computed" in r) ? { computed: groupFindings(results) } : {}),
     },
   };
   const rows = results.map((r) => `    ${JSON.stringify(r, round)}`).join(",\n");
@@ -270,6 +277,7 @@ function card(r: ComparedResult): string {
     ${r.widthDelta ? `<span class="delta">width ${signed(r.widthDelta)}px</span>` : ""}
     ${r.unstablePixels ? `<span class="unstable">${r.unstablePixels.toLocaleString("en-US")} px unstable</span>` : ""}
     ${r.alignedScore !== null ? `<span class="aligned">aligned ${pct(r.alignedScore)}</span>` : ""}
+    ${r.computed ? `<span class="w">${r.computed.dom ? `dom differs (${r.computed.dom})` : "dom identical"}</span>` : ""}
     <span class="px">${r.diffPixels.toLocaleString()} / ${r.totalPixels.toLocaleString()} px differ</span>
   </header>
   ${findings(r)}
@@ -342,6 +350,13 @@ export async function writeReport(
     .join("")}
   ${meta.rightReplayedFrom ? `&middot; right replayed from a recording of <code>${esc(meta.rightReplayedFrom)}</code>` : ""}
 </p>
+
+${(() => {
+  const lines = fmtComputed(results, [...new Set(results.map(name))]);
+  return lines.length
+    ? `<section><h2>Computed styles</h2><pre class="computed">${esc(lines.join("\n"))}</pre></section>`
+    : "";
+})()}
 
 ${section(compared)}
 

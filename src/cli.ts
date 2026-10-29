@@ -89,6 +89,7 @@ function parseArgs(argv: string[]): Args {
     else if (v === "--no-progress") a.progress = false;
     else if (v === "--rerun-failed") a.rerunFailed = true;
     else if (v === "--cache-right") a.cacheRight = true;
+    else if (v === "--computed") a.computed = true;
     else if (v === "--mask-media") a.maskMedia = true;
     else if (v === "--accept") {
       a.accept = next().trim();
@@ -213,6 +214,8 @@ const HELP = `
     --cache-right       Replay the right side's network from the last --cache-right run
                         in --out, if under an hour old and covering every shot; else load
                         it live and record it. The page still renders and is shot fresh.
+    --computed          Also diff every element's computed style and ::before/::after,
+                        and say whether the markup is identical. Pixels still decide.
     --dry-run           Print the URL pairs and exit. No browser.
     --open              Open the report when the run finishes.
     --progress          A line per shot as it finishes. The default on a terminal;

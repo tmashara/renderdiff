@@ -56,6 +56,7 @@ describe("help and version", () => {
       "--right-storage-state",
       "--accept",
       "--rerun-failed",
+      "--computed",
       "--mask",
       "--mask-media",
     ]) {

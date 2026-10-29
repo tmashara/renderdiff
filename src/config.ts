@@ -262,6 +262,8 @@ export interface RenderdiffConfig {
   extraCss?: string;
   /** Per-route regions painted over on both sides. */
   masks?: Mask[];
+  /** Also diff every element's computed style, and say whether the markup is identical. */
+  computed?: boolean;
   /** Mask every `iframe`, `video` and video.js text track on every route. */
   maskMedia?: boolean;
 }
@@ -282,6 +284,7 @@ export interface ResolvedConfig {
   masks: Mask[];
   /** Absolute storage state paths, checked to be JSON; null for a side without one. */
   storageState: { left: string | null; right: string | null };
+  computed: boolean;
 }
 
 /** package.json's version; the same relative path resolves from `src/` and `dist/`. */
@@ -442,6 +445,7 @@ function validate(c: Record<string, unknown>, file: string) {
       bad("widths", "an array of positive numbers");
     }
   }
+  if (c.computed !== undefined && typeof c.computed !== "boolean") bad("computed", "a boolean");
   if (c.threshold !== undefined) {
     const t = c.threshold;
     if (typeof t !== "number" || !Number.isFinite(t) || t < 0 || t > 1) {
@@ -490,6 +494,7 @@ export interface CliOverrides {
   concurrency?: number;
   /** Per side, from --storage-state / --left-storage-state / --right-storage-state. */
   storageState?: { left?: string; right?: string };
+  computed?: boolean;
   /** From --mask, appended to the config's masks. */
   masks?: string[];
   maskMedia?: boolean;
@@ -540,6 +545,7 @@ export function resolveConfig(file: RenderdiffConfig, cli: CliOverrides): Resolv
       left: storageFile(cli.storageState?.left ?? fileState?.left),
       right: storageFile(cli.storageState?.right ?? fileState?.right),
     },
+    computed: cli.computed ?? file.computed ?? false,
   };
 }
 

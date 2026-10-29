@@ -8,7 +8,8 @@ import { applyAccepted, readAccepted, updateAccepted } from "./accept.ts";
 import { CACHE_DIR, cacheFile, replayable, REPLAY_TTL, saveRecording, shotId } from "./cache.ts";
 import { cancelUnstable, capture, HookError, prepare, type Shot } from "./capture.ts";
 import { compare, crops, type Band } from "./compare.ts";
-import { locate, type ElementDiff } from "./locate.ts";
+import { diffSnapshots, fmtComputed } from "./computed.ts";
+import { locate, snapshot, type ElementDiff } from "./locate.ts";
 import {
   CONTEXT_OPTIONS,
   label,
@@ -32,6 +33,8 @@ import {
 
 /** A busy main thread can stall the probe; the elements are a hint, so give up rather than wait. */
 const LOCATE_TIMEOUT = 5_000;
+/** A full-page walk reads every element's style; past this, report the snapshot as failed. */
+const COMPUTED_TIMEOUT = 15_000;
 
 /** Past this share of a page unstable, too little was measured for a score to mean anything. */
 const MAX_UNSTABLE_SHARE = 0.25;
@@ -140,7 +143,7 @@ function previous(file: string, now: Record<string, unknown>): Results | string 
   for (const [key, value] of Object.entries(now)) {
     if (key === "config" && value !== was[key]) {
       return (
-        `the config (masks, hooks, hidden selectors, blocked URLs, CSS, storage state) ` +
+        `the config (masks, hooks, hidden selectors, blocked URLs, CSS, storage state, --computed) ` +
         `differs from the one that wrote ${file}; run without --rerun-failed to start over`
       );
     }
@@ -339,6 +342,30 @@ export async function run({
           ]),
         ]);
         named?.forEach((els, i) => (spots[i]!.target.elements = els));
+        const snap = (page: Page, side: "left" | "right") =>
+          snapshot(
+            page,
+            masksFor(cfg, page, route),
+            COMPUTED_TIMEOUT,
+            route.selector ? page.locator(route.selector[side]) : null,
+          ).catch((e: unknown) => {
+            // page.evaluate prefixes the page's own error: keep only its message.
+            throw new Error(
+              String(e instanceof Error ? e.message : e).replace(/^[\s\S]*Error: /, ""),
+            );
+          });
+        const computed = cfg.computed
+          ? await Promise.race([
+              Promise.all([snap(leftPage, "left"), snap(rightPage, "right")]).then(
+                ([l, r]) => ({ computed: diffSnapshots(l, r) }),
+                (e: Error) => ({ computed: null, computedError: e.message }),
+              ),
+              sleep(COMPUTED_TIMEOUT + 5_000, null, { ref: false }).then(() => ({
+                computed: null,
+                computedError: `took over ${(COMPUTED_TIMEOUT + 5_000) / 1000}s`,
+              })),
+            ])
+          : null;
         const cropped = made.map(({ png, ...c }, i) => ({ path: `${base}.c${i + 1}.png`, ...c }));
         await Promise.all([
           write(images.left, leftShot.png),
@@ -357,6 +384,7 @@ export async function run({
           crops: cropped,
           accepted: false,
           failed: { left: leftShot.failed, right: rightShot.failed },
+          ...computed,
           ...(replayedAt ? { rightReplayedFrom: new Date(replayedAt).toISOString() } : {}),
         });
         const { regions, bands, alignedScore, text } = metrics;
@@ -375,6 +403,12 @@ export async function run({
             ? `text: ${text.added.length} added, ${text.removed.length} removed`
             : "",
           dom.length ? `dom ${fmtElements(dom)}` : "",
+          computed && !computed.computed
+            ? `computed: snapshot failed, ${computed.computedError}`
+            : "",
+          computed?.computed
+            ? `computed ${computed.computed.dom ? `dom differs (${computed.computed.dom})` : "dom identical"}, ${computed.computed.changes.length + computed.computed.truncated} change(s)`
+            : "",
         ].filter(Boolean);
         ++done;
         if (!progress) continue;
@@ -496,7 +530,7 @@ export async function run({
       `stale accepted: ${stale.map((a) => `${a.route}@${a.width}`).join(" ")} — ${acceptedFile}`,
     );
   }
-  if (progress) summarize(results, reportPath, resultsPath);
+  if (progress) summarize(results, names, reportPath, resultsPath);
   else console.log(compact(results, names, resultsPath, cfg.threshold));
 
   if (open) {
@@ -571,7 +605,12 @@ async function shoot(
   }
 }
 
-function summarize(results: RouteResult[], reportPath: string, resultsPath: string) {
+function summarize(
+  results: RouteResult[],
+  routes: string[],
+  reportPath: string,
+  resultsPath: string,
+) {
   const compared = results.filter((r): r is ComparedResult => r.status === "compared");
 
   const open = compared.filter((r) => !r.accepted);
@@ -598,6 +637,9 @@ function summarize(results: RouteResult[], reportPath: string, resultsPath: stri
     console.log(`\nErrors (${errors.length}):`);
     for (const e of errors) console.log(`  ${name(e)}@${e.width}: ${e.error}`);
   }
+
+  const computed = fmtComputed(results, routes);
+  if (computed.length) console.log(`\n${computed.join("\n")}`);
 
   console.log(`\nReport: ${reportPath}`);
   console.log(`Results: ${resultsPath}`);
@@ -690,6 +732,7 @@ export function compact(
   }
   if (accepted.length) out.unshift(`accepted: ${accepted.join(" ")}`);
   if (clean.length) out.unshift(`clean: ${clean.join(" ")}`);
+  out.push(...fmtComputed(results, routes));
   const all = results.filter((r): r is ComparedResult => r.status === "compared");
   const compared = all.filter((r) => !r.accepted);
   const shots = compared.filter((r) => r.diffPixels > 0).length;

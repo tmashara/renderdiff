@@ -1,6 +1,7 @@
 import type { Locator, Page } from "playwright";
 import type { Shot } from "./capture.ts";
 import type { Box, Spot } from "./compare.ts";
+import type { Snapshot } from "./computed.ts";
 
 /** Names the DOM elements behind each change, from the pages still holding the shot's document. */
 
@@ -25,7 +26,7 @@ const PER_SPOT = 3;
 const MAX_CHANGED = 6;
 
 /** Layout first; width and height last, since they are usually a consequence. */
-const PROPS = [
+export const PROPS = [
   "display",
   "position",
   "float",
@@ -99,10 +100,14 @@ interface ProbeArgs {
   masked: Node[];
   props: string[];
   perSpot: number;
+  /** Snapshot every element's `props` instead of picking, giving up after this many ms. */
+  walk?: number;
+  /** Where the walk starts, keyed `:scope`; the body, keyed `body`, when null. */
+  root?: Node | null;
 }
 
 /** Runs in the page. At scroll 0 a client rect is page px, below the fold too. */
-function probe({ boxes, find, masked, props, perSpot }: ProbeArgs) {
+function probe({ boxes, find, masked, props, perSpot, walk, root }: ProbeArgs) {
   const MAX_SCAN = 50_000;
   const HASHED = /\d{3,}|^(css|sc|jsx|svelte)-|__[\w-]{5,}$|^_/;
   const TEST = ["data-testid", "data-test", "data-test-id", "data-cy", "data-qa"];
@@ -113,7 +118,8 @@ function probe({ boxes, find, masked, props, perSpot }: ProbeArgs) {
   const snippet = (e: Element) =>
     ((e as HTMLElement).innerText ?? e.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 40);
 
-  const part = (e: Element) => {
+  /** Tag, a naming attribute and up to two classes that don't look generated. */
+  const base = (e: Element, sorted: boolean) => {
     const tag = e.localName;
     let s = CSS.escape(tag);
     const href = e.getAttribute("href");
@@ -129,11 +135,20 @@ function probe({ boxes, find, masked, props, perSpot }: ProbeArgs) {
       }
     }
     // ponytail: hashed-class heuristic, attributes and nth-of-type are the fallback
-    s += Array.from(e.classList)
-      .filter((c) => !HASHED.test(c))
-      .slice(0, 2)
-      .map((c) => `.${CSS.escape(c)}`)
-      .join("");
+    const classes = Array.from(e.classList).filter((c) => !HASHED.test(c));
+    if (sorted) classes.sort();
+    return (
+      s +
+      classes
+        .slice(0, 2)
+        .map((c) => `.${CSS.escape(c)}`)
+        .join("")
+    );
+  };
+
+  const part = (e: Element) => {
+    const tag = e.localName;
+    let s = base(e, false);
     const siblings = e.parentElement ? Array.from(e.parentElement.children) : [];
     if (siblings.some((c) => c !== e && c.matches(s))) {
       s += `:nth-of-type(${siblings.filter((c) => c.localName === tag).indexOf(e) + 1})`;
@@ -186,6 +201,77 @@ function probe({ boxes, find, masked, props, perSpot }: ProbeArgs) {
   const hidden = new Set<Element>();
   for (const m of masked as Element[])
     [m, ...Array.from(m.querySelectorAll("*"))].forEach((e) => hidden.add(e));
+
+  if (walk) {
+    // STILL_CSS stops CSS animations; this settles ones started from script.
+    for (const a of document.getAnimations()) {
+      try {
+        a.finish();
+      } catch {
+        a.cancel();
+      }
+    }
+    const snap: Record<string, { html: string; styles: string[] }> = {};
+    const SKIP = new Set(["script", "style", "link", "meta", "template", "noscript"]);
+    let n = 0;
+    const end = performance.now() + walk;
+    // Generated class names change with the CSS, so they aren't markup changes.
+    const html = (e: Element) => {
+      const attrs = Array.from(e.attributes, (a) => {
+        const v =
+          a.name === "class"
+            ? Array.from(e.classList)
+                .filter((c) => !HASHED.test(c))
+                .sort()
+                .join(" ")
+            : a.value;
+        return ` ${a.name}="${v.replace(/"/g, "&quot;")}"`;
+      }).join("");
+      const text = Array.from(e.childNodes, (c) => (c.nodeType === 3 ? c.textContent : ""))
+        .join("")
+        .replace(/\s+/g, " ")
+        .trim();
+      return `<${e.localName}${attrs}>${text}`;
+    };
+    // A display:none element is kept, so a rule that hid it is a style change; its subtree isn't.
+    const visit = (e: Element, key: string) => {
+      if (++n > MAX_SCAN) throw new Error(`more than ${MAX_SCAN} elements`);
+      if (performance.now() > end) throw new Error(`took over ${walk}ms`);
+      const cs = getComputedStyle(e);
+      snap[key] = { html: html(e), styles: props.map((p) => cs.getPropertyValue(p)) };
+      if (cs.display === "none") return;
+      for (const pseudo of ["::before", "::after"]) {
+        const ps = getComputedStyle(e, pseudo);
+        const content = ps.getPropertyValue("content");
+        if (content !== "none" && content !== "normal")
+          snap[key + pseudo] = { html: "", styles: props.map((p) => ps.getPropertyValue(p)) };
+      }
+      // Indexed among every child, as :nth-of-type counts, so the key works with querySelector.
+      const ofType = new Map<string, number>();
+      const kids = Array.from(e.children, (c) => {
+        const k = (ofType.get(c.localName) ?? 0) + 1;
+        ofType.set(c.localName, k);
+        return { c, k };
+      }).filter(
+        ({ c }) => !hidden.has(c) && !SKIP.has(c.localName) && !(c as SVGElement).ownerSVGElement,
+      );
+      // The id, or the tag with a naming attribute and classes; with the index where siblings share it.
+      const segs = kids.map(({ c }) =>
+        c.id && !HASHED.test(c.id)
+          ? `${CSS.escape(c.localName)}#${CSS.escape(c.id)}`
+          : base(c, true),
+      );
+      const count = new Map<string, number>();
+      for (const g of segs) count.set(g, (count.get(g) ?? 0) + 1);
+      kids.forEach(({ c, k }, i) => {
+        const g = segs[i]!;
+        visit(c, `${key} > ${count.get(g)! > 1 ? `${g}:nth-of-type(${k})` : g}`);
+      });
+    };
+    const start = (root as Element | null) ?? document.body;
+    if (start) visit(start, root ? ":scope" : "body");
+    return { picks: [], found: [], snap };
+  }
   const els = document.body?.querySelectorAll("*") ?? [];
   for (let i = 0; i < els.length && i < MAX_SCAN; i++) {
     const e = els[i]!;
@@ -260,7 +346,7 @@ function probe({ boxes, find, masked, props, perSpot }: ProbeArgs) {
     return e ? hit(e) : null;
   });
 
-  return { picks, found };
+  return { picks, found, snap: null };
 }
 
 type Pair = [Seen | null, Seen | null];
@@ -293,6 +379,32 @@ const same = (a: Seen, b: Seen) =>
 
 const moved = (a: Box, b: Box) => a.x !== b.x || a.y !== b.y || a.w !== b.w || a.h !== b.h;
 
+const handles = async (ls: Locator[]) =>
+  (await Promise.all(ls.map((l) => l.elementHandles()))).flat();
+
+/**
+ * Every rendered element's computed `PROPS` and `content`, and its `::before`/`::after` when
+ * generated, keyed by a selector path; masked and `display: none` subtrees are skipped.
+ * Finishes the page's animations, so it runs after `locate`.
+ */
+export async function snapshot(
+  page: Page,
+  masks: Locator[],
+  budget: number,
+  root: Locator | null,
+): Promise<Snapshot> {
+  const { snap } = await page.evaluate(probe, {
+    root: root && (await root.elementHandle()),
+    boxes: [],
+    find: [],
+    masked: await handles(masks),
+    props: [...PROPS, "content"],
+    perSpot: 0,
+    walk: budget,
+  });
+  return snap!;
+}
+
 /**
  * The elements behind each of the first `MAX_SPOTS` spots, in spot order. Each side picks the
  * elements that best fill its box, then the other side looks for each by selector.
@@ -305,9 +417,7 @@ export async function locate(
 ): Promise<ElementDiff[][]> {
   const todo = spots.slice(0, MAX_SPOTS);
   if (!todo.length) return [];
-  const masked = await Promise.all(
-    masks.map(async (ls) => (await Promise.all(ls.map((l) => l.elementHandles()))).flat()),
-  );
+  const masked = await Promise.all(masks.map(handles));
   const boxes = (s: 0 | 1) =>
     todo.map((t) => {
       const b = s ? t.right : t.left;
