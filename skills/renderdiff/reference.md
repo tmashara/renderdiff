@@ -41,7 +41,7 @@ Report colouring (`--open`, for a human): green above 99.5%, amber to 97%, red b
 | "It's probably just fonts / antialiasing." | "Probably" is exactly what the crop resolves. Look. |
 | "`dom` says margin, done." | It's a computed value. Confirm the source rule changed on purpose, and still open the crop when the region is large or `dom` names nothing. |
 | "The crops looked fine, done." | There are at most three: bands, then the largest regions. Check the region count, any `clipped` crop in results.json, and open the diff PNG for the rest and for any height delta: padding is never cropped. |
-| "Masking the header gets this to 100%." | Every mask is coverage surrendered. Mask only content *proven* to vary per load (clocks, star counts, rotating quotes), with a `reason`, which the report prints verbatim. |
+| "Masking the header gets this to 100%." | Every mask is coverage surrendered. Mask only content *proven* to vary per load (clocks, star counts, rotating quotes), with a `reason`, which the report prints verbatim. Differing base vs base is that proof; `--mask-media` still gives up every iframe and video. |
 | "I'll `--accept` it so the run is green." | Accept only differences you opened and that exist before your change (or are intended), with a reason that says which. |
 | "I'll lower `--threshold` until it passes." | `--threshold` relaxes the exit code; the difference is still there. It's a CI gate, not a dial for reaching green. |
 | "That route errors, I'll drop it from the list." | Shrinking the route list shrinks what you verified. Fix it, or say it's unverified. |
@@ -97,6 +97,9 @@ cookie script ran wedges the renderer).
 
 ## Gotchas
 
+- **Reference choice:** base build vs change build, both local, is the default. Production as
+  the reference mixes in deploy drift, one-sided embeds (job boards, ads) and CSP blocks: use
+  it as a second pass, and say in the verdict which reference you used.
 - **stdout is compact when piped** (what an agent sees). `--progress` prints a line per
   shot instead; `--no-progress` forces the summary on a terminal.
 - **Accepted differences** (`--accept "<reason>"`) go to `renderdiff.accepted.json` next to the
