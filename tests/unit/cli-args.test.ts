@@ -396,6 +396,27 @@ describe("accept and rerun", () => {
   });
 });
 
+describe("probe", () => {
+  const U = `${L}/a`;
+  test("needs one URL", async () => {
+    await rejects(["probe"], "probe needs a URL");
+    await rejects(["probe", U, R], "probe takes one URL");
+    await rejects(["probe", U, "/b"], "probe takes one URL");
+  });
+
+  test("--loads is an integer of at least 2", async () => {
+    await rejects(["probe", U, "--loads", "1"], "--loads expects an integer of at least 2, got 1");
+    await rejects(["probe", U, "--loads=2.5"], "--loads expects an integer of at least 2");
+    await rejects(["probe", U, "--loads"], "--loads needs a value");
+    await rejects([L, R, "/a", "--loads", "3"], "unknown flag: --loads");
+  });
+
+  test("one width, no selector", async () => {
+    await rejects(["probe", U, "--width", "1440", "--width", "375"], "probe takes one --width");
+    await rejects(["probe", U, "--selector", "main"], "probe does not take --selector");
+  });
+});
+
 describe("preflight", () => {
   // Port 1 is reserved and never listening, so this is a closed port rather than a race
   // against something we just shut down.

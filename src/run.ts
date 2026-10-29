@@ -38,7 +38,7 @@ import {
 /** A busy main thread can stall the probe; the elements are a hint, so give up rather than wait. */
 const LOCATE_TIMEOUT = 5_000;
 /** A full-page walk reads every element's style; past this, report the snapshot as failed. */
-const COMPUTED_TIMEOUT = 15_000;
+export const COMPUTED_TIMEOUT = 15_000;
 /** Bounds one capture: a renderer that dies or never returns from an evaluate would hang the run. */
 const SHOT_TIMEOUT = (Math.max(0, Number(process.env.RENDERDIFF_SHOT_TIMEOUT)) || 120) * 1000;
 
@@ -789,7 +789,7 @@ const ARGS = [
  * A missing browser binary is the likeliest first-run failure, so fall back to the system
  * Chrome (both sides share it, so the comparison stays symmetric), then name the fix.
  */
-async function launch() {
+export async function launch() {
   try {
     return { browser: await chromium.launch({ args: ARGS }), channel: null };
   } catch (e) {
@@ -815,7 +815,7 @@ const transient = (e: unknown) =>
     (e instanceof Error && /net::ERR_|Execution context was destroyed/.test(e.message)));
 
 /** One retry for a transient failure: a live site can time out once on a cold edge. */
-async function shoot(
+export async function shoot(
   pages: Record<"left" | "right", Page>,
   url: string,
   route: Route,

@@ -182,6 +182,7 @@ const HELP = `
     renderdiff http://localhost:3000 https://example.com /pricing::/plans
     renderdiff report <out-dir> [--verdict <file>] [--title <text>]
     renderdiff merge <full-out> <partial-out> --out <dir>
+    renderdiff probe <url> [--width <n>] [--loads <n>]
 
   An argument starting with http:// or https:// is an origin: the first is left (your
   change), the second right (the reference); or pass --left / --right. A route is a
@@ -207,6 +208,11 @@ const HELP = `
 
   renderdiff merge writes <full-out>'s results to --out with each shot <partial-out> also
   has replaced by the partial run's, and its other shots added. Both must compare the same origins.
+
+  renderdiff probe loads one URL --loads times (default 8, in parallel up to --concurrency),
+  each in a fresh browser context as a run loads a side, and lists the elements whose computed
+  style or position in their parent varies between loads: what to mask. Exits 0 if nothing
+  varies, 1 if something does, 3 if a load errored.
 
   Writes report.html, results.json and crops of each change to --out. Exits 1 if any
   shot differs and isn't accepted (with --threshold, only if one scores below it;
@@ -414,12 +420,69 @@ async function merge(argv: string[]): Promise<never> {
   }
 }
 
+/** Takes `--loads <n>` out of `argv`, for `renderdiff probe`. */
+function takeLoads(argv: string[]): number {
+  let loads = 8;
+  for (let i = 0; i < argv.length; i++) {
+    const raw = argv[i]!;
+    const eq = raw.indexOf("=");
+    const v = eq === -1 ? raw : raw.slice(0, eq);
+    if (v === "--loads") {
+      const value = eq === -1 ? argv[i + 1] : raw.slice(eq + 1);
+      if (value === undefined || value === "" || value.startsWith("-")) {
+        throw new Error("--loads needs a value");
+      }
+      loads = num("--loads", value);
+      if (!Number.isInteger(loads) || loads < 2) {
+        throw new Error(`--loads expects an integer of at least 2, got ${loads}`);
+      }
+      argv.splice(i--, eq === -1 ? 2 : 1);
+    }
+  }
+  return loads;
+}
+
+/** `renderdiff probe <url>`: load one URL several times and list what varies between loads. */
+async function probe(a: Args, loads: number): Promise<never> {
+  if (!a.left) die("probe needs a URL: renderdiff probe <url>");
+  if (a.right || a.routes.length) die("probe takes one URL, with its path");
+  if ((a.widths?.length ?? 0) > 1) die("probe takes one --width");
+  if (a.selector) die("probe does not take --selector; it walks the whole page");
+  if (!URL.canParse(a.left)) die(`not a URL: ${a.left}`);
+  const u = new URL(a.left);
+  let route: Route;
+  try {
+    cfg = resolveConfig(fileConfig, { ...a, left: u.origin, right: u.origin });
+    [route] = parseRoutes(
+      [u.pathname + u.search],
+      undefined,
+      fileConfig.before,
+      fileConfig.beforeShot,
+    ) as [Route];
+  } catch (e) {
+    die(e instanceof Error ? e.message : String(e));
+  }
+  if (configPath) console.log(`Config: ${configPath}`);
+  await preflight(cfg.left, cfg.left);
+  const { probe } = await import("./probe.ts");
+  try {
+    process.exit(await probe(cfg.left + route.left, route, cfg.widths[0]!, cfg, loads));
+  } catch (e) {
+    console.error(`✗ ${e instanceof Error ? e.message : String(e)}`);
+    process.exit(3);
+  }
+}
+
 if (process.argv[2] === "report") await report(process.argv.slice(3));
 if (process.argv[2] === "merge") await merge(process.argv.slice(3));
 
+const probing = process.argv[2] === "probe";
+let loads = 0;
 let args: Args;
 try {
-  args = parseArgs(process.argv.slice(2));
+  const argv = process.argv.slice(probing ? 3 : 2);
+  if (probing) loads = takeLoads(argv);
+  args = parseArgs(argv);
 } catch (e) {
   die(e instanceof Error ? e.message : String(e));
 }
@@ -441,6 +504,7 @@ const { config: fileConfig, path: configPath } = await loadConfig(args.config).c
 );
 
 let cfg: ResolvedConfig;
+if (probing) await probe(args, loads);
 try {
   cfg = resolveConfig(fileConfig, args);
 } catch (e) {
