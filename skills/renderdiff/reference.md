@@ -310,9 +310,10 @@ For scripts and drilling into one route; the loop doesn't need it. One result pe
   `y`, `h`, or null when unaligned); each with `elements` (`selector`, `side`, each side's box,
   `changed` `{ prop: [left, right] }`, `text`, `rightSelector`, `reparented`; absent when not
   looked at, `[]` when nothing was named); `text` `{ added, removed }`; `failed` `{ left, right }`;
-  `masked` (reasons of `data-renderdiff-mask` elements, absent when none); `images`; `crops` (`kind`, each side's box with `h` 0 at an insertion point, `layout`, `scale`,
-  `clipped`); `accepted`; `rightReplayedFrom`; with `--computed`, `computed` (`dom`, 0 =
-  identical; `changes` `{ key, prop, values }`, first 500; `truncated`; `unmatched`) or null with
+  `masked` (reasons of `data-renderdiff-mask` elements, absent when none); `images`; `crops`
+  (`kind`, each side's box with `h` 0 at an insertion point, `layout`, `scale`, `clipped`);
+  `accepted`; `rightReplayedFrom`; with `--computed`, `computed` (`dom`, 0 = identical;
+  `changes` `{ key, prop, values }`, first 500; `truncated`; `unmatched`) or null with
   `computedError`.
 - **`summary`:** `compared`, `errors`, `mean` and `worst` (accepted shots aside),
   `belowThreshold`, `differing` (unaccepted shots with any differing pixel; without
