@@ -60,7 +60,7 @@ Breaking any of these produces a flaky suite, and the flake looks like a renderd
 9. **No animation** except in `animated`, which exists to prove `STILL_CSS` and the
    image-animation launch flag kill it, `ticker`, whose timer exists to be caught by the
    stability check, `unsettled`, which recolours the whole page to trip the
-   unstable-pixel cap, `unsettled-once`, which does so on its first render only, and
+   unstable-pixel cap, `unsettled-once`, which does so on its first render only,
    `mask-geometry`, whose box moves once after settle, and `lottie`, whose script-driven
    player exists to be held on one frame.
 
