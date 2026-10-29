@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import sharp from "sharp";
 import type { Accepted } from "./accept.ts";
 import { fmtComputed, groupFindings, type ComputedDiff, type Finding } from "./computed.ts";
 import type { Band, Box, Region, TextDiff } from "./compare.ts";
@@ -111,6 +112,11 @@ export interface RunMeta {
   config: string;
   /** The oldest `rightReplayedFrom` among the results, or null when every right side loaded live. */
   rightReplayedFrom: string | null;
+  freezeVideo: boolean;
+  /** `process.platform` of the run; accepted entries and pixels are OS-specific. */
+  platform: string;
+  /** With `--rerun-failed`: shots rerun and shots reused from the previous run; else null. */
+  rerun: { rerun: number; reused: number } | null;
 }
 
 export interface Summary {
@@ -223,7 +229,10 @@ const TEXT_CAP = 20;
 const dom = (els: ElementDiff[] | undefined) =>
   els?.length ? `<span class="dom"> — ${esc(fmtElements(els))}</span>` : "";
 
-function findings(r: ComparedResult): string {
+const cropLink = (c: CropResult) =>
+  `<a class="crop" href="${esc(c.path)}" target="_blank" title="${c.kind}, left ${c.layout === "stacked" ? "on top" : "on the left"}"><img loading="lazy" src="${esc(c.path)}"></a>`;
+
+function findings(r: ComparedResult, crop = cropLink): string {
   const items: string[] = [];
   const failed = fmtFailed(r.failed);
   if (failed) items.push(`<p class="failed">failed to load: ${esc(failed)}</p>`);
@@ -239,14 +248,7 @@ function findings(r: ComparedResult): string {
     );
   }
   if (r.crops.length) {
-    items.push(
-      `<div class="crops">${r.crops
-        .map(
-          (c) =>
-            `<a class="crop" href="${c.path}" target="_blank" title="${c.kind}, left ${c.layout === "stacked" ? "on top" : "on the left"}"><img loading="lazy" src="${c.path}"></a>`,
-        )
-        .join("")}</div>`,
-    );
+    items.push(`<div class="crops">${r.crops.map(crop).join("")}</div>`);
   }
   if (r.bands?.length) {
     items.push(
@@ -272,10 +274,7 @@ const reasons = (r: ComparedResult) =>
     ...new Set([...(r.bands ?? []), ...r.regions].flatMap((g) => (g.accepted ? [g.accepted] : []))),
   ].join("; ");
 
-function card(r: ComparedResult): string {
-  const imgs = r.images;
-  return `
-<article class="card">
+const head = (r: ComparedResult) => `
   <header>
     <span class="score ${band(r.score)}">${pct(r.score)}</span>
     <code>${esc(name(r))}</code>
@@ -288,7 +287,12 @@ function card(r: ComparedResult): string {
     ${r.alignedScore !== null ? `<span class="aligned">aligned ${pct(r.alignedScore)}</span>` : ""}
     ${r.computed ? `<span class="w">${r.computed.dom ? `dom differs (${r.computed.dom})` : "dom identical"}</span>` : ""}
     <span class="px">${r.diffPixels.toLocaleString()} / ${r.totalPixels.toLocaleString()} px differ</span>
-  </header>
+  </header>`;
+
+function card(r: ComparedResult): string {
+  const imgs = r.images;
+  return `
+<article class="card">${head(r)}
   ${findings(r)}
   <div class="grid">
     <figure><figcaption>left</figcaption><a href="${imgs.left}" target="_blank"><img loading="lazy" src="${imgs.left}"></a></figure>
@@ -298,19 +302,7 @@ function card(r: ComparedResult): string {
 </article>`;
 }
 
-export async function writeReport(
-  results: RouteResult[],
-  meta: RunMeta,
-  cfg: ResolvedConfig,
-  stale: Accepted[],
-): Promise<string> {
-  const compared = results.filter((r): r is ComparedResult => r.status === "compared");
-  const errors = results.filter((r): r is ErrorResult => r.status === "error");
-
-  const html = `<!doctype html>
-<meta charset="utf-8">
-<title>Visual diff</title>
-<style>
+const STYLE = `<style>
   :root { color-scheme: light dark; --bg:#fff; --fg:#1a1a1a; --mut:#666; --line:#e3e3e3; --card:#fafafa; }
   @media (prefers-color-scheme: dark) { :root { --bg:#16181c; --fg:#e8e8e8; --mut:#999; --line:#2c2f36; --card:#1c1f24; } }
   * { box-sizing: border-box }
@@ -346,7 +338,65 @@ export async function writeReport(
   code { font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace }
   details { margin:1rem 0; color:var(--mut) }
   ul { margin:.5rem 0; padding-left:1.25rem }
-</style>
+</style>`;
+
+function computedSection(results: RouteResult[]): string {
+  const lines = fmtComputed(results, [...new Set(results.map(name))]);
+  return lines.length
+    ? `<section><h2>Computed styles</h2><pre class="computed">${esc(lines.join("\n"))}</pre></section>`
+    : "";
+}
+
+const listed = (errors: ErrorResult[], stale: Accepted[]) =>
+  (errors.length
+    ? `<section><h2 class="bad">Errors</h2>
+<p class="blurb">These produced no measurement, so they are neither a pass nor a fail.</p>
+<ul>${errors.map((r) => `<li><code>${esc(name(r))}</code> @${r.width}px — ${esc(r.error)}</li>`).join("")}</ul></section>`
+    : "") +
+  (stale.length
+    ? `<section><h2>Stale accepted differences</h2>
+<p class="blurb">Accepted, but not seen on this run: prune them from the accepted file.</p>
+<ul>${stale.map((a) => `<li><code>${esc(a.route)}</code> @${a.width}px — ${esc(a.reason)}</li>`).join("")}</ul></section>`
+    : "");
+
+const neutralized = (meta: RunMeta) => `<details>
+  <summary>What was neutralized</summary>
+  <p>Blocked on both sides — analytics, consent, and A/B tooling that would otherwise
+     rewrite the DOM differently on each load:</p>
+  <ul>${meta.blockUrlPatterns.map((p) => `<li><code>${esc(p)}</code></li>`).join("")}</ul>
+  <p>Masked, because they drift — painted over on both sides, so they can neither pass
+     nor fail:</p>
+  ${
+    meta.masks.length
+      ? `<ul>${meta.masks.map((m) => `<li>${esc(m.reason)}</li>`).join("")}</ul>`
+      : `<p><em>None configured.</em></p>`
+  }
+  <p>Pinned on both sides: clock starts at <code>${esc(meta.clock)}</code> on every load, a seeded
+     <code>Math.random</code>, timezone <code>${CONTEXT_OPTIONS.timezoneId}</code>, locale
+     <code>${CONTEXT_OPTIONS.locale}</code>, <code>${CONTEXT_OPTIONS.colorScheme}</code> colour
+     scheme, reduced motion, CSS animations and transitions off${
+       meta.freezeVideo ? ", videos kept from playing with video.js overlays hidden" : ""
+     }.</p>
+  <p>Unstable pixels — ones that changed between two shots of the same load — are painted
+     magenta on both sides, counted on each card, and excluded from the measurement. A route
+     more than 25% unstable is an error.</p>
+  <p>Magenta is also padding where one page is taller or wider than the other. It counts
+     against the score on purpose — see the height delta on the row.</p>
+</details>`;
+
+export async function writeReport(
+  results: RouteResult[],
+  meta: RunMeta,
+  cfg: ResolvedConfig,
+  stale: Accepted[],
+): Promise<string> {
+  const compared = results.filter((r): r is ComparedResult => r.status === "compared");
+  const errors = results.filter((r): r is ErrorResult => r.status === "error");
+
+  const html = `<!doctype html>
+<meta charset="utf-8">
+<title>Visual diff</title>
+${STYLE}
 
 <h1>Visual diff</h1>
 <p class="meta">
@@ -360,59 +410,164 @@ export async function writeReport(
   ${meta.rightReplayedFrom ? `&middot; right replayed from a recording of <code>${esc(meta.rightReplayedFrom)}</code>` : ""}
 </p>
 
-${(() => {
-  const lines = fmtComputed(results, [...new Set(results.map(name))]);
-  return lines.length
-    ? `<section><h2>Computed styles</h2><pre class="computed">${esc(lines.join("\n"))}</pre></section>`
-    : "";
-})()}
+${computedSection(results)}
 
 ${section(compared)}
 
-${
-  errors.length
-    ? `<section><h2 class="bad">Errors</h2>
-<p class="blurb">These produced no measurement, so they are neither a pass nor a fail.</p>
-<ul>${errors.map((r) => `<li><code>${esc(name(r))}</code> @${r.width}px — ${esc(r.error)}</li>`).join("")}</ul></section>`
-    : ""
-}
+${listed(errors, stale)}
 
-${
-  stale.length
-    ? `<section><h2>Stale accepted differences</h2>
-<p class="blurb">Accepted, but not seen on this run: prune them from the accepted file.</p>
-<ul>${stale.map((a) => `<li><code>${esc(a.route)}</code> @${a.width}px — ${esc(a.reason)}</li>`).join("")}</ul></section>`
-    : ""
-}
-
-<details>
-  <summary>What was neutralized</summary>
-  <p>Blocked on both sides — analytics, consent, and A/B tooling that would otherwise
-     rewrite the DOM differently on each load:</p>
-  <ul>${cfg.blockUrlPatterns.map((p) => `<li><code>${esc(p)}</code></li>`).join("")}</ul>
-  <p>Masked, because they drift — painted over on both sides, so they can neither pass
-     nor fail:</p>
-  ${
-    cfg.masks.length
-      ? `<ul>${cfg.masks.map((m) => `<li>${esc(m.reason)}</li>`).join("")}</ul>`
-      : `<p><em>None configured.</em></p>`
-  }
-  <p>Pinned on both sides: clock starts at <code>${esc(meta.clock)}</code> on every load, a seeded
-     <code>Math.random</code>, timezone <code>${CONTEXT_OPTIONS.timezoneId}</code>, locale
-     <code>${CONTEXT_OPTIONS.locale}</code>, <code>${CONTEXT_OPTIONS.colorScheme}</code> colour
-     scheme, reduced motion, CSS animations and transitions off${
-       cfg.freezeVideo ? ", videos kept from playing with video.js overlays hidden" : ""
-     }.</p>
-  <p>Unstable pixels — ones that changed between two shots of the same load — are painted
-     magenta on both sides, counted on each card, and excluded from the measurement. A route
-     more than 25% unstable is an error.</p>
-  <p>Magenta is also padding where one page is taller or wider than the other. It counts
-     against the score on purpose — see the height delta on the row.</p>
-</details>
+${neutralized(meta)}
 `;
 
   fs.mkdirSync(cfg.outDir, { recursive: true });
   const out = path.join(cfg.outDir, "report.html");
   fs.writeFileSync(out, html);
+  return out;
+}
+
+// ponytail: hard 12MB ceiling on embedded crops (base64) to fit a 16MB Artifact; split files if runs hit it.
+const EVIDENCE_BUDGET = 12_000_000;
+
+/** One self-contained page for a ticket: the verdict, the banner and the non-clean shots' crops. */
+export async function writeEvidence(
+  { meta, results, summary }: Results,
+  outDir: string,
+  verdict: string | null,
+  title = "Visual parity evidence",
+): Promise<string> {
+  // Lazy, so importing the package's types never loads Playwright.
+  const { compact, fails, reusable } = await import("./run.ts");
+  const routes = [...new Set(results.map(name))];
+  const compared = results.filter((r): r is ComparedResult => r.status === "compared");
+  const errors = results.filter((r): r is ErrorResult => r.status === "error");
+  const byScore = (a: ComparedResult, b: ComparedResult) => a.score - b.score;
+  const cards = compared.filter((r) => !reusable(r)).sort(byScore);
+  const acceptedCards = compared.filter((r) => r.accepted).sort(byScore);
+
+  const worst = new Map<string, CropResult>();
+  for (const r of cards) if (r.crops[0] && !worst.has(name(r))) worst.set(name(r), r.crops[0]);
+  const embedded = new Map<CropResult, string>();
+  let used = 0;
+  let omitted = 0;
+  const all = [...worst.values(), ...[...cards, ...acceptedCards].flatMap((r) => r.crops)];
+  for (const c of new Set(all)) {
+    let webp: Buffer;
+    try {
+      webp = await sharp(path.join(outDir, c.path))
+        .resize({ width: 1000, withoutEnlargement: true })
+        .webp({ quality: 80 })
+        .toBuffer();
+    } catch {
+      omitted++;
+      continue;
+    }
+    const uri = `data:image/webp;base64,${webp.toString("base64")}`;
+    if (used + uri.length > EVIDENCE_BUDGET) {
+      omitted++;
+      continue;
+    }
+    used += uri.length;
+    embedded.set(c, uri);
+  }
+  const crop = (c: CropResult) =>
+    embedded.has(c)
+      ? `<img src="${embedded.get(c)}" title="${c.kind}, left ${c.layout === "stacked" ? "on top" : "on the left"}">`
+      : `<p class="omitted">crop omitted</p>`;
+
+  const open = compared.filter((r) => !r.accepted);
+  const count = (n: number, what: string) => (n ? [`${n} ${what}`] : []);
+  const notes = [
+    ...count(errors.length, "error(s)"),
+    ...count(open.filter((r) => r.unstablePixels).length, "shot(s) with unstable pixels"),
+    ...count(open.filter((r) => fmtFailed(r.failed)).length, "shot(s) with failed assets"),
+    ...count(
+      open.filter((r) => r.diffPixels > 0 && !fails(r, meta.threshold)).length,
+      "shot(s) differ under threshold",
+    ),
+    ...count(meta.rerun?.reused ?? 0, "shot(s) reused by --rerun-failed"),
+    ...count(omitted, "crop(s) omitted (over the size budget or missing)"),
+  ];
+  const [cls, label] = compared.some((r) => fails(r, meta.threshold))
+    ? ["bad", "Differs"]
+    : !results.length || meta.rerun?.reused || !results.every(reusable)
+      ? ["warn", "Not verified"]
+      : ["good", "Parity"];
+
+  const shots = (route: string) => results.filter((r) => name(r) === route);
+  const clean = routes.filter((rt) =>
+    shots(rt).every((r) => r.status === "compared" && !r.accepted && reusable(r)),
+  );
+  const accepted = routes.filter((rt) => !clean.includes(rt) && shots(rt).every(reusable));
+  const why = (rt: string) =>
+    [...new Set(compared.filter((r) => name(r) === rt && r.accepted).map(reasons))].join("; ");
+
+  const html = `<!doctype html>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'">
+<title>${esc(title)}</title>
+${STYLE}
+<style>
+  .banner { font-size:1.2rem; font-weight:700; padding:.6rem 1rem; border-radius:8px;
+            border:2px solid currentColor; margin:0 0 .5rem }
+  .verdict { white-space:pre-wrap; border-left:3px solid var(--line); padding-left:1rem }
+  .crops img { max-height:none }
+  .omitted { font-style:italic }
+</style>
+
+<h1>${esc(title)}</h1>
+<p class="meta">
+  left <code>${esc(meta.left)}</code> vs right <code>${esc(meta.right)}</code><br>
+  ${esc(meta.generatedAt)} &middot; renderdiff ${esc(meta.version)} &middot;
+  widths ${meta.widths.join(", ")} &middot;
+  threshold ${meta.threshold === null ? "none" : pct(meta.threshold)} &middot;
+  ${esc(meta.platform ?? "unknown platform")} &middot; ${esc(meta.browser.name)} ${esc(meta.browser.version)}
+</p>
+
+<div class="banner ${cls}">${label}</div>
+${notes.length ? `<p class="blurb">${esc(notes.join(" · "))}</p>` : ""}
+<p><code>${esc(compact(results, routes, "results.json", meta.threshold).split("\n").at(-1)!)}</code></p>
+
+<section><h2>Verdict</h2>
+${verdict?.trim() ? `<div class="verdict">${esc(verdict.trim())}</div>` : `<p class="blurb"><em>No verdict attached.</em></p>`}
+</section>
+
+<section><h2>Coverage</h2>
+<details><summary>${clean.length} clean route(s)</summary>
+<ul>${clean.map((rt) => `<li><code>${esc(rt)}</code></li>`).join("")}</ul></details>
+${
+  accepted.length
+    ? `<p>Accepted:</p><ul>${accepted.map((rt) => `<li><code>${esc(rt)}</code> — ${esc(why(rt))}</li>`).join("")}</ul>`
+    : ""
+}
+</section>
+
+${listed(errors, summary.stale)}
+
+${computedSection(results)}
+
+${
+  cards.length
+    ? `<section><h2>Not clean</h2>${cards
+        .map((r) => `<article class="card">${head(r)}${findings(r, crop)}</article>`)
+        .join("\n")}</section>`
+    : ""
+}
+
+${
+  acceptedCards.length
+    ? `<section><h2>Accepted</h2>${acceptedCards
+        .map((r) => `<article class="card">${head(r)}${findings(r, crop)}</article>`)
+        .join("\n")}</section>`
+    : ""
+}
+
+${neutralized(meta)}
+`;
+
+  const out = path.join(outDir, "evidence.html");
+  fs.writeFileSync(out, html);
+  if (Buffer.byteLength(html) > 16 * 1024 * 1024) {
+    console.warn("evidence.html is over 16 MB: too big to publish as an Artifact");
+  }
   return out;
 }

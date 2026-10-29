@@ -10,6 +10,7 @@
  * Per-site knobs (masks for content that drifts, extra selectors to hide, defaults for
  * the flags below) live in a `renderdiff.config.ts` / `.mjs` in the working directory.
  */
+import fs from "node:fs";
 import path from "node:path";
 import { ACCEPTED_FILE } from "./accept.ts";
 import {
@@ -169,6 +170,7 @@ const HELP = `
 
     renderdiff http://localhost:3000 https://example.com / /about
     renderdiff http://localhost:3000 https://example.com /pricing::/plans
+    renderdiff report <out-dir> [--verdict <file>] [--title <text>]
 
   An argument starting with http:// or https:// is an origin: the first is left (your
   change), the second right (the reference); or pass --left / --right. A route is a
@@ -186,6 +188,9 @@ const HELP = `
   --accept "<reason>" records this run's differences in renderdiff.accepted.json (next to
   the config, or in cwd); later runs report them as accepted, and anything new still shows.
   --rerun-failed reruns only what the previous run in --out didn't find clean or accepted.
+
+  renderdiff report reads results.json in <out-dir> and writes evidence.html beside it: one
+  self-contained page (crops embedded) with a parity banner and the --verdict file's text.
 
   Writes report.html, results.json and crops of each change to --out. Exits 1 if any
   shot differs and isn't accepted (with --threshold, only if one scores below it;
@@ -277,6 +282,44 @@ async function preflight(left: string, right: string) {
   console.error("  collapse every page and diff as garbage).\n");
   process.exit(2);
 }
+
+/** `renderdiff report <out-dir>`: evidence.html from an existing results.json, no browser. */
+async function report(argv: string[]): Promise<never> {
+  try {
+    let dir: string | undefined;
+    const opt: { "--verdict"?: string; "--title"?: string } = {};
+    for (let i = 0; i < argv.length; i++) {
+      const v = argv[i]!;
+      if (v === "--verdict" || v === "--title") {
+        const value = argv[++i];
+        if (value === undefined) throw new Error(`${v} needs a value`);
+        opt[v] = value;
+      } else if (v.startsWith("-") || dir !== undefined)
+        throw new Error(`unexpected argument: ${v}`);
+      else dir = v;
+    }
+    if (!dir)
+      throw new Error("usage: renderdiff report <out-dir> [--verdict <file>] [--title <text>]");
+    const file = path.join(dir, "results.json");
+    if (!fs.existsSync(file)) throw new Error(`no ${file}; run renderdiff with --out ${dir} first`);
+    const verdict =
+      opt["--verdict"] === undefined ? null : fs.readFileSync(opt["--verdict"], "utf8");
+    const { writeEvidence } = await import("./report.ts");
+    const out = await writeEvidence(
+      JSON.parse(fs.readFileSync(file, "utf8")),
+      dir,
+      verdict,
+      opt["--title"],
+    );
+    console.log(`${out} (${Math.ceil(fs.statSync(out).size / 1024)} KB)`);
+    process.exit(0);
+  } catch (e) {
+    console.error(`✗ ${e instanceof Error ? e.message : String(e)}`);
+    process.exit(2);
+  }
+}
+
+if (process.argv[2] === "report") await report(process.argv.slice(3));
 
 let args: Args;
 try {
