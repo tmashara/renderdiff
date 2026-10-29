@@ -9,7 +9,7 @@ import { applyAccepted, readAccepted, unacceptable, updateAccepted } from "./acc
 import { CACHE_DIR, cacheFile, replayable, REPLAY_TTL, saveRecording, shotId } from "./cache.ts";
 import { cancelUnstable, capture, HookError, prepare, step, type Shot } from "./capture.ts";
 import { compare, crops, type Band, type Box, type Region } from "./compare.ts";
-import { diffSnapshots, fmtComputed, pageError } from "./computed.ts";
+import { diffAria, diffSnapshots, fmtAria, fmtComputed, pageError } from "./computed.ts";
 import { locate, snapshot, type ElementDiff } from "./locate.ts";
 import {
   CONTEXT_OPTIONS,
@@ -170,7 +170,7 @@ function previous(file: string, now: Record<string, unknown>): Results | string 
   for (const [key, value] of Object.entries(now)) {
     if (key === "config" && value !== was[key]) {
       return (
-        `the config (masks, hooks, hidden selectors, blocked URLs, CSS, storage state, --computed) ` +
+        `the config (masks, hooks, hidden selectors, blocked URLs, CSS, storage state, --computed, --aria) ` +
         `differs from the one that wrote ${file}; run without --rerun-failed to start over`
       );
     }
@@ -478,6 +478,26 @@ export async function run({
               })),
             ])
           : null;
+        // Masked content is noise here too; every next job reloads the page, so no restore.
+        const tree = async (page: Page, side: "left" | "right") => {
+          for (const m of masksFor(cfg, page, route))
+            await m.evaluateAll((es) => es.forEach((e) => e.setAttribute("aria-hidden", "true")));
+          return page
+            .locator(route.selector?.[side] ?? "body")
+            .ariaSnapshot({ timeout: COMPUTED_TIMEOUT });
+        };
+        const aria = cfg.aria
+          ? await Promise.race([
+              Promise.all([tree(pages.left, "left"), tree(pages.right, "right")]).then(
+                ([l, r]) => ({ aria: diffAria(l, r, [pages.left.url(), pages.right.url()]) }),
+                (e: unknown) => ({ aria: null, ariaError: pageError(e) }),
+              ),
+              sleep(COMPUTED_TIMEOUT + 5_000, null, { ref: false }).then(() => ({
+                aria: null,
+                ariaError: `took over ${(COMPUTED_TIMEOUT + 5_000) / 1000}s`,
+              })),
+            ])
+          : null;
         const cropped = made.map(({ png, ...c }, i) => ({ path: `${base}.c${i + 1}.png`, ...c }));
         await Promise.all([
           write(images.left, leftShot.png),
@@ -500,6 +520,7 @@ export async function run({
           failed: { left: leftShot.failed, right: rightShot.failed },
           ...(marked.length ? { masked: marked } : {}),
           ...computed,
+          ...aria,
           ...(replayedAt ? { rightReplayedFrom: new Date(replayedAt).toISOString() } : {}),
         });
         const { regions, bands, alignedScore, text } = metrics;
@@ -524,6 +545,10 @@ export async function run({
             : "",
           computed?.computed
             ? `computed ${computed.computed.dom ? `dom differs (${computed.computed.dom})` : "dom identical"}, ${computed.computed.changes.length + computed.computed.truncated} change(s)`
+            : "",
+          aria && !aria.aria ? `aria: snapshot failed, ${aria.ariaError}` : "",
+          aria?.aria && (aria.aria.added.length || aria.aria.removed.length)
+            ? `aria: ${aria.aria.added.length} added, ${aria.aria.removed.length} removed`
             : "",
         ].filter(Boolean);
         ++done;
@@ -935,6 +960,8 @@ function summarize(
   if (repeated.length) console.log(`\n${repeated.join("\n")}`);
   const computed = fmtComputed(results, routes);
   if (computed.length) console.log(`\n${computed.join("\n")}`);
+  const aria = fmtAria(results, routes);
+  if (aria.length) console.log(`\n${aria.join("\n")}`);
   const varies = fmtVaries(results, routes);
   if (varies.length) console.log(`\n${varies.join("\n")}`);
 
@@ -1032,6 +1059,7 @@ export function compact(
   out.push(
     ...fmtPixelFindings(results),
     ...fmtComputed(results, routes),
+    ...fmtAria(results, routes),
     ...fmtVaries(results, routes),
   );
   const all = results.filter((r): r is ComparedResult => r.status === "compared");

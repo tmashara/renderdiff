@@ -9,7 +9,8 @@ hand.
 Three groups:
 
 - **Equivalence** — `home`, `flex-vs-grid`, `float-vs-flex`, `table-vs-grid`, `abs-vs-flex`,
-  `inline-block-vs-flex`. The two sides are visually identical and built with different CSS.
+  `inline-block-vs-flex`, `button-vs-div`. The two sides are visually identical and built with
+  different CSS (`button-vs-div`: different markup, for `--aria`).
   These must score ≈100%. They are the corpus's central claim: the score tracks pixels, not
   markup, so a CSS refactor that changed nothing visible reads as "nothing changed".
 - **Controls** — `shifted`, `taller`, `color`, `tint`, `nav`, `margin`, `divider`. Deliberately different. These must score low.

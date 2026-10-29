@@ -98,6 +98,7 @@ function parseArgs(argv: string[]): Args {
     else if (v === "--cache-right") a.cacheRight = true;
     else if (v === "--no-recheck") a.recheck = false;
     else if (v === "--computed") a.computed = true;
+    else if (v === "--aria") a.aria = true;
     else if (v === "--mask-media") a.maskMedia = true;
     else if (v === "--no-freeze-video") a.freezeVideo = false;
     else if (v === "--sitemap") {
@@ -250,6 +251,8 @@ const HELP = `
                         varies per load. Off anyway under --cache-right.
     --computed          Also diff every element's computed style and ::before/::after,
                         and say whether the markup is identical. Pixels still decide.
+    --aria              Also diff each page's accessibility tree (Playwright's ARIA
+                        snapshot) line by line. Pixels still decide.
     --sitemap[=<url>]   Add the paths in the right side's sitemap (one index level, files
                         dropped). Default <right>/sitemap.xml; give a URL or path with =.
     --dry-run           Print the URL pairs and exit. No browser.

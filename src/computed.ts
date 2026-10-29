@@ -1,3 +1,4 @@
+import { textDiff } from "./compare.ts";
 import { name } from "./config.ts";
 import { PROPS } from "./locate.ts";
 import type { ComparedResult, RouteResult } from "./report.ts";
@@ -34,7 +35,17 @@ export interface Finding extends StyleChange {
   at: { url: string; widths: number[] }[];
 }
 
+export interface AriaDiff {
+  /** Lines of Playwright's ARIA snapshot only the left (your change) has, at most `MAX_ARIA_LINES`; both empty: identical. */
+  added: string[];
+  removed: string[];
+  /** Lines past `MAX_ARIA_LINES` on either side, left out. */
+  truncated: number;
+}
+
 const MAX_CHANGES = 500;
+const MAX_ARIA_LINES = 200;
+const ARIA_LINES_SHOWN = 10;
 const MAX_UNMATCHED = 20;
 const FIELDS = [...PROPS, "content"];
 
@@ -66,16 +77,19 @@ const hashy = (t: string) => (t.match(/\d+|[A-Za-z]+/g)?.length ?? 0) >= 4;
 
 /** In URL attributes, bundler hashes in a file name (`main.3f9a8c1d.png`, `?v=…`) read the same on both sides. */
 export const normalizeAssets = (html: string) =>
+  html.replace(
+    / (src|href|srcset|poster)="([^"]*)"/g,
+    (_, n: string, v: string) => ` ${n}="${normalizeUrl(v)}"`,
+  );
+
+const normalizeUrl = (v: string) =>
   // ponytail: hex/base36 hashes between separators; add a framework's build-id path when one shows up
-  html.replace(/ (src|href|srcset|poster)="([^"]*)"/g, (_, n: string, v: string) => {
-    const u = v
-      .replace(
-        /([.\-_])([A-Za-z0-9]{8,})(?=(?:[.\-_][A-Za-z0-9]+)*\.[A-Za-z0-9]{2,5}(?:$|[?#\s,]))/g,
-        (m, sep: string, t: string) => (hashy(t) ? `${sep}#` : m),
-      )
-      .replace(/([?&](?:v|ver|version|hash)=)[\w.-]+/g, "$1#");
-    return ` ${n}="${u}"`;
-  });
+  v
+    .replace(
+      /([.\-_])([A-Za-z0-9]{8,})(?=(?:[.\-_][A-Za-z0-9]+)*\.[A-Za-z0-9]{2,5}(?:$|[?#\s,]))/g,
+      (m, sep: string, t: string) => (hashy(t) ? `${sep}#` : m),
+    )
+    .replace(/([?&](?:v|ver|version|hash)=)[\w.-]+/g, "$1#");
 
 /** A page's throw is its text after the first `Error: `, without the stack page.evaluate appends. */
 export const pageError = (e: unknown) => {
@@ -115,18 +129,19 @@ export function collapseInherited<C extends { key: string; prop: string; values:
   });
 }
 
-/** `from`'s origin, also protocol-relative, written as `to`'s: in keys, markup and styles. */
-function rebase(s: Snapshot, from: string, to: string): Snapshot {
+/** `from`'s origin, also protocol-relative, written as `to`'s. */
+function rebaseText(s: string, from: string, to: string): string {
   const [f, t] = [new URL(from), new URL(to)];
   if (f.origin === t.origin || f.origin === "null" || t.origin === "null") return s;
   const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   // Not `:46110` for `:4611`, nor `localhost.example.com` for `localhost`.
   const re = new RegExp(`(${esc(f.protocol)})?//${esc(f.host)}(?![\\w.:-])`, "g");
-  // Origins hold no `"` or `\`, so the JSON text rewrites like the strings it encodes.
-  return JSON.parse(
-    JSON.stringify(s).replace(re, (_, p?: string) => `${p ? t.protocol : ""}//${t.host}`),
-  ) as Snapshot;
+  return s.replace(re, (_, p?: string) => `${p ? t.protocol : ""}//${t.host}`);
 }
+
+/** In keys, markup and styles. Origins hold no `"` or `\`, so the JSON text rewrites like the strings it encodes. */
+const rebase = (s: Snapshot, from: string, to: string): Snapshot =>
+  JSON.parse(rebaseText(JSON.stringify(s), from, to)) as Snapshot;
 
 export function diffSnapshots(
   left: Snapshot,
@@ -277,5 +292,64 @@ export function fmtComputed(results: RouteResult[], routes: string[]): string[] 
   out.push(...unmatched.slice(0, UNMATCHED_SHOWN));
   if (unmatched.length > UNMATCHED_SHOWN)
     out.push(`  (+${unmatched.length - UNMATCHED_SHOWN} more routes with unmatched elements)`);
+  return out;
+}
+
+// ponytail: raw indented lines, so a wrapper role added or removed re-indents everything below it; key lines by role path if that gets noisy
+export function diffAria(left: string, right: string, origins?: [string, string]): AriaDiff {
+  const lines = (t: string) =>
+    t.split("\n").map((l) => l.replace(/^(\s*- \/url: )(.*)$/, (_, p, u) => p + normalizeUrl(u)));
+  const { added, removed } = textDiff(
+    lines(origins ? rebaseText(left, ...origins) : left),
+    lines(right),
+  );
+  return {
+    added: added.slice(0, MAX_ARIA_LINES),
+    removed: removed.slice(0, MAX_ARIA_LINES),
+    truncated:
+      Math.max(0, added.length - MAX_ARIA_LINES) + Math.max(0, removed.length - MAX_ARIA_LINES),
+  };
+}
+
+/** The console block: identical routes counted, then each distinct diff once with the widths it was seen at. */
+export function fmtAria(results: RouteResult[], routes: string[]): string[] {
+  const rows = results.filter((r): r is ComparedResult => r.status === "compared" && "aria" in r);
+  if (!rows.length) return [];
+  const groups = new Map<string, { at: string; widths: number[]; lines: string[]; more: number }>();
+  const failed: string[] = [];
+  const differs: string[] = [];
+  let identical = 0;
+  for (const route of routes) {
+    const rs = rows.filter((r) => name(r) === route);
+    if (!rs.length) continue;
+    const bad = rs.find((r) => !r.aria);
+    if (bad) failed.push(`${route}@${bad.width} (${bad.ariaError ?? "unknown"})`);
+    const diffs = rs.filter((r) => r.aria && (r.aria.added.length || r.aria.removed.length));
+    if (diffs.length) differs.push(route);
+    else if (rs.some((r) => r.aria)) identical++;
+    for (const r of diffs) {
+      const { added, removed, truncated } = r.aria!;
+      const id = JSON.stringify([route, added, removed]);
+      const g = groups.get(id);
+      if (g) g.widths.push(r.width);
+      else {
+        const lines = [...added.map((l) => `+${l}`), ...removed.map((l) => `-${l}`)];
+        groups.set(id, { at: route, widths: [r.width], lines, more: truncated });
+      }
+    }
+  }
+  const out = [
+    `aria: identical on ${identical} of ${identical + differs.length} route(s)` +
+      (differs.length ? `, differs ${differs.join(" ")}` : "") +
+      (failed.length ? `; snapshot failed on ${failed.join(" ")}` : ""),
+  ];
+  const all = [...groups.values()];
+  for (const g of all.slice(0, SHOWN)) {
+    out.push(`  ${g.at}@${g.widths.join(",")}`);
+    out.push(...g.lines.slice(0, ARIA_LINES_SHOWN).map((l) => `    ${l}`));
+    const more = Math.max(0, g.lines.length - ARIA_LINES_SHOWN) + g.more;
+    if (more) out.push(`    (+${more} more in results.json)`);
+  }
+  if (all.length > SHOWN) out.push(`  (+${all.length - SHOWN} more in results.json)`);
   return out;
 }

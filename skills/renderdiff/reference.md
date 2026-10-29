@@ -1,7 +1,7 @@
 # renderdiff reference
 
 Left is your change, right is the reference: `+` is only/more on the left, `-` only/more on
-the right. Sections: Reference and routes · Output · Errors · `--computed` · Masks, accepts
+the right. Sections: Reference and routes · Output · Errors · `--computed` · `--aria` · Masks, accepts
 and thresholds · Rationalizations · Exit codes · Iterating · Scoping · Config file ·
 results.json · Gotchas.
 
@@ -49,6 +49,7 @@ accepted: /blog
   @375  ERROR HTTP 404 at http://localhost:3001/about
 findings: …                       (a change seen on 2+ routes)
 computed: …                       (with --computed, see below)
+aria: …                           (with --aria, see below)
 renderdiff: 1 of 3 routes differ (1 of 15 shots), 1 error, worst 97.41% /about@1440 — …/results.json
 ```
 
@@ -169,6 +170,27 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
   `before` hook can open the state.
 - Fails per shot (reported, pixels stand) past 15s or 50,000 elements. Not walked: SVG
   internals, shadow DOM, iframes, masked and `display: none` subtrees.
+
+## `--aria`
+
+After each shot, diffs Playwright's ARIA snapshot (the accessibility tree) of `body` or the
+`--selector` element, line by line:
+
+```
+aria: identical on 2 of 3 route(s), differs /pricing
+  /pricing@1440,375
+    +- text: Buy now
+    -- button "Buy now"
+```
+
+- `+` only the left has, `-` only the right; the same diff at several widths is one group.
+  10 lines per group shown, 200 per side kept in results.json. `--progress` rows say
+  `aria: N added, M removed`.
+- Masked elements are left out, `/url:` asset hashes ignored, the left origin read as the
+  right's. Iframes aren't descended into.
+- Indentation is kept, so a landmark added or removed around content re-lists every line
+  under it.
+- Fails per shot past 15s (reported, pixels stand).
 
 ## Masks, accepts and thresholds
 
@@ -291,6 +313,7 @@ export default {
   freezeVideo: true,    // --no-freeze-video sets false
   lottieFrame: 60,      // hold lottie-player on frame 60; unset leaves it playing
   computed: false,      // --computed
+  aria: false,          // --aria
 };
 ```
 
@@ -347,7 +370,8 @@ For scripts and drilling into one route; the loop doesn't need it. One result pe
   (`kind`, each side's box with `h` 0 at an insertion point, `layout`, `scale`, `clipped`);
   `accepted`; `rightReplayedFrom`; with `--computed`, `computed` (`dom`, 0 = identical;
   `changes` `{ key, prop, values }`, first 500; `truncated`; `unmatched`) or null with
-  `computedError`.
+  `computedError`; with `--aria`, `aria` (`added`, `removed`, first 200 each, both empty =
+  identical; `truncated`) or null with `ariaError`.
 - **`summary`:** `compared`, `errors`, `mean` and `worst` (accepted shots aside),
   `belowThreshold`, `differing` (unaccepted shots with any differing pixel; without
   `--threshold`, any exits 1), `accepted`, `stale`, `findings` (each `dom` entry, text line

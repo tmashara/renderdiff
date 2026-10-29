@@ -60,6 +60,7 @@ the per-shot output when piped, `--no-progress` the summary on a terminal.
 | `1 accepted` | That many of the shot's changes are accepted; the rest are new. |
 | `findings: N repeated on 2+ routes` | After the routes: the same `dom` entry, text line or element-less band delta (`band -24px`) on two or more routes, once per line with `×N routes` and where (`/a@1440,375`, then `+N routes`), most widespread first, accepted ones aside. Top 20; `summary.findings` in results.json has them all. One cause behind many rows: fix it once. A selector names an element per page, so the same path may be a different element on another route: check one crop. |
 | `computed: N findings` | With `--computed`: each `key prop left→right` once, with the routes and widths it was seen at; `dom identical`: the markup matches apart from asset hashes and generated class names, so look at CSS or script. See [below](#computed-styles---computed). |
+| `aria: identical on N of M route(s)` | With `--aria`: routes whose accessibility tree matches at every width, then each differing route's lines, `+` left only, `-` right only. See [below](#aria-snapshots---aria). |
 | `crops …` | Up to 3 PNGs per comparison, bands first, relative to `results.json`. Left is on top or on the left, and the change is boxed in red. |
 | `ERROR …` | Unmeasured, which is neither a pass nor a fail. Exits 3. |
 | `renderdiff: …` | The verdict line: routes and shots that differ (accepted ones aside), errors, the worst score, and with `--threshold` how many scored below it. |
@@ -231,6 +232,33 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
 
 `:hover`/`:focus` states aren't snapshotted.
 
+## ARIA snapshots (`--aria`)
+
+With `--aria`, after the shot (and `--computed`) renderdiff takes Playwright's ARIA snapshot
+of each side, the accessibility tree a screen reader gets, of `body` or the `--selector`
+element, and diffs it line by line:
+
+```
+aria: identical on 2 of 3 route(s), differs /pricing
+  /pricing@1440,375
+    +- text: Buy now
+    -- button "Buy now"
+```
+
+- `+` lines only the left (your change) has, `-` only the right. Above, a `div` styled like
+  the button it replaced: the same pixels, and the button role lost.
+- The same diff at several widths is one group; a mobile-only nav change gets its own.
+  Ten lines per group, 20 groups; each result keeps up to 200 lines per side, and
+  `truncated` counts the rest.
+- Masked elements are left out (marked `aria-hidden` once the shot is taken), and so are
+  bundler hashes in `/url:` values; the left origin reads as the right's, as with
+  `--computed`.
+- Lines keep their indentation, so a landmark added or removed around content (`main`
+  swapped for a `div`) re-indents, and lists, every line under it.
+- Iframes aren't descended into. A snapshot that fails or takes over 15s is reported as
+  failed, with why (`aria: null`, `ariaError`), and the pixel result stands. Pixels still
+  decide the score and the exit code.
+
 ## Text
 
 A line diff of each side's visible text (`document.body.innerText`, or the element's with a
@@ -347,6 +375,7 @@ pulls a route), scores rounded down to four decimals (so a shot that differs nev
       "failed": { "left": [], "right": [] },   // stylesheets and font faces that didn't load: "font Inter 700", "stylesheet https://…"
       "masked": ["rotating quote (data-renderdiff-mask)"],   // absent unless a side marked elements data-renderdiff-mask
       "computed": { "dom": 1, "changes": [], "truncated": 0, "unmatched": { "left": [], "right": ["body > nav > a[href=\"/pricing\"]"] } },   // --computed only; null: snapshot failed, "computedError" says why
+      "aria": { "added": ["- text: Buy now"], "removed": ["- button \"Buy now\""], "truncated": 0 },   // --aria only; both empty: identical; null: snapshot failed, "ariaError" says why
       "images": { "left": "about.1440.left.png", "right": "about.1440.right.png", "diff": "about.1440.diff.png" },
       "crops": [{
         "path": "about.1440.c1.png", "kind": "band",          // or "region"
