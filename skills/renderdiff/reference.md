@@ -14,7 +14,13 @@ results.json · Gotchas.
 - **Production builds on both sides.** Dev overlays exist on one side only; Next's and
   Astro's are hidden by default, others go in `hideSelectors`.
 - **Static builds:** `npx serve -l 3002 dist` (or any static server). Match the real host's
-  clean URLs and trailing slashes, or a route 404s or redirects on one side only.
+  clean URLs and trailing slashes, or a route 404s or redirects on one side only. `serve`
+  already maps `/about` to `about.html` and `/docs` to `docs/index.html`, but answers with
+  and without a trailing slash: `{ "trailingSlash": true }` in a `serve.json` redirects
+  `/docs` to `/docs/`, `false` the reverse. Pass it as `-c ../serve.json`, which is relative
+  to `dist` so it survives rebuilds; restart after editing it. Docs dist under the marketing
+  one on a single origin: `ln -s "$PWD/docs/dist" dist/docs` (`rewrites` only remap paths
+  inside the served dir). Other options (`redirects`, `headers`): serve-handler's README.
 - **Routes** are literal (no globs, no discovery): every template or page the change can
   reach, from the sitemap or router; skip search results, pagination and admin. For removed
   CSS, every page where its selectors could match. Pages you don't list go under Not verified.
