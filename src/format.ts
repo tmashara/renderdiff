@@ -1,4 +1,4 @@
-import type { Line } from "./compare.ts";
+import type { Line, TextDiff } from "./compare.ts";
 import type { ElementDiff } from "./locate.ts";
 
 /** Number formatting shared by the console summary (`run.ts`) and the HTML report. */
@@ -11,6 +11,9 @@ export const fmtFailed = (f: { left: string[]; right: string[] } | undefined) =>
   (["left", "right"] as const)
     .flatMap((s) => (f?.[s].length ? [`${s}: ${f[s].join(", ")}`] : []))
     .join("; ");
+/** `+"Inter 600" -"Roboto"`: + for faces only the left loaded, - for faces only the right did. */
+export const fmtFonts = (f: TextDiff) =>
+  [...f.added.map((t) => `+"${t}"`), ...f.removed.map((t) => `-"${t}"`)].join(" ");
 export const fmtRegion = (r: { x: number; y: number; w: number; h: number }) =>
   `${r.w}×${r.h} at (${r.x},${r.y})`;
 /** Signed like the height delta: + when left has the extra rows, − when right does. */

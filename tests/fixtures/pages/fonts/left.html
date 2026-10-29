@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Font faces</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for font faces. Both sides load the glyph-less Blank face; only the right also
+   declares a 600 face for the heading, so the right loads one face the left doesn't. The
+   block differs so the route has a row to carry it. */
+@font-face { font-family: "Blank"; src: url("/shared/blank.ttf"); }
+body { font-family: "Blank", ui-monospace, SFMono-Regular, Menlo, monospace; }
+h1 { font-weight: 600; }
+.box { width: 208px; height: 160px; background: #c62828; }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Font faces</h1>
+<p class="lede">This pair is deliberately different. The block below is red on the left and blue on the right, and only the right declares a bold face for the heading.</p>
+<div class="box"></div>
+<section class="notes">
+<h2>Notes</h2>
+<p>A face one side loads and the other doesn't is easy to miss in the pixels. Naming it tells the reader where to look first.</p>
+</section>
+</div>
+</body>
+</html>

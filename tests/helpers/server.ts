@@ -37,6 +37,7 @@ const CONTENT_TYPES: Record<string, string> = {
   ".webm": "video/webm",
   ".html": "text/html; charset=utf-8",
   ".pdf": "application/pdf",
+  ".ttf": "font/ttf",
 };
 
 /** `/` -> `home`, `/flex-vs-grid` -> `flex-vs-grid`. Rejects anything with a separator. */

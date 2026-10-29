@@ -1341,6 +1341,18 @@ describe("failed assets", () => {
   });
 });
 
+describe("font faces", () => {
+  test("a face only one side loads is listed; shared and failed faces are not", async () => {
+    const run = await capture(["/fonts", "/broken-asset"]);
+    const all = results(run.outDir);
+    const r = result(all, "/fonts", 1440);
+    assert.deepEqual(r.fonts, { added: [], removed: ["Blank 600"] }, context(run));
+    const [row] = parseSummary(run.stdout).routes.get("/fonts")!.rows;
+    assert.equal(row!.fonts, '-"Blank 600"', context(run));
+    assert.equal(result(all, "/broken-asset", 1440).fonts, undefined, context(run));
+  });
+});
+
 describe("retries", () => {
   test("a page that did not render is not retried", async () => {
     const before = site.hits("/blank");

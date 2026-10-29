@@ -8,6 +8,7 @@ import path from "node:path";
 import { after, before, describe, test } from "node:test";
 import sharp from "sharp";
 import {
+  pixelFindings,
   verdict,
   writeEvidence,
   writeReport,
@@ -166,6 +167,22 @@ describe("verdict", () => {
     assert.equal(verdict(at(0.9), 0.9), "warn");
     assert.equal(verdict(at(0.89), 0.9), "bad");
     assert.equal(verdict(at(0.9999), null), "bad");
+  });
+});
+
+describe("pixelFindings", () => {
+  const fonts = { added: [], removed: ["Inter 600"] };
+
+  test("a face one side lacks on 2+ differing routes is a finding", () => {
+    const f = pixelFindings([
+      shot("/a", { diffPixels: 1, fonts }),
+      shot("/b", { diffPixels: 1, fonts }),
+    ]).find((f) => f.finding === 'fonts -"Inter 600"');
+    assert.equal(f?.at.length, 2);
+  });
+
+  test("on clean routes it is not", () => {
+    assert.deepEqual(pixelFindings([shot("/a", { fonts }), shot("/b", { fonts })]), []);
   });
 });
 

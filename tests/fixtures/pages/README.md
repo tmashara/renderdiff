@@ -19,7 +19,7 @@ Three groups:
   elements each change names (`margin`, `color`, `nav`), and a lost `::before` line and a
   re-parented pairing (`divider`).
 - **Guard rails** — `blank`, `tall`, `animated`, `lazy`, `lazy-deep`, `lazy-js`, `lazy-grow`, `consent`,
-  `drifting`, `tracker`, `clock`, `ticker`, `unsettled`, `unsettled-once`, `sprite`, `short`, `tall-region`, `reorder`, `stripe`, `frameset`, `menu`, `scroll-spy`, `signed-in`, `fixed`, `inserted`, `labelled`, `broken-asset`, `media`, `long`, `video`, `video-seek`, `lottie`, `hang`, `origin`, `cooperate`, `mask-geometry`, `bistable`.
+  `drifting`, `tracker`, `clock`, `ticker`, `unsettled`, `unsettled-once`, `sprite`, `short`, `tall-region`, `reorder`, `stripe`, `frameset`, `menu`, `scroll-spy`, `signed-in`, `fixed`, `inserted`, `labelled`, `broken-asset`, `fonts`, `media`, `long`, `video`, `video-seek`, `lottie`, `hang`, `origin`, `cooperate`, `mask-geometry`, `bistable`.
   One per defence in `src/capture.ts` / `src/config.ts`.
 
 ## Authoring rules
@@ -35,7 +35,9 @@ Breaking any of these produces a flaky suite, and the flake looks like a renderd
    side is an integer, whereas `place-items: center` rounds. Give both mechanisms an even
    box in an even container and they agree.
 3. **No webfonts.** `shared/base.css` sets a local monospace stack. A webfont means a
-   network fetch and a possible FOUT, which differs between two loads seconds apart.
+   network fetch and a possible FOUT, which differs between two loads seconds apart. The
+   exception is `shared/blank.ttf`, a glyph-less face used by `fonts`: text falls back to
+   the local stack on both sides.
 4. **No external assets.** Images come from `/shared/img/` on the fixture origin. Nothing
    leaves localhost, so the suite works offline and in CI.
 5. **Identical text on both sides.** Only the inline `<style>` and the class names differ.
