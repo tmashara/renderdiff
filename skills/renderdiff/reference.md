@@ -15,12 +15,12 @@ results.json · Gotchas.
   Astro's are hidden by default, others go in `hideSelectors`.
 - **Static builds:** `npx serve -l 3002 dist` (or any static server). Match the real host's
   clean URLs and trailing slashes, or a route 404s or redirects on one side only. `serve`
-  already maps `/about` to `about.html` and `/docs` to `docs/index.html`, but answers with
-  and without a trailing slash: `{ "trailingSlash": true }` in a `serve.json` redirects
-  `/docs` to `/docs/`, `false` the reverse. Pass it as `-c ../serve.json`, which is relative
-  to `dist` so it survives rebuilds; restart after editing it. Docs dist under the marketing
-  one on a single origin: `ln -s "$PWD/docs/dist" dist/docs` (`rewrites` only remap paths
-  inside the served dir). Other options (`redirects`, `headers`): serve-handler's README.
+  already maps `/about` to `about.html` and `/docs` to `docs/index.html`, but serves both
+  `/docs` and `/docs/`: `{ "trailingSlash": true }` in a `serve.json` redirects `/docs` to
+  `/docs/`, `false` the reverse. Pass it as `-c ../serve.json` (relative to `dist`, so the
+  file sits outside it and survives rebuilds); restart after editing it. Docs dist under the
+  marketing one: `ln -s "$PWD/docs/dist" dist/docs`, redone after each rebuild (`rewrites`
+  only remap paths inside the served dir). `redirects` and more: serve-handler's README.
 - **Routes** are literal (no globs, no discovery): every template or page the change can
   reach, from the sitemap or router; skip search results, pagination and admin. For removed
   CSS, every page where its selectors could match. Pages you don't list go under Not verified.
