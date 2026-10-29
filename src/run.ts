@@ -26,6 +26,7 @@ import {
   fails,
   fmtPixelFindings,
   stats,
+  writeEvidence,
   writeReport,
   writeResults,
   type ComparedResult,
@@ -160,6 +161,8 @@ function previous(file: string, now: Record<string, unknown>): Results | string 
   } catch {
     return `${file} is not valid JSON; run without --rerun-failed`;
   }
+  if (prev.results?.some((r) => r.from))
+    return `${file} was written by renderdiff merge; rerun into a new --out and merge again`;
   const was: Record<string, unknown> = {
     ...prev.meta,
     routes: [...new Set(prev.results?.map(name))],
@@ -675,6 +678,100 @@ export async function run({
     console.error(`\n✗ ${n} route${n === 1 ? "" : "s"} ${what} (${shots}).`);
   }
   return below.length ? 1 : results.some((r) => r.status === "error") ? 3 : 0;
+}
+
+function readResults(dir: string): Results {
+  const file = path.join(dir, "results.json");
+  if (!fs.existsSync(file)) throw new Error(`no ${file}; run renderdiff with --out ${dir} first`);
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    throw new Error(`${file} is not valid JSON`);
+  }
+}
+
+/** `renderdiff merge`: the full run's results with the partial run's shots replacing or added. */
+export async function merge(fullDir: string, partialDir: string, outDir: string): Promise<void> {
+  const full = readResults(fullDir);
+  const partial = readResults(partialDir);
+  for (const side of ["left", "right"] as const) {
+    if (full.meta[side] !== partial.meta[side])
+      throw new Error(
+        `${side} differs: ${full.meta[side]} in ${fullDir}, ${partial.meta[side]} in ${partialDir}`,
+      );
+  }
+  const real = (p: string): string => {
+    try {
+      return fs.realpathSync.native(p);
+    } catch {
+      return path.join(real(path.dirname(path.resolve(p))), path.basename(p));
+    }
+  };
+  for (const dir of [fullDir, partialDir]) {
+    const rel = path.relative(real(dir), real(outDir));
+    if (!rel || (rel.split(path.sep)[0] !== ".." && !path.isAbsolute(rel)))
+      throw new Error(`--out ${outDir} is or is inside ${dir}; pass a new directory`);
+  }
+  if (!wipeable(outDir))
+    throw new Error(
+      `output directory ${outDir} holds files renderdiff didn't write — ` +
+        `refusing to wipe it. Pass --out with a new or empty directory.`,
+    );
+
+  const key = (r: RouteResult) => `${name(r)}@${r.width}`;
+  const taken = new Map(
+    partial.results.map((r) => [key(r), { ...r, from: r.from ?? partial.meta.generatedAt }]),
+  );
+  const results = full.results.map((r) => taken.get(key(r)) ?? r);
+  const replaced = results.filter((r) => taken.has(key(r))).length;
+  const kept = new Set(full.results.map(key));
+  results.push(...[...taken.values()].filter((r) => !kept.has(key(r))));
+
+  const copies = new Map<string, { src: string; shot: string }>();
+  for (const r of results) {
+    const src = taken.has(key(r)) ? partialDir : fullDir;
+    for (const f of files(r)) {
+      if (!fs.existsSync(path.join(src, f))) throw new Error(`${path.join(src, f)} is missing`);
+      const had = copies.get(f);
+      if (had)
+        throw new Error(`${had.shot} and ${key(r)} both write ${f}; rerun both into one --out`);
+      copies.set(f, { src, shot: key(r) });
+    }
+  }
+
+  if (fs.existsSync(outDir)) {
+    for (const f of fs.readdirSync(outDir))
+      fs.rmSync(path.join(outDir, f), { recursive: true, force: true });
+  }
+  fs.mkdirSync(outDir, { recursive: true });
+  for (const [f, { src }] of copies) fs.copyFileSync(path.join(src, f), path.join(outDir, f));
+
+  const union = <T>(a: T[], b: T[]) => [
+    ...new Map([...a, ...b].map((v) => [JSON.stringify(v), v])).values(),
+  ];
+  const replays = results.flatMap((r) =>
+    r.status === "compared" && r.rightReplayedFrom ? [r.rightReplayedFrom] : [],
+  );
+  const meta = {
+    ...full.meta,
+    widths: union(full.meta.widths, partial.meta.widths),
+    masks: union(full.meta.masks, partial.meta.masks),
+    hideSelectors: union(full.meta.hideSelectors, partial.meta.hideSelectors),
+    blockUrlPatterns: union(full.meta.blockUrlPatterns, partial.meta.blockUrlPatterns),
+    rightReplayedFrom: replays.sort()[0] ?? null,
+  };
+  const stale = [
+    ...(full.summary.stale ?? []).filter((a) => !taken.has(`${a.route}@${a.width}`)),
+    ...(partial.summary.stale ?? []),
+  ];
+  await writeReport(results, meta, outDir, stale);
+  const resultsPath = writeResults(results, meta, outDir, stale);
+  await writeEvidence(readResults(outDir), outDir, null);
+  console.log(
+    `merged ${taken.size} shot(s) from ${partialDir} (${replaced} replaced, ` +
+      `${taken.size - replaced} added) into ${outDir}`,
+  );
+  console.log(compact(results, [...new Set(results.map(name))], resultsPath, meta.threshold));
 }
 
 const browserOf = (l: { browser: Browser; channel: string | null }) => ({

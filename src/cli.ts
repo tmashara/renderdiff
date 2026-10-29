@@ -181,6 +181,7 @@ const HELP = `
     renderdiff http://localhost:3000 https://example.com / /about
     renderdiff http://localhost:3000 https://example.com /pricing::/plans
     renderdiff report <out-dir> [--verdict <file>] [--title <text>]
+    renderdiff merge <full-out> <partial-out> --out <dir>
 
   An argument starting with http:// or https:// is an origin: the first is left (your
   change), the second right (the reference); or pass --left / --right. A route is a
@@ -203,6 +204,9 @@ const HELP = `
   renderdiff report reads results.json in <out-dir>, rewrites report.html, and writes
   evidence.html beside it: one self-contained page (crops embedded) with a parity banner and
   the --verdict file's text.
+
+  renderdiff merge writes <full-out>'s results to --out with each shot <partial-out> also
+  has replaced by the partial run's, and its other shots added. Both must compare the same origins.
 
   Writes report.html, results.json and crops of each change to --out. Exits 1 if any
   shot differs and isn't accepted (with --threshold, only if one scores below it;
@@ -385,7 +389,33 @@ async function report(argv: string[]): Promise<never> {
   }
 }
 
+/** `renderdiff merge <full-out> <partial-out> --out <dir>`: no browser, so never exit 1 or 3. */
+async function merge(argv: string[]): Promise<never> {
+  try {
+    const dirs: string[] = [];
+    let out: string | undefined;
+    for (let i = 0; i < argv.length; i++) {
+      const v = argv[i]!;
+      if (v === "--out") {
+        out = argv[++i];
+        if (out === undefined) throw new Error("--out needs a value");
+      } else if (v.startsWith("-") || dirs.length === 2)
+        throw new Error(`unexpected argument: ${v}`);
+      else dirs.push(v);
+    }
+    if (dirs.length !== 2 || !out)
+      throw new Error("usage: renderdiff merge <full-out> <partial-out> --out <dir>");
+    const { merge } = await import("./run.ts");
+    await merge(dirs[0]!, dirs[1]!, out);
+    process.exit(0);
+  } catch (e) {
+    console.error(`✗ ${e instanceof Error ? e.message : String(e)}`);
+    process.exit(2);
+  }
+}
+
 if (process.argv[2] === "report") await report(process.argv.slice(3));
+if (process.argv[2] === "merge") await merge(process.argv.slice(3));
 
 let args: Args;
 try {

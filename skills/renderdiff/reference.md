@@ -225,7 +225,7 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
 | --- | --- |
 | 0 | No unaccepted shot differs (with `--threshold`: none scores below it) and no route errored. Unstable pixels or a failed asset alone exit 0: read their rows. |
 | 1 | An unaccepted shot differs (with `--threshold`: scores below it; `--threshold 0` never fails). Also on an `--accept` run for what can't be accepted. Wins over 3. |
-| 2 | Bad arguments or config; an origin not responding; a bad storage state or `renderdiff.accepted.json`; an out dir holding files renderdiff didn't write; `--rerun-failed` that doesn't repeat the last run. |
+| 2 | Bad arguments or config; an origin not responding; a bad storage state or `renderdiff.accepted.json`; an out dir holding files renderdiff didn't write; `--rerun-failed` that doesn't repeat the last run; `merge` refusing. |
 | 3 | A route errored (unmeasured), or the run crashed (e.g. no browser). |
 
 ## Iterating
@@ -234,6 +234,8 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
   (differences, unstable shots, failed assets, errors), merging back into results.json. Same
   origins, routes, widths, config (masks, hooks, hidden selectors, CSS, storage state,
   `--computed`) and version as the run it continues, or it exits 2.
+- **Hand-picked reruns with a changed config** (a new mask for a few routes): run them into a
+  new `--out`, then `renderdiff merge <full-out> <that-out> --out <dir>`.
 - **`--cache-right`** replays the right side's recorded traffic (`<out>/.cache/`, kept by the
   wipe) for up to an hour, if the recording covers every shot; otherwise loads live and records.
   The page still renders live, so `dom` and the refusals hold, but a deploy to the reference
@@ -305,6 +307,15 @@ shots. `evidence.html`: a Parity / Differs / Not verified banner, the `renderdif
 the verdict file as plain text, coverage, and cards for shots that aren't clean, then
 accepted ones, with crops embedded (past 12MB or missing, left out and noted). No external
 references. Exits 2 without `results.json` or a readable verdict file.
+
+## `merge`
+
+`renderdiff merge <full-out> <partial-out> --out <dir>`, no browser: the full run's results
+with each shot the partial run also took replaced by its (files too), the rest added; each
+such shot has `from` (that run's `generatedAt`). Masks, hidden selectors, blocked URLs and
+widths are unioned in `meta`; accepted flags stay as each run set them. `evidence.html` says
+Not verified. Exits 2 on different origins, an `--out` that is or is inside an input or holds foreign
+files, or two shots writing one file. A merged out dir refuses `--rerun-failed`.
 
 ## results.json
 

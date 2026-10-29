@@ -237,6 +237,11 @@ and writes `evidence.html` there: one self-contained page (a Parity / Differs / 
 banner, your verdict, crops embedded) to attach to a ticket or publish as proof:
 [docs/output.md](https://github.com/tmashara/renderdiff/blob/main/docs/output.md#evidencehtml).
 
+`renderdiff merge <full-out> <partial-out> --out <dir>` writes the full run's results to a new
+out dir with the shots a partial run also took (say, a few routes rerun under a new mask)
+replaced by its, and its other shots added. Each merged shot carries `from`:
+[docs/output.md](https://github.com/tmashara/renderdiff/blob/main/docs/output.md#merge).
+
 ## Why a clean result is trustworthy
 
 - **Refuses to start** unless both origins answer: two error pages would score ~100%.
