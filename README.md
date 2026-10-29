@@ -225,6 +225,11 @@ Everything lands in the out dir (`./renderdiff-out` by default):
   result per line. Its types (`Results` and friends) are exported from the package; fields:
   [docs/output.md](https://github.com/tmashara/renderdiff/blob/main/docs/output.md#resultsjson).
 
+`renderdiff report <out> --verdict verdict.md --title "<task>"` then writes `evidence.html`
+there: one self-contained page (a Parity / Differs / Not verified banner, your verdict, crops
+embedded) to attach to a ticket or publish as proof:
+[docs/output.md](https://github.com/tmashara/renderdiff/blob/main/docs/output.md#evidencehtml).
+
 ## Why a clean result is trustworthy
 
 - **Refuses to start** unless both origins answer: two error pages would score ~100%.

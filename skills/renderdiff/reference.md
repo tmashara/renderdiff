@@ -278,9 +278,9 @@ rather than remove.
 
 `renderdiff report <out> [--verdict <file>] [--title <text>]` writes `<out>/evidence.html` from
 `results.json`, no browser: a Parity / Differs / Not verified banner, the `renderdiff:` line, the
-verdict file as plain text, coverage, and cards for shots that aren't clean, then accepted ones, with crops embedded
-(past 12MB or missing, left out and noted). No external references. Exits 2 without `results.json` or a
-readable verdict file.
+verdict file as plain text, coverage, and cards for shots that aren't clean, then accepted ones,
+with crops embedded (past 12MB or missing, left out and noted). No external references. Exits 2
+without `results.json` or a readable verdict file.
 
 ## results.json
 
