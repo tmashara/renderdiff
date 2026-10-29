@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layout parity</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* LEFT: a div styled like the button: same pixels, no button role. */
+div.buy { all: unset; display: block; box-sizing: border-box; width: 160px; height: 40px; line-height: 40px; text-align: center; background: #2a5bd7; color: #fff; }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Layout parity check</h1>
+<p class="lede">Both sides of this pair render the same pixels. One side's call to action is a button, the other's a plain block, so only the accessibility tree tells them apart.</p>
+
+<p>Ready to order?</p>
+<div class="buy">Buy now</div>
+
+<section class="notes">
+<h2>Notes</h2>
+<p>The geometry here is deliberately integral: fixed widths, fixed heights, and no fractional boxes anywhere. Every inherited style is reset on both elements, so the button and the block draw the same box.</p>
+<p>Text is identical on both sides. Nothing loads from the network except assets served by the fixture origin itself, so this page renders the same offline as it does in continuous integration.</p>
+</section>
+</div>
+</body>
+</html>

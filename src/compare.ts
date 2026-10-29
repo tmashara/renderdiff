@@ -252,7 +252,7 @@ function backtrack(trace: Int32Array[], n: number, m: number, D: number) {
   return pairs.reverse();
 }
 
-function textDiff(a: string[], b: string[]): TextDiff {
+export function textDiff(a: string[], b: string[]): TextDiff {
   const pairs = myers(a, b);
   if (!pairs) {
     // Too different to align: fall back to plain membership.

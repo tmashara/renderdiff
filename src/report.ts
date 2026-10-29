@@ -5,9 +5,11 @@ import type { Accepted } from "./accept.ts";
 import {
   addAt,
   fmtAt,
+  fmtAria,
   fmtComputed,
   groupFindings,
   SHOWN,
+  type AriaDiff,
   type ComputedDiff,
   type Finding,
 } from "./computed.ts";
@@ -80,6 +82,9 @@ export interface ComparedResult extends BaseResult {
   /** With `--computed`: the computed-style diff; null when the snapshot failed, with `computedError` saying why. */
   computed?: ComputedDiff | null;
   computedError?: string;
+  /** With `--aria`: the ARIA snapshot diff; null when the snapshot failed, with `ariaError` saying why. */
+  aria?: AriaDiff | null;
+  ariaError?: string;
 }
 
 /** A crop of one change: left and right panels, a 1px red box round it, or a 2px red seam. */
@@ -334,6 +339,7 @@ function summary(results: RouteResult[], meta: RunMeta, stale: Accepted[]): stri
   const byRoute = Map.groupBy(stats(differing).sorted, name);
   const routes = [...new Set(results.map(name))];
   const computed = fmtComputed(results, routes);
+  const aria = fmtAria(results, routes);
   const repeated = fmtPixelFindings(results);
   return `<section class="summary">
 <p class="counts">
@@ -373,6 +379,12 @@ ${
   computed.length
     ? `<details><summary>Computed styles: ${groupFindings(results).length} finding(s)</summary>
 <pre class="computed">${esc(computed.join("\n"))}</pre></details>`
+    : ""
+}
+${
+  aria.length
+    ? `<details><summary>ARIA: ${esc(aria[0]!.slice("aria: ".length))}</summary>
+<pre class="computed">${esc(aria.slice(1).join("\n"))}</pre></details>`
     : ""
 }
 </section>`;
@@ -444,6 +456,7 @@ const head = (r: ComparedResult) => `
     ${r.variesPixels ? `<span class="unstable">${r.variesPixels.toLocaleString("en-US")} px vary per load</span>` : ""}
     ${r.alignedScore !== null ? `<span class="aligned">aligned ${pct(r.alignedScore)}</span>` : ""}
     ${r.computed ? `<span class="w">${r.computed.dom ? `dom differs (${r.computed.dom})` : "dom identical"}</span>` : ""}
+    ${r.aria ? `<span class="w">${r.aria.added.length || r.aria.removed.length ? `aria differs (+${r.aria.added.length} −${r.aria.removed.length})` : "aria identical"}</span>` : ""}
     <span class="px">${r.diffPixels.toLocaleString()} / ${r.totalPixels.toLocaleString()} px differ</span>
   </header>`;
 

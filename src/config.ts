@@ -292,6 +292,8 @@ export interface RenderdiffConfig {
   masks?: Mask[];
   /** Also diff every element's computed style, and say whether the markup is identical. */
   computed?: boolean;
+  /** Also diff each page's ARIA snapshot. */
+  aria?: boolean;
   /** Mask every `iframe` on every route. */
   maskMedia?: boolean;
   /** Keep every video paused on frame 0 (its poster if it never loads) and hide video.js overlays. Default true. */
@@ -320,6 +322,8 @@ export interface ResolvedConfig {
   freezeVideo: boolean;
   /** Optional, not null, so an unset value leaves the config hash unchanged. */
   lottieFrame?: number;
+  /** Optional like `lottieFrame`. */
+  aria?: true;
 }
 
 /** package.json's version; the same relative path resolves from `src/` and `dist/`. */
@@ -492,6 +496,7 @@ function validate(c: Record<string, unknown>, file: string) {
     }
   }
   if (c.computed !== undefined && typeof c.computed !== "boolean") bad("computed", "a boolean");
+  if (c.aria !== undefined && typeof c.aria !== "boolean") bad("aria", "a boolean");
   if (c.threshold !== undefined) {
     const t = c.threshold;
     if (typeof t !== "number" || !Number.isFinite(t) || t < 0 || t > 1) {
@@ -548,6 +553,7 @@ export interface CliOverrides {
   /** Per side, from --storage-state / --left-storage-state / --right-storage-state. */
   storageState?: { left?: string; right?: string };
   computed?: boolean;
+  aria?: boolean;
   /** From --mask, appended to the config's masks. */
   masks?: string[];
   maskMedia?: boolean;
@@ -609,6 +615,7 @@ export function resolveConfig(file: RenderdiffConfig, cli: CliOverrides): Resolv
     computed: cli.computed ?? file.computed ?? false,
     freezeVideo,
     lottieFrame: file.lottieFrame,
+    aria: (cli.aria ?? file.aria) || undefined,
   };
 }
 

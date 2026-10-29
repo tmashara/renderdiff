@@ -6,7 +6,9 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
   collapseInherited,
+  diffAria,
   diffSnapshots,
+  fmtAria,
   fmtComputed,
   groupFindings,
   normalizeAssets,
@@ -314,4 +316,58 @@ test("a snapshot error keeps the page's message, not page.evaluate's prefix or s
   const timeout =
     "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator('.x')";
   assert.equal(pageError(new Error(timeout)), timeout);
+});
+
+describe("diffAria", () => {
+  const same = { added: [], removed: [], truncated: 0 };
+
+  test("asset hashes and the other side's origin read the same", () => {
+    const tree = (css: string, abs: string) =>
+      `- link "Styles":\n  - /url: ${css}\n- link "Home":\n  - /url: ${abs}/x`;
+    assert.deepEqual(
+      diffAria(
+        tree("/main.3f9a8c1d.css?v=abc", "http://localhost:4611"),
+        tree("/main.9b2e7f04.css?v=def", "http://localhost:4612"),
+        ["http://localhost:4611/a", "http://localhost:4612/a"],
+      ),
+      same,
+    );
+  });
+
+  test("a lost role is one line each way; past the cap only a count is kept", () => {
+    assert.deepEqual(diffAria("- p: Hi\n- text: Buy", '- p: Hi\n- button "Buy"'), {
+      added: ["- text: Buy"],
+      removed: ['- button "Buy"'],
+      truncated: 0,
+    });
+    const many = (s: string) => Array.from({ length: 205 }, (_, i) => `- ${s} ${i}`).join("\n");
+    const d = diffAria(many("a"), many("b"));
+    assert.deepEqual([d.added.length, d.removed.length, d.truncated], [200, 200, 10]);
+  });
+
+  test("fmtAria shows a diff once across widths and splits one that differs", () => {
+    const lost = { added: ["- text: Buy"], removed: ['- button "Buy"'], truncated: 0 };
+    assert.deepEqual(
+      fmtAria(
+        [
+          shot("/a", 1440, { aria: lost }),
+          shot("/a", 375, { aria: lost }),
+          shot("/b", 1440, { aria: same }),
+          shot("/b", 375, { aria: { ...same, added: ["- navigation"] } }),
+          shot("/c", 1440, { aria: same }),
+          shot("/d", 1440, { aria: null, ariaError: "took over 20s" }),
+        ],
+        ["/a", "/b", "/c", "/d"],
+      ),
+      [
+        "aria: identical on 1 of 3 route(s), differs /a /b; snapshot failed on /d@1440 (took over 20s)",
+        "  /a@1440,375",
+        "    +- text: Buy",
+        '    -- button "Buy"',
+        "  /b@375",
+        "    +- navigation",
+      ],
+    );
+    assert.deepEqual(fmtAria([shot("/a", 1440, {})], ["/a"]), []);
+  });
 });

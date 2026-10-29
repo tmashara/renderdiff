@@ -603,3 +603,51 @@ test("--computed names the changed rule's property, once across widths, and the 
   );
   assert.match(r.stdout, /a\[href="#blog"\] margin-left 24px→16px {2}\/margin@1440,375/);
 });
+
+test("--aria names a div that lost its button role, where pixels see nothing", async () => {
+  const r = await runCli([
+    ...renderdiffArgs({
+      left: site.left,
+      right: site.right,
+      routes: ["/button-vs-div", "/origin", "/margin"],
+      widths: WIDTHS,
+    }),
+    "--aria",
+  ]);
+  assert.equal(r.code, 1, context(r));
+  const { results: rows } = results(r.outDir);
+  const aria = (route: string) =>
+    rows.filter((x) => x.url === route).map((x) => x.status === "compared" && x.aria);
+  const at = (route: string) => rows.filter((x) => x.url === route && x.status === "compared");
+  assert.deepEqual(
+    at("/button-vs-div").map((x) => x.status === "compared" && x.score),
+    [1, 1],
+  );
+  const lost = { added: ["- text: Buy now"], removed: ['- button "Buy now"'], truncated: 0 };
+  assert.deepEqual(aria("/button-vs-div"), [lost, lost], context(r));
+  const same = { added: [], removed: [], truncated: 0 };
+  assert.deepEqual(aria("/origin"), [same, same], context(r));
+  assert.deepEqual(aria("/margin"), [same, same], context(r));
+  assert.match(r.stdout, /^aria: identical on 2 of 3 route\(s\), differs \/button-vs-div/m);
+  assert.equal(r.stdout.match(/\/button-vs-div@1440,375/g)?.length, 1, context(r));
+});
+
+test("--aria leaves out masked elements and reads only a route's @selector element", async () => {
+  const runs = await Promise.all(
+    [["/button-vs-div", "--mask", ".buy"], ["/button-vs-div @.notes"]].map(([route, ...flags]) =>
+      runCli([
+        ...renderdiffArgs({ left: site.left, right: site.right, routes: [route!], widths: [1440] }),
+        "--aria",
+        ...flags,
+      ]),
+    ),
+  );
+  for (const r of runs) {
+    const [row] = results(r.outDir).results;
+    assert.deepEqual(
+      row?.status === "compared" && row.aria,
+      { added: [], removed: [], truncated: 0 },
+      context(r),
+    );
+  }
+});

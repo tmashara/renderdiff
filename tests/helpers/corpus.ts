@@ -18,6 +18,7 @@ export const EQUIVALENCE = [
   "table-vs-grid",
   "abs-vs-flex",
   "inline-block-vs-flex",
+  "button-vs-div",
 ] as const;
 
 /** Deliberately different. Must score low — otherwise the suite proves nothing. */
