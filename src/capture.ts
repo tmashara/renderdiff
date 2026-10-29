@@ -58,6 +58,55 @@ function freezeVideo() {
 }
 
 /**
+ * Runs in the page: each element's box, plus every descendant's that paints outside it,
+ * each cut to the overflow of the ancestors that clip it. Null inside a frame.
+ */
+function maskRects(els: Element[]) {
+  if (window !== window.top) return null;
+  const clipped = (e: Element) => {
+    let { left, top, right, bottom } = e.getBoundingClientRect();
+    let pos = getComputedStyle(e).position;
+    // body's overflow belongs to the viewport, which paintBoxes already clamps to.
+    for (
+      let a = e.parentElement;
+      a && a !== document.body && pos !== "fixed";
+      a = a.parentElement
+    ) {
+      const s = getComputedStyle(a);
+      if (s.display === "contents") continue;
+      // An absolute box escapes the overflow of ancestors below its containing block.
+      if (pos === "absolute" && s.position === "static" && s.transform === "none") continue;
+      pos = s.position;
+      if (s.display === "inline") continue;
+      const r = a.getBoundingClientRect();
+      if (s.overflowX !== "visible")
+        [left, right] = [Math.max(left, r.left), Math.min(right, r.right)];
+      if (s.overflowY !== "visible")
+        [top, bottom] = [Math.max(top, r.top), Math.min(bottom, r.bottom)];
+    }
+    return { x: left, y: top, width: right - left, height: bottom - top };
+  };
+  type B = ReturnType<typeof clipped>;
+  const outside = (b: B, o: B) =>
+    b.x < o.x || b.y < o.y || b.x + b.width > o.x + o.width || b.y + b.height > o.y + o.height;
+  return els.flatMap((e) => {
+    const own = clipped(e);
+    const spill = Array.from(e.querySelectorAll("*"))
+      .filter((d) => {
+        const r = d.getBoundingClientRect();
+        return (
+          r.width * r.height > 0 &&
+          outside(r, own) &&
+          d.checkVisibility({ opacityProperty: true, visibilityProperty: true })
+        );
+      })
+      .map(clipped)
+      .filter((b) => outside(b, own));
+    return [own, ...spill].filter((b) => b.width > 0 && b.height > 0);
+  });
+}
+
+/**
  * Chromium's screenshot backing store caps at this in any dimension; a single
  * `fullPage` or clip shot past it can come out truncated or wrapped. Rather than refuse, a
  * taller page or element is captured in vertical tiles of at most this height and stitched
@@ -348,22 +397,30 @@ export async function capture(
       throw new Error(`selector "${selector}" is off the page ${where}`);
     }
   }
-  const boxes = (
-    await Promise.all(
-      (await Promise.all(masks.map((l) => l.all()))).flat().map((m) => m.boundingBox()),
+  const read = async () =>
+    (
+      await Promise.all(
+        masks.map(
+          async (l) =>
+            (await l.evaluateAll(maskRects)) ??
+            // A frame's rects are in its own viewport; Playwright maps boxes to the page.
+            (await Promise.all((await l.all()).map((m) => m.boundingBox()))),
+        ),
+      )
     )
-  )
-    .filter((b) => b !== null)
-    .map((b) => (clip ? { ...b, x: b.x - clip.x, y: b.y - clip.y } : b));
+      .flat()
+      .filter((b) => b !== null)
+      .map((b) => (clip ? { ...b, x: b.x - clip.x, y: b.y - clip.y } : b));
   const area = clip ?? { x: 0, y: 0, width, height: scrollHeight };
   const tiled = area.height > MAX_CAPTURE_HEIGHT;
-  const shoot = async () =>
-    paintBoxes(
-      tiled
-        ? await captureTiled(page, area)
-        : await page.screenshot({ fullPage: true, clip, animations: "disabled" }),
-      boxes,
-    );
+  // Read on both sides of the shot, so a box that moves while it is taken stays covered.
+  const shoot = async () => {
+    const before = await read();
+    const png = tiled
+      ? await captureTiled(page, area)
+      : await page.screenshot({ fullPage: true, clip, animations: "disabled" });
+    return paintBoxes(png, [...before, ...(await read())]);
+  };
 
   // A tiled shot is expensive, so it gets one comparison.
   const tries = tiled ? 2 : 3;
@@ -463,24 +520,20 @@ type Box = { x: number; y: number; width: number; height: number };
 
 async function paintBoxes(png: Buffer, boxes: Box[]): Promise<Buffer> {
   if (!boxes.length) return png;
-  const { width: W = 0, height: H = 0 } = await sharp(png).metadata();
-  const rects = boxes.flatMap((b) => {
+  const { data, info } = await decode(png);
+  const { width: W, height: H } = info;
+  const px = Buffer.from(`${MASK_COLOR.slice(1)}ff`, "hex");
+  for (const b of boxes) {
     const left = Math.max(0, Math.floor(b.x));
     const top = Math.max(0, Math.floor(b.y));
-    const width = Math.min(W, Math.ceil(b.x + b.width)) - left;
-    const height = Math.min(H, Math.ceil(b.y + b.height)) - top;
-    if (width <= 0 || height <= 0) return [];
-    return [
-      {
-        input: {
-          create: { width, height, channels: 4 as const, background: MASK_COLOR },
-        },
-        left,
-        top,
-      },
-    ];
-  });
-  return rects.length ? sharp(png).composite(rects).png().toBuffer() : png;
+    const right = Math.min(W, Math.ceil(b.x + b.width));
+    const bottom = Math.min(H, Math.ceil(b.y + b.height));
+    if (right <= left) continue;
+    for (let y = top; y < bottom; y++) data.fill(px, (y * W + left) * 4, (y * W + right) * 4);
+  }
+  return sharp(data, { raw: { width: W, height: H, channels: 4 } })
+    .png()
+    .toBuffer();
 }
 
 /**

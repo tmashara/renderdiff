@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mask geometry</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for mask geometry. Three masked boxes differ per side: one moves after settle,
+   one is cut by an overflow:hidden wrapper, one has a child painted above it. The stage is
+   placed absolutely, so the test can probe fixed page pixels. */
+.stage { position: absolute; top: 300px; left: 16px; width: 416px; height: 1400px; }
+.stage > * { position: absolute; left: 0; width: 416px; }
+.stage div { color: #fff; }
+.moves { top: 0; height: 160px; background: var(--accent); }
+.wrap { top: 440px; height: 120px; overflow: hidden; }
+.clipped { height: 300px; background: var(--accent); }
+.below { top: 580px; height: 200px; background: var(--fill); }
+.player { top: 880px; height: 200px; background: var(--ink); }
+.poster { position: absolute; top: -44px; left: 0; width: 416px; height: 44px; background: var(--accent); }
+.track { position: relative; height: 100px; overflow: hidden; }
+.slide { position: absolute; top: 0; left: 500px; width: 300px; height: 100px; background: var(--accent); }
+.menu { position: absolute; top: 100%; left: 0; width: 416px; height: 200px; background: var(--accent); opacity: 0; }
+.under { top: 1100px; height: 200px; background: var(--fill); }
+.stage > .notes { top: 1320px; }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Mask geometry</h1>
+<p class="lede">Each masked box below differs between the two sides. A mask has to follow its element, stay inside the overflow that cuts it, and cover what its children paint outside it.</p>
+<div class="stage">
+<div class="moves"><p>Version one</p></div>
+<div class="wrap"><div class="clipped"><p>Version one</p></div></div>
+<div class="below"></div>
+<div class="player">
+<div class="poster">Version one</div>
+<div class="track"><div class="slide">Slide</div></div>
+<div class="menu">Menu</div>
+</div>
+<div class="under"></div>
+<section class="notes">
+<h2>Notes</h2>
+<p>The first box moves 200px down once renderdiff has read its text, standing in for a pinned section that re-lays out after settle.</p>
+</section>
+</div>
+</div>
+<script>
+// Stands in for a ScrollTrigger pin refresh. Couples to the text read, which hides each mask
+// and restores it: the move lands a moment after the restore.
+const box = document.querySelector(".moves");
+let hidden = false;
+new MutationObserver(() => {
+  if (box.style.visibility === "hidden") hidden = true;
+  else if (hidden) {
+    hidden = false;
+    setTimeout(() => (box.style.top = "200px"), 30);
+  }
+}).observe(box, { attributes: true, attributeFilter: ["style"] });
+</script>
+</body>
+</html>
