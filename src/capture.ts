@@ -23,6 +23,33 @@ export interface Shot {
 }
 
 /**
+ * Runs in the page: pause every video, open shadow roots included, and stub `play()` so nothing
+ * restarts it. One that has played is rewound to frame 0; one that hasn't keeps its poster.
+ */
+function freezeVideo() {
+  HTMLMediaElement.prototype.play = () => Promise.resolve();
+  const videos = (root: Document | ShadowRoot): HTMLVideoElement[] => [
+    ...Array.from(root.querySelectorAll("video")),
+    ...Array.from(root.querySelectorAll("*")).flatMap((e) =>
+      e.shadowRoot ? videos(e.shadowRoot) : [],
+    ),
+  ];
+  return Promise.all(
+    videos(document).map((v) => {
+      v.autoplay = false;
+      v.pause();
+      if (!v.readyState || (!v.played.length && !v.currentTime)) return;
+      const seeked = new Promise((r) => {
+        v.addEventListener("seeked", r, { once: true });
+        setTimeout(r, 2_000);
+      });
+      v.currentTime = 0;
+      return seeked;
+    }),
+  );
+}
+
+/**
  * Chromium's screenshot backing store caps at this in any dimension; a single
  * `fullPage` or clip shot past it can come out truncated or wrapped. Rather than refuse, a
  * taller page or element is captured in vertical tiles of at most this height and stitched
@@ -143,6 +170,8 @@ export async function capture(
     }
   }
   await page.addStyleTag({ content: cfg.neutralizeCss });
+  // Before the scroll too, so autoplay never starts and page state driven by playback stays put.
+  if (cfg.freezeVideo) await page.evaluate(freezeVideo);
 
   // Native lazy images go eager; JS lazy loaders see every viewport-height slice, one
   // frame each, since a scroll inside one synchronous loop never paints.
@@ -150,10 +179,6 @@ export async function capture(
     // The fake clock drives rAF too, so add wall time for a real paint per slice.
     const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 32)));
     Array.from(document.images).forEach((img) => (img.loading = "eager"));
-    document.querySelectorAll("video").forEach((v) => {
-      v.pause();
-      v.currentTime = 0;
-    });
     const h = Math.min(document.documentElement.scrollHeight, maxHeight);
     for (let y = 0; y < h; y += window.innerHeight) {
       window.scrollTo(0, y);
@@ -179,6 +204,7 @@ export async function capture(
     return failed;
   });
   await networkIdle(page, 250, 3_000);
+  if (cfg.freezeVideo) await page.evaluate(freezeVideo);
   const failed = [...new Set([...network.get(page)!.failed, ...fonts])];
   await page.addStyleTag({ content: cfg.neutralizeCss }); // anything injected late
 

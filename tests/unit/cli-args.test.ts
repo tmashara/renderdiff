@@ -59,6 +59,7 @@ describe("help and version", () => {
       "--computed",
       "--mask",
       "--mask-media",
+      "--no-freeze-video",
     ]) {
       assert.ok(r.stdout.includes(flag), `--help does not mention ${flag}`);
     }

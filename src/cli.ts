@@ -91,6 +91,7 @@ function parseArgs(argv: string[]): Args {
     else if (v === "--cache-right") a.cacheRight = true;
     else if (v === "--computed") a.computed = true;
     else if (v === "--mask-media") a.maskMedia = true;
+    else if (v === "--no-freeze-video") a.freezeVideo = false;
     else if (v === "--accept") {
       a.accept = next().trim();
       if (!a.accept) throw new Error("--accept needs a reason");
@@ -203,7 +204,8 @@ const HELP = `
     --left-selector <sel>, --right-selector <sel>
                         That side's selector, over --selector.
     --mask <sel>        Paint this selector over on both sides, every route; repeatable.
-    --mask-media        Mask iframe, video and .vjs-text-track-display on every route.
+    --mask-media        Mask every iframe on every route.
+    --no-freeze-video   Leave videos playing and video.js overlays visible.
     --storage-state <file>
                         Start both sides with this storage state JSON. Never commit it.
     --left-storage-state <file>, --right-storage-state <file>

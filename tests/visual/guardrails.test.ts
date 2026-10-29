@@ -438,12 +438,14 @@ describe("selector masks", () => {
     ]);
   });
 
-  test("--mask-media paints iframes, video and video.js text tracks", async () => {
+  test("--mask-media paints iframes; freezing video hides video.js overlays", async () => {
     const bare = await capture(["/media"]);
     assert.ok(result(results(bare.outDir), "/media", 1440).diffPixels > 0, context(bare));
     const run = await capture(["/media"], { extra: ["--mask-media"] });
     assert.equal(run.code, 0, context(run));
     assert.equal(result(results(run.outDir), "/media", 1440).diffPixels, 0, context(run));
+    const live = await capture(["/media"], { extra: ["--mask-media", "--no-freeze-video"] });
+    assert.ok(result(results(live.outDir), "/media", 1440).diffPixels > 0, context(live));
   });
 });
 

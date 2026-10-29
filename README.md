@@ -104,7 +104,8 @@ renderdiff <left-origin> <right-origin> <route…> [options]
 | `--selector <sel>` | Compare the one element this Playwright selector matches, on both sides, instead of the whole page. Applies to every route, over the config's per-route `selector`. |
 | `--left-selector <sel>`, `--right-selector <sel>` | That side's selector, over `--selector`. One without the other side (or `--selector`) is an error. |
 | `--mask <sel>` | Paint this Playwright selector over on both sides, on every route; repeatable. Added to the config's masks and listed in the report as coverage given up. |
-| `--mask-media` | Mask every `iframe`, `video` and `.vjs-text-track-display` (video.js text tracks) on every route, as config `maskMedia: true` does. |
+| `--mask-media` | Mask every `iframe` on every route, as config `maskMedia: true` does. |
+| `--no-freeze-video` | Leave videos playing and video.js overlays visible, as config `freezeVideo: false` does. By default every `video` is paused at frame 0 and `.vjs-text-track-display` / `.vjs-control-bar` are hidden. |
 | `--storage-state <file>` | Start both sides with this Playwright storage state (cookies, localStorage), e.g. signed in. Relative to cwd. Over the config's `storageState`. |
 | `--left-storage-state <file>`, `--right-storage-state <file>` | That side's storage state, over `--storage-state`. One side alone is fine. |
 | `--accept <reason>` | Record this run's differences as accepted, with a reason. See **Accepted differences and reruns**. |
@@ -308,7 +309,7 @@ Paths are relative to the out dir. Results are in route-then-width order.
 - **Refuses to start** unless both origins answer: two error pages would score ~100%.
 - **Refuses a shot** with an HTTP status ≥ 400, or where both sides look blank.
 - **Blocks analytics, consent and A/B tooling** at the network layer, on both sides.
-- **Pins what varies between loads**: clock, `Math.random`, timezone, locale, colour scheme, reduced motion, video frames.
+- **Pins what varies between loads**: clock, `Math.random`, timezone, locale, colour scheme, reduced motion, video frames and video.js overlays.
 - **Kills animation, transitions and caret blink**, and hides common consent banners and dev toolbars.
 - **Settles the page**: lazy images, fonts and network idle before the shot.
 - **Shoots until stable**, and excludes pixels still moving as `unstable`.

@@ -28,7 +28,7 @@ legitimate: [reference.md](reference.md).
    pagination and admin. `--dry-run` shows the URL pairs.
 2. **Baseline first.** Before changing code, run the base against the reference. Against
    the base build that is base vs base, so whatever differs varies per load: mask it
-   (`--mask-media` for iframes, video and video.js text tracks; `--mask <sel>` or a config
+   (`--mask-media` for iframes; video is frozen by default; `--mask <sel>` or a config
    mask with a `reason` for the rest), then rerun until the baseline is clean. Against
    production, `--accept "differs before the change"` what is stable drift. Mask or accept
    only what you looked at, never to get green.

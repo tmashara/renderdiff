@@ -17,7 +17,15 @@ export function cacheFile(cfg: ResolvedConfig, browser: { name: string; version:
   const state = cfg.storageState.right && fs.readFileSync(cfg.storageState.right, "utf8");
   const key = createHash("sha256")
     .update(
-      JSON.stringify([version(), browser, cfg.right, state, CONTEXT_OPTIONS, cfg.blockUrlPatterns]),
+      JSON.stringify([
+        version(),
+        browser,
+        cfg.right,
+        state,
+        CONTEXT_OPTIONS,
+        cfg.blockUrlPatterns,
+        cfg.freezeVideo,
+      ]),
     )
     .digest("hex")
     .slice(0, 16);
