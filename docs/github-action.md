@@ -22,7 +22,7 @@ exits non-zero.
 | --- | --- |
 | `left` | Your change: a preview URL or `http://localhost:3000`. Required. |
 | `right` | The reference, usually production. Required. |
-| `routes` | Separated by spaces or newlines; pairs (`/pricing::/plans`) work. Optional when the config lists routes. |
+| `routes` | Separated by spaces or newlines; pairs (`/pricing::/plans`) work; per-route selectors go in the config, since the input splits on spaces. Optional when the config lists routes. |
 | `config` | Config file path. Default: `renderdiff.config.{ts,mts,js,mjs}` in the workspace. |
 | `widths` | Spaces or commas. Default renderdiff's five. |
 | `threshold` | Fail only below this score. Without it, any difference fails the job (exit 1); `"0"` never fails on one. |

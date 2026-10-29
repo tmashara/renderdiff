@@ -251,8 +251,10 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
   first `::` followed by `/`, so `/q?x=std::vector` and `pricing::plans` are single routes. Named
   `/a::/b` in stdout and `url`; files `{a}~{b}.{width}.*.png`.
 - **One component:** `--selector <sel>` (or `--left-selector` + `--right-selector`, or a route
-  object's `selector: ".x" | { left, right }`) compares the one element it matches, exactly one
-  per side, in its own pixels. A CLI selector applies to every route and replaces the config's.
+  object's `selector: ".x" | { left, right }`, or `'/a @.x'` / `'/a @.l::/b @.r'` in the route
+  string) compares the one element it matches, exactly one per side, in its own pixels. A
+  selector in the route string beats `--selector`, which applies to every other route and
+  replaces a route object's.
   Named `/a [.x]`; files `{slug}@{sel}.{width}.*.png`. The whole page still loads; it's shot at
   scroll 0, so fixed or sticky overlays over it are included (`hideSelectors` them); a
   transformed element is shot at its axis-aligned box. `xpath=` and `>>` work; pseudo-elements

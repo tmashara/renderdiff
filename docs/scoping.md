@@ -29,6 +29,7 @@ To compare one component instead of the whole page, give a selector:
 ```
 renderdiff http://localhost:3000 https://example.com /pricing --selector "[data-test=plans]"
 renderdiff http://localhost:3000 https://example.com /pricing --left-selector .plans-v2 --right-selector .plans
+renderdiff http://localhost:3000 https://example.com / '/pricing @section.cta' '/pricing @.plans-v2::/plans @.plans'
 ```
 
 Any Playwright selector works, `xpath=` and `>>` chains included, and it's never split on
@@ -37,7 +38,10 @@ with the count (`selector ".card" matched 6 elements on left (/pricing), expecte
 shot, the score, the regions and the text diff are that element's, in its own pixels; a
 mask is painted where it overlaps the element.
 
-A CLI selector applies to every route and replaces the config's. In a config file a route
+A route string can carry its own selector after whitespace and `@`: `'/pricing @section.cta'`,
+or one per side, `'/pricing @.plans-v2::/plans @.plans'`. The space before `@` is required,
+so `/@user` stays a path. A selector written in the route beats `--selector`, which applies
+to every other route and replaces the config's route-object selectors. In a config file a route
 object takes `selector: ".plans"` or `selector: { left: ".plans-v2", right: ".plans" }`;
 to compare several components of one page, list the route once per selector. Such a route
 is `/pricing [.plans]` in the summary and the report, keeps `/pricing @1440` on a
