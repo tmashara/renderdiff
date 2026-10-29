@@ -7,7 +7,7 @@ import { chromium, errors, type Browser, type Page } from "playwright";
 import { applyAccepted, readAccepted, updateAccepted } from "./accept.ts";
 import { CACHE_DIR, cacheFile, replayable, REPLAY_TTL, saveRecording, shotId } from "./cache.ts";
 import { cancelUnstable, capture, HookError, prepare, type Shot } from "./capture.ts";
-import { compare, crops, type Band } from "./compare.ts";
+import { compare, crops, type Band, type Region } from "./compare.ts";
 import { diffSnapshots, fmtComputed } from "./computed.ts";
 import { locate, snapshot, type ElementDiff } from "./locate.ts";
 import {
@@ -20,7 +20,7 @@ import {
   type ResolvedConfig,
   type Route,
 } from "./config.ts";
-import { fmtBand, fmtElements, fmtFailed, fmtRegion, pct, signed } from "./format.ts";
+import { fmtBand, fmtElements, fmtFailed, fmtLine, fmtRegion, pct, signed } from "./format.ts";
 import {
   stats,
   writeReport,
@@ -396,6 +396,7 @@ export async function run({
           regions.length
             ? `${regions.length} region${regions.length > 1 ? "s" : ""}, largest ${fmtRegion(regions[0]!)}`
             : "",
+          ...more(regions.flatMap((g) => (g.line ? [fmtLine(g.line)] : []))),
           ...(bands ?? []).map((b) => `band ${fmtBand(b)}`),
           alignedScore !== null ? `aligned ${pct(alignedScore)}` : "",
           bands === null ? "rows too different to align" : "",
@@ -750,6 +751,10 @@ export function compact(
   return out.join("\n");
 }
 
+/** The first three, and how many more there are. */
+const more = (lines: string[]) =>
+  lines.length > 3 ? [...lines.slice(0, 3), `(+${lines.length - 3} more)`] : lines;
+
 /** One compact row for comparisons that agree on everything but score, regions and unstable px. */
 function row(g: ComparedResult[]): string {
   const [r] = g as [ComparedResult];
@@ -757,7 +762,15 @@ function row(g: ComparedResult[]): string {
     const [lo, hi] = [Math.min(...ns), Math.max(...ns)];
     return lo === hi ? f(lo) : `${f(lo)}–${f(hi)}`;
   };
-  const regions = g.map((x) => x.regions.length);
+  const drawn = (c: Region) => c.line && !c.accepted;
+  const regions = g.map((x) => x.regions.filter((c) => !drawn(c)).length);
+  const lined = g.find((x) => x.regions.some(drawn)) ?? r;
+  const ys = (x: ComparedResult) =>
+    x.regions
+      .filter(drawn)
+      .map((c) => c.line!.y)
+      .join();
+  const approx = new Set(g.map(ys)).size > 1;
   const accepted = g.map(
     (x) => [...(x.bands ?? []), ...x.regions].filter((c) => c.accepted).length,
   );
@@ -775,6 +788,7 @@ function row(g: ComparedResult[]): string {
     r.bands === null ? "unaligned" : "",
     ...(r.bands ?? []).map((b) => `band ${b.side === "left" ? "+" : "-"}${b.h}${y(b)}`),
     r.alignedScore !== null ? `aligned ${pct(r.alignedScore)}` : "",
+    ...more(lined.regions.flatMap((c) => (drawn(c) ? [fmtLine(c.line!, approx)] : []))),
     Math.max(...regions) ? `${span(regions, String)} reg` : "",
     unstable ? `unstable ${unstable.toLocaleString("en-US")}px` : "",
     Math.max(...accepted) ? `${span(accepted, String)} accepted` : "",

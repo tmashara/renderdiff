@@ -1,3 +1,4 @@
+import type { Line } from "./compare.ts";
 import type { ElementDiff } from "./locate.ts";
 
 /** Number formatting shared by the console summary (`run.ts`) and the HTML report. */
@@ -16,6 +17,10 @@ export const fmtRegion = (r: { x: number; y: number; w: number; h: number }) =>
 export const fmtBand = (b: { side: "left" | "right"; y: number; h: number }) =>
   `${b.side === "left" ? "+" : "-"}${b.h}px at y=${b.y} (${b.side})`;
 
+/** `line -1px@y812`: signed like a band, − when only the reference draws it; `~` when approximate. */
+export const fmtLine = (l: Line, approx = false) =>
+  `line ${l.side === "left" ? "+" : l.side === "right" ? "-" : ""}${l.h}px@y${approx ? "~" : ""}${l.y}`;
+
 /** `+sel "text"` / `-sel "text"` for one side only, `sel prop l→r`, else its box deltas (left − right). */
 export const fmtElements = (els: ElementDiff[], props = 2) =>
   els
@@ -25,11 +30,12 @@ export const fmtElements = (els: ElementDiff[], props = 2) =>
       const changed = Object.entries(e.changed)
         .slice(0, props)
         .map(([p, [l, r]]) => (p === "text" ? `"${l}"→"${r}"` : `${p} ${l}→${r}`));
-      if (changed.length) return `${e.selector} ${changed.join(", ")}`;
+      const re = e.reparented ? " (re-parented)" : "";
+      if (changed.length) return `${e.selector} ${changed.join(", ")}${re}`;
       const moved = (["x", "y", "w", "h"] as const).flatMap((k) => {
         const d = e.left![k] - e.right![k];
         return d ? [`${k}${signed(d)}`] : [];
       });
-      return [e.selector, ...moved].join(" ");
+      return [e.selector, ...moved].join(" ") + re;
     })
     .join("; ");

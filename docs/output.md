@@ -27,7 +27,8 @@ renderdiff: 2 of 3 routes differ (6 of 15 shots), 0 errors, worst 97.41% /about@
 A row covers the widths that agree on height and width delta (`h`, `w`), bands, aligned
 score and text; the score and region count are then shown as ranges, and `unstable` as the
 largest. Bands are `+` for rows only the left has and `-` for rows only the right has, at
-`y`, with `~` when the widths put it in different places. Up to three text-diff lines
+`y`, with `~` when the widths put it in different places. A region that is a thin line
+across the page shows as `line -1px@y812` instead of counting toward `reg`; past three, `(+N more)`. Up to three text-diff lines
 follow (`-"x"` only on the right, `+"x"` only on the left, `(+N more)` past that). Under a
 row, `failed` lists stylesheets and font faces a side failed to load (fix those first),
 `dom` names up to three elements behind the changes (`@w` when the row covers several
@@ -63,6 +64,7 @@ because an unmeasured route is not a verified one.
 | Can't align | `rows too different to align` | `unaligned` | `bands: null` |
 | Text | `text: 0 added, 1 removed` | `text -"Pricing"` | `text: { added: [], removed: ["Pricing"] }` |
 | Regions | (on the report card) | `3 reg` | `regions: [...]` |
+| Line | `line -1px@y812` | `line -1px@y812` | `regions[i].line: { y: 812, h: 1, side: "right" }` |
 | Unstable | `(unstable 1,204px)` | `unstable 1,204px` | `unstablePixels: 1204` |
 | Failed assets | `failed left: font Inter 700` | `failed left: font Inter 700` | `failed: { left: ["font Inter 700"], right: [] }` |
 
@@ -88,6 +90,11 @@ from the realigned rows, so content a band only pushed down isn't one (above, th
 the whole difference, so there are none). The card lists the top five with their pixel
 counts; up to three crops cover the bands first, then the largest regions.
 
+A region whose differing pixels sit in one or two rows spanning at least half the page is a
+line: a divider, border or focus ring that one side lost. `line -1px@y812` means only the
+right (the reference) draws it, `+` only the left, and no sign that both do, differently.
+A line barely moves the score, so `99.97%  line -1px@y812` is worth opening.
+
 ## Bands
 
 Rows only one side has, found by aligning the two images row by row. `-24px at y=196
@@ -111,6 +118,11 @@ right after the shot. Each is a CSS selector unique on its side, so `--selector`
   first. A computed value is a symptom: find the rule that set it.
 - `sel x+8` moved without a style of its own changing, so the cause is a neighbour or its
   parent, which is listed after it when one of them changed.
+- `-sel::before` / `+sel::before` is a pseudo-element only the right / left generates, and
+  `sel::after height 1px→2px` one on both whose `content`, size, background, top or bottom
+  border, or `box-shadow` differ. It carries `(re-parented)` when its element does.
+- `(re-parented)` after an entry means its ancestors' tags differ between the sides, so the
+  pairing crossed a structure change: its properties may not be the cause.
 - A bare `sel` is on both sides with nothing compared changed or moved, so its own pixels did
   (an image's source, a canvas).
 
