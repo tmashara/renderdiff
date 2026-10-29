@@ -192,7 +192,7 @@ runs:
           echo
           echo '```text'
           # Cut lines are dropped whole so a split UTF-8 char can't glue onto the closing fence.
-          if [ "$(wc -c < "$log")" -gt 60000 ]; then head -c 60000 "$log" | sed '$d'; echo '…'; else cat "$log"; fi
+          if [ "$(wc -c < "$log")" -gt 60000 ]; then head -c 60000 "$log" | sed '$d'; echo '…'; else cat "$log"; [ -z "$(tail -c1 "$log")" ] || echo; fi
           echo '```'
           [ "$(wc -c < "$log")" -le 60000 ] || echo "Output truncated; the full output is in the job summary of [this run]($run)."
         } > "$body"
