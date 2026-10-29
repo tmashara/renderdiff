@@ -9,7 +9,7 @@
    below parity is if the animation is still running when the shot is taken — the rotation
    angle at an arbitrary moment differs between two loads seconds apart.
    The marker is deliberately off-centre and large: any residual rotation moves thousands of
-   pixels, not a handful. */
+   pixels, not a handful. The GIF and the SMIL fill must hold their first frame. */
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes slide { to { transform: translateX(640px); } }
 @keyframes pulse { 50% { opacity: 0.1; } }
@@ -40,6 +40,8 @@ input { width: 288px; padding: 8px; font: 16px/24px ui-monospace, monospace; mar
 <h1>Motion guard rail</h1>
 <p class="lede">Everything on this page moves. Both origins serve it identically, so a score below parity means motion survived into the screenshot.</p>
 
+<img src="/shared/img/blink.gif" width="64" height="64" alt="">
+<svg width="64" height="64"><rect width="64" height="64" fill="#1f6feb"><animate attributeName="fill" values="#1f6feb;#16202b" dur="0.9s" repeatCount="indefinite"/></rect></svg>
 <div class="spinner"></div>
 <div class="track"><div class="runner"></div></div>
 <div class="track"><div class="runner"></div></div>
@@ -49,6 +51,7 @@ input { width: 288px; padding: 8px; font: 16px/24px ui-monospace, monospace; mar
 <section class="notes">
 <h2>Notes</h2>
 <p>A spinner at one and a tenth seconds per revolution is at an effectively arbitrary angle whenever the shot lands. Two captures taken seconds apart would disagree on almost every pixel inside the circle, which makes this the cheapest possible check that motion is actually being frozen rather than merely slowed.</p>
+<p>The GIF cycles four frames and the SVG fill interpolates without pause, so any two shots of either disagree unless both hold their first frame.</p>
 <p>The caret matters for the same reason and is easy to forget: a text cursor blinks on a timer of its own, independent of any CSS animation on the page.</p>
 </section>
 </div>

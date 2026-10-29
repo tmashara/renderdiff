@@ -574,16 +574,21 @@ const browserOf = (l: { browser: Browser; channel: string | null }) => ({
   version: l.browser.version(),
 });
 
+// Replaces Playwright's own headless --blink-settings, so its hover/pointer values are repeated.
+const ARGS = [
+  "--blink-settings=imageAnimationPolicy=2,primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4",
+];
+
 /**
  * A missing browser binary is the likeliest first-run failure, so fall back to the system
  * Chrome (both sides share it, so the comparison stays symmetric), then name the fix.
  */
 async function launch() {
   try {
-    return { browser: await chromium.launch(), channel: null };
+    return { browser: await chromium.launch({ args: ARGS }), channel: null };
   } catch (e) {
     try {
-      const browser = await chromium.launch({ channel: "chrome" });
+      const browser = await chromium.launch({ channel: "chrome", args: ARGS });
       console.log(
         `Bundled Chromium failed to launch; using the system Chrome ${browser.version()}.`,
       );
