@@ -20,6 +20,8 @@ export interface Shot {
   origin: { x: number; y: number };
   /** Stylesheets and font faces that failed to load, e.g. `font Inter 700 italic`, `stylesheet https://…`. */
   failed: string[];
+  /** Reasons of the page's `data-renderdiff-mask` elements, e.g. `rotating quote (data-renderdiff-mask)`. */
+  marked: string[];
 }
 
 /**
@@ -151,6 +153,7 @@ export async function prepare(page: Page, cfg: ResolvedConfig, now: number): Pro
     });
   // mulberry32 with a fixed seed, re-seeded on every navigation.
   await page.addInitScript(() => {
+    (window as unknown as { __RENDERDIFF__: boolean }).__RENDERDIFF__ = true;
     let s = 0x9e3779b9;
     Math.random = () => {
       s = (s + 0x6d2b79f5) | 0;
@@ -267,6 +270,12 @@ export async function capture(
       ),
     );
   }
+  const marked = await page.locator("[data-renderdiff-mask]").evaluateAll((els) =>
+    els.map((e) => {
+      const v = e.getAttribute("data-renderdiff-mask");
+      return v ? `${v} (data-renderdiff-mask)` : "data-renderdiff-mask";
+    }),
+  );
   const { scrollHeight, innerText, pageText, media } = await (el ?? page.locator(":root")).evaluate(
     (root) => {
       const body = document.body ?? document.documentElement;
@@ -351,9 +360,9 @@ export async function capture(
   for (let n = 2; ; n++) {
     await page.waitForTimeout(50);
     const png = await shoot();
-    if (png.equals(prev)) return { png, unstable: null, blank, text, origin, failed };
+    if (png.equals(prev)) return { png, unstable: null, blank, text, origin, failed, marked };
     if (n === tries)
-      return { png, unstable: await differing(prev, png), blank, text, origin, failed };
+      return { png, unstable: await differing(prev, png), blank, text, origin, failed, marked };
     prev = png;
   }
 }

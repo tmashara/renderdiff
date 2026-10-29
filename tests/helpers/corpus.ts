@@ -55,6 +55,7 @@ export const GUARDRAILS = [
   "video",
   "hang",
   "origin",
+  "cooperate",
 ] as const;
 
 export const ALL: string[] = [...EQUIVALENCE, ...CONTROLS, ...GUARDRAILS];

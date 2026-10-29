@@ -25,6 +25,7 @@ const shot = async (paint: (px: Buffer) => void) => ({
   text: [],
   origin: { x: 0, y: 0 },
   failed: [],
+  marked: [],
 });
 
 test("a lost 1px divider is a line drawn by the right side", async () => {

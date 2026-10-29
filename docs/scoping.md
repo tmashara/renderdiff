@@ -101,3 +101,14 @@ starts. The file's contents are never printed; `meta.storageState` and the repor
 each side's file. It holds live session tokens: **never commit it**, and add it to
 `.gitignore`. The out dir then holds signed-in screenshots, and their text in
 `results.json`, so don't publish or commit that either; add the out dir to `.gitignore` too.
+
+## Cooperating pages
+
+Every page renderdiff loads has `window.__RENDERDIFF__` set to `true` before its first
+script, so it can skip what it knows will differ (a live chat widget, a rotating quote).
+Do it in both builds, or the side that doesn't is the one that differs.
+
+An element marked `data-renderdiff-mask` is masked like a config mask, on every route and
+both sides. The attribute's value is its reason in the report, `rotating quote
+(data-renderdiff-mask)` for `data-renderdiff-mask="rotating quote"`, and in the result's
+`masked` in `results.json`.

@@ -171,7 +171,7 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
 
 | Tool | Legitimate for | Never for |
 | --- | --- | --- |
-| Mask (`--mask <sel>`, config `masks` with `reason`, `--mask-media`) | Content *proven* to vary per load: a base-vs-base baseline differs there (clocks, star counts, rotating quotes, embeds). | Anything that differs only after your change. |
+| Mask (`--mask <sel>`, config `masks` with `reason`, `--mask-media`, `data-renderdiff-mask="<reason>"` in the page) | Content *proven* to vary per load: a base-vs-base baseline differs there (clocks, star counts, rotating quotes, embeds). | Anything that differs only after your change. |
 | `--accept "<reason>"` | A difference you opened that exists before your change (baseline vs production) or is intended, with a reason saying which. | Getting green. |
 | `--threshold <0..1>` | A CI gate on the exit code. | Reaching green; the difference is still there. |
 
@@ -180,6 +180,8 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
   shows its poster, video.js captions and control bars hidden), so its box is still compared.
   `--no-freeze-video` lets it play: expect `unstable` or `did not settle`.
 - Masks hide text too, so masked text leaves the text diff.
+- Pages see `window.__RENDERDIFF__ === true` before their first script; anything hidden on it
+  must be hidden in both builds.
 - Accepted entries go to `renderdiff.accepted.json` next to the config (or cwd), one per band
   or region, scoped by the run's routes and widths. A match ignores `y` and needs the same
   kind, side, box, pixel hash (4 bits a channel) and named elements, so anything else drawn
@@ -308,9 +310,10 @@ For scripts and drilling into one route; the loop doesn't need it. One result pe
   `y`, `h`, or null when unaligned); each with `elements` (`selector`, `side`, each side's box,
   `changed` `{ prop: [left, right] }`, `text`, `rightSelector`, `reparented`; absent when not
   looked at, `[]` when nothing was named); `text` `{ added, removed }`; `failed` `{ left, right }`;
-  `images`; `crops` (`kind`, each side's box with `h` 0 at an insertion point, `layout`, `scale`,
-  `clipped`); `accepted`; `rightReplayedFrom`; with `--computed`, `computed` (`dom`, 0 =
-  identical; `changes` `{ key, prop, values }`, first 500; `truncated`; `unmatched`) or null with
+  `masked` (reasons of `data-renderdiff-mask` elements, absent when none); `images`; `crops`
+  (`kind`, each side's box with `h` 0 at an insertion point, `layout`, `scale`, `clipped`);
+  `accepted`; `rightReplayedFrom`; with `--computed`, `computed` (`dom`, 0 = identical;
+  `changes` `{ key, prop, values }`, first 500; `truncated`; `unmatched`) or null with
   `computedError`.
 - **`summary`:** `compared`, `errors`, `mean` and `worst` (accepted shots aside),
   `belowThreshold`, `differing` (unaccepted shots with any differing pixel; without

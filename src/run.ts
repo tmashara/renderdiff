@@ -443,6 +443,7 @@ export async function run({
         ]);
 
         if (!rightShot.failed.length) recorded.push(shotId(route, width));
+        const marked = [...new Set([...leftShot.marked, ...rightShot.marked])];
         results.push({
           ...entry,
           status: "compared",
@@ -453,6 +454,7 @@ export async function run({
           crops: cropped,
           accepted: false,
           failed: { left: leftShot.failed, right: rightShot.failed },
+          ...(marked.length ? { masked: marked } : {}),
           ...computed,
           ...(replayedAt ? { rightReplayedFrom: new Date(replayedAt).toISOString() } : {}),
         });

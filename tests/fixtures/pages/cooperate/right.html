@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cooperating page</title>
+<link rel="stylesheet" href="/shared/base.css">
+<script>if (window.__RENDERDIFF__) document.documentElement.classList.add("rd");</script>
+<style>
+/* GUARD RAIL for page cooperation. Each box differs between the sides: one carries
+   data-renderdiff-mask, one the page hides under window.__RENDERDIFF__, one is neither. */
+.box { width: 416px; height: 160px; background: var(--accent); color: #fff; }
+.box + .box { margin-top: 160px; }
+.rd .flagged { visibility: hidden; }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Cooperating page</h1>
+<p class="lede">This pair is deliberately different in three boxes. The page marks one for masking and hides another when it knows renderdiff is looking.</p>
+<div class="box marked" data-renderdiff-mask="rotating quote"><p>Well begun is half done.</p></div>
+<div class="box flagged"><p>Ad slot B</p></div>
+<div class="box control"><p>Version two</p></div>
+<section class="notes">
+<h2>Notes</h2>
+<p>Only the last box should show up in the diff, since nothing neutralizes it. The other two are the page telling renderdiff what it may skip.</p>
+</section>
+</div>
+</body>
+</html>

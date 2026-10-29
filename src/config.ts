@@ -306,9 +306,14 @@ export function defineConfig(config: RenderdiffConfig): RenderdiffConfig {
 }
 
 export function masksFor(cfg: ResolvedConfig, page: Page, route: Route): Locator[] {
-  return cfg.masks
-    .filter((m) => m.urlPath === undefined || m.urlPath === route.left || m.urlPath === route.right)
-    .map((m) => ("selector" in m ? page.locator(m.selector) : m.locate(page)));
+  return [
+    ...cfg.masks
+      .filter(
+        (m) => m.urlPath === undefined || m.urlPath === route.left || m.urlPath === route.right,
+      )
+      .map((m) => ("selector" in m ? page.locator(m.selector) : m.locate(page))),
+    page.locator("[data-renderdiff-mask]"),
+  ];
 }
 
 /** Config filenames probed in cwd, in order. */
