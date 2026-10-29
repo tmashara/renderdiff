@@ -58,7 +58,8 @@ only the reference has (`band -24`) are missing at y=196. With those rows cut ou
 matches exactly (`aligned 100.00%`). The missing rows are the "Pricing" nav link, which
 exists only on the reference (`-`). Open `renderdiff-out/about.1440.c1.png` to see it.
 
-**Without `--threshold`, a diff still exits 0**, so read the summary.
+**Any difference exits 1.** `--threshold <0..1>` relaxes that to scores below it
+(`--threshold 0` never fails on a difference). Read the summary either way.
 
 ### For coding agents
 
@@ -96,12 +97,14 @@ renderdiff <left-origin> <right-origin> <route…> [options]
 | `--left <url>` | Left origin, instead of the first positional one. Giving both is an error. |
 | `--right <url>` | Right origin, instead of the second positional one. |
 | `--width <n>` | Viewport width; repeatable. Replaces the defaults. |
-| `--threshold <0..1>` | Exit non-zero if any comparison scores below this. |
+| `--threshold <0..1>` | Exit 1 only if a comparison scores below this, instead of on any difference. `0` never fails on one. |
 | `--out <dir>` | Output directory, wiped at the start of a run. Default `./renderdiff-out`. A directory holding files renderdiff didn't write is refused. |
 | `--concurrency <n>` | Parallel workers. Default half the CPU cores, between 2 and 8. Lower it when one side is someone's live site. |
 | `--config <path>` | Config file. Default: `renderdiff.config.{ts,mts,js,mjs}` in cwd. |
 | `--selector <sel>` | Compare the one element this Playwright selector matches, on both sides, instead of the whole page. Applies to every route, over the config's per-route `selector`. |
 | `--left-selector <sel>`, `--right-selector <sel>` | That side's selector, over `--selector`. One without the other side (or `--selector`) is an error. |
+| `--mask <sel>` | Paint this Playwright selector over on both sides, on every route; repeatable. Added to the config's masks and listed in the report as coverage given up. |
+| `--mask-media` | Mask every `iframe`, `video` and `.vjs-text-track-display` (video.js text tracks) on every route, as config `maskMedia: true` does. |
 | `--storage-state <file>` | Start both sides with this Playwright storage state (cookies, localStorage), e.g. signed in. Relative to cwd. Over the config's `storageState`. |
 | `--left-storage-state <file>`, `--right-storage-state <file>` | That side's storage state, over `--storage-state`. One side alone is fine. |
 | `--accept <reason>` | Record this run's differences as accepted, with a reason. See **Accepted differences and reruns**. |
@@ -121,8 +124,8 @@ range rather than on a boundary, so a layout switch never flaps between runs.
 
 | Exit | Meaning |
 | --- | --- |
-| `0` | No route errored and none scored below `--threshold`. Without one, a diff still exits 0. |
-| `1` | A route scored below `--threshold`. Wins over `3` when both happen. |
+| `0` | No route errored and no shot differs (with `--threshold`: none scored below it). Accepted differences don't count; nor do unstable pixels or a failed asset alone, which still get their own row. |
+| `1` | A shot differs, or with `--threshold` scored below it. Wins over `3` when both happen. A difference that can't be accepted (unstable pixels beside it, a width change, a height change whose rows don't align) exits 1 even on the `--accept` run. |
 | `2` | Bad arguments, bad config, or an origin that isn't responding. |
 | `3` | A route errored, so it went unmeasured, or the run crashed (e.g. no Chromium). |
 
@@ -149,7 +152,7 @@ screenshots and text) out of git too. Details: [docs/scoping.md](https://github.
 ## Config file
 
 Flags cover a one-off run. A `renderdiff.config.{ts,mts,js,mjs}` in the working directory
-covers a repo you diff repeatedly, and expresses what flags can't: **masks** for content
+covers a repo you diff repeatedly, and expresses what flags can't: **per-route masks** for content
 that legitimately drifts, extra selectors to hide, extra URLs to block, `before` hooks.
 
 ```ts
@@ -213,7 +216,7 @@ renderdiff http://localhost:3000 https://example.com / /about --rerun-failed
 
 `--accept "<reason>"` writes every difference the run saw to `renderdiff.accepted.json` (next
 to the config, or in cwd); commit it. Later, a shot whose every difference matches an entry is
-listed on an `accepted:` line and counts neither as differing nor toward `--threshold`;
+listed on an `accepted:` line and counts neither as differing nor toward the exit code;
 anything new on the same page still shows. `--rerun-failed` reruns only what the last run in
 `--out` didn't find clean or accepted and merges it back; it exits 2 if the run differs from
 the previous one. Matching rules, what can still hide, and stale entries:
@@ -287,6 +290,7 @@ Everything lands in the out dir (`./renderdiff-out` by default):
     "compared": 1, "errors": 1, "mean": 0.9714,
     "worst": { "url": "/about", "width": 1440, "score": 0.9714 },
     "belowThreshold": 0,          // accepted shots aside
+    "differing": 1,               // shots with any differing pixel, accepted ones aside
     "accepted": 0,                // shots whose every difference was accepted
     "stale": []                   // accepted entries the run measured but didn't see
   }

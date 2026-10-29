@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layout parity</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for the area ceiling: 50,000px tall, past the ceiling at 1440 (40,000px) and
+   under it at 375 (about 153,600px). 30,000px past 2000px wide, which the ceiling's 40,000px
+   floor must still allow there. */
+html, body { margin: 0; }
+.long { height: 50000px; }
+@media (min-width: 2000px) { .long { height: 30000px; } }
+</style>
+</head>
+<body>
+<div class="long">
+<h1>Long page guard rail</h1>
+<p>A legitimately long page, like a changelog at a phone width. The sanity ceiling bounds the stitched image's area, not its height, so this page is compared at 375px and refused at 1440px, where the same height is four times the pixels.</p>
+</div>
+</body>
+</html>

@@ -3,7 +3,7 @@
  *
  * Chromium silently truncates a single screenshot past 16,384px, so `capture()` drops to raw
  * CDP and stitches vertical tiles for anything taller. This page is exactly 18,000px, which
- * is past that cap and well under the 40,000px sanity ceiling, so it lands on the tiled path
+ * is past that cap and well under the sanity ceiling (40,000px at 1440), so it lands on the tiled path
  * and needs two tiles (16,000 + 2,000).
  *
  * The height is exact by construction — 100 blocks of exactly 180px, no margins, no page

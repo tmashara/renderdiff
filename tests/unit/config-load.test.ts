@@ -170,6 +170,7 @@ describe("validation", () => {
       /two routes both read as \/a; they have different before hooks — merge them into one route/,
     ],
     ['{ routes: [{ left: "/a", before: {} }] }', /`routes\[0\]\.before` must be a function/],
+    ['{ maskMedia: "yes" }', /`maskMedia` must be a boolean/],
     ["{ storageState: 1 }", /`storageState` must be a non-empty path/],
     [
       '{ storageState: { left: "a.json", center: "b.json" } }',

@@ -60,7 +60,7 @@ after(async () => {
 /** One CLI run against the fixture site. */
 const capture = (
   routes: string[],
-  opts: { widths?: number[]; config?: string; selector?: string } = {},
+  opts: { widths?: number[]; config?: string; selector?: string; extra?: string[] } = {},
 ) =>
   runCli([
     ...renderdiffArgs({
@@ -72,6 +72,7 @@ const capture = (
       config: opts.config,
     }),
     ...(opts.selector ? ["--selector", opts.selector] : []),
+    ...(opts.extra ?? []),
   ]);
 
 /** The report card for a route, with the run's context attached to any failure. */
@@ -260,6 +261,25 @@ describe("consent chrome", () => {
   });
 });
 
+describe("the area ceiling", () => {
+  test("a long page is compared at a narrow width and refused at a wide one", async () => {
+    const run = await capture(["/long"], { widths: [375, 1440] });
+    assert.equal(run.code, 3, context(run));
+    const all = results(run.outDir);
+    assert.equal(result(all, "/long", 375).diffPixels, 0, context(run));
+    assert.equal((await sharp(run.file("long.375.left.png")).metadata()).height, 50_000);
+    const wide = all.results.find((r) => r.width === 1440);
+    assert.ok(wide?.status === "error", context(run));
+    assert.match(wide.error, /50000px tall at 1440px wide, past the 40000px sanity ceiling/);
+  });
+
+  test("a width past 1440 still gets the 40,000px ceiling", async () => {
+    const run = await capture(["/long"], { widths: [2560] });
+    assert.equal(run.code, 0, context(run));
+    assert.equal((await sharp(run.file("long.2560.left.png")).metadata()).height, 30_000);
+  });
+});
+
 describe("the tiled capture path", () => {
   let run: CliResult;
 
@@ -399,6 +419,32 @@ describe("selector masks", () => {
     assert.equal(r.diffPixels, 0, `the selector mask did not cover the value${context(run)}`);
     assert.deepEqual([r.text.added, r.text.removed], [[], []], context(run));
   });
+
+  test("--mask masks a selector on every route, without a config", async () => {
+    const run = await capture(["/drifting"], { extra: ["--mask", "[data-drift]"] });
+    assert.equal(run.code, 0, context(run));
+    assert.equal(result(results(run.outDir), "/drifting", 1440).diffPixels, 0, context(run));
+    assert.deepEqual(parseReport(run.report()!).maskReasons, ["[data-drift] (--mask)"]);
+  });
+
+  test("--mask adds to the config's masks", async () => {
+    const run = await capture(["/drifting"], {
+      config: path.join(CONFIGS, "mask-selector.mjs"),
+      extra: ["--mask", "iframe"],
+    });
+    assert.deepEqual(parseReport(run.report()!).maskReasons, [
+      "render counter, by selector",
+      "iframe (--mask)",
+    ]);
+  });
+
+  test("--mask-media paints iframes, video and video.js text tracks", async () => {
+    const bare = await capture(["/media"]);
+    assert.ok(result(results(bare.outDir), "/media", 1440).diffPixels > 0, context(bare));
+    const run = await capture(["/media"], { extra: ["--mask-media"] });
+    assert.equal(run.code, 0, context(run));
+    assert.equal(result(results(run.outDir), "/media", 1440).diffPixels, 0, context(run));
+  });
 });
 
 describe("route pairs", () => {
@@ -469,7 +515,7 @@ describe("component scope", () => {
 
   test("an element with no text that differs only in colour is scored, not refused as blank", async () => {
     const run = await scoped(["/stripe"], ["--selector", ".plain"]);
-    assert.equal(run.code, 0, context(run));
+    assert.equal(run.code, 1, context(run));
     const r = result(results(run.outDir), "/stripe", 1440);
     assert.ok(r.score < 1 && r.diffPixels > 0, context(run));
   });
@@ -496,7 +542,7 @@ describe("component scope", () => {
 
   test("the recoloured swatch alone scores low, with its region in the element's own pixels", async () => {
     const run = await scoped(["/color"], ["--selector", SWATCH, "--progress"]);
-    assert.equal(run.code, 0, context(run));
+    assert.equal(run.code, 1, context(run));
     const r = result(results(run.outDir), "/color", 1440);
     assert.deepEqual(r.selector, { left: SWATCH, right: SWATCH });
     assert.equal(r.totalPixels, 208 * 160, context(run));
@@ -530,7 +576,7 @@ describe("component scope", () => {
       ],
       { noOut: true },
     );
-    assert.equal(again.code, 0, context(again));
+    assert.equal(again.code, 1, context(again));
   });
 
   test("a mask is painted in the element's coordinates", async () => {
@@ -551,7 +597,7 @@ describe("component scope", () => {
       [PAIR],
       ["--left-selector", ".swatch >> nth=0", "--right-selector", ".swatch >> nth=1"],
     );
-    assert.equal(run.code, 0, context(run));
+    assert.equal(run.code, 1, context(run));
     const r = result(results(run.outDir), PAIR, 1440);
     assert.deepEqual(r.selector, { left: ".swatch >> nth=0", right: ".swatch >> nth=1" });
     assert.deepEqual([r.text.added, r.text.removed], [["One"], ["Two"]], context(run));
@@ -601,7 +647,7 @@ describe("before hooks", () => {
     const run = await hooked(
       '{ routes: [{ left: "/menu", before: async (page) => { await page.click("#toggle"); } }] }',
     );
-    assert.equal(run.code, 0, context(run));
+    assert.equal(run.code, 1, context(run));
     const r = result(results(run.outDir), "/menu", 1440);
     // Each side's panel says something different, so this only differs if both opened.
     assert.ok(r.diffPixels > 0, `the hook did not run before the shot${context(run)}`);
@@ -621,7 +667,7 @@ describe("before hooks", () => {
         'await page.locator("h1").evaluate((h, t) => (h.textContent = t), `${side} ${route} ${width}`); } }',
       ["/menu"],
     );
-    assert.equal(run.code, 0, context(run));
+    assert.equal(run.code, 1, context(run));
     const r = result(results(run.outDir), "/menu", 1440);
     assert.deepEqual(
       [r.text.added, r.text.removed],
@@ -703,7 +749,7 @@ describe("storage state", () => {
       ],
       { cwd },
     );
-    assert.equal(run.code, 0, context(run));
+    assert.equal(run.code, 1, context(run));
     const res = results(run.outDir);
     const r = result(res, "/signed-in", 1440);
     assert.deepEqual(
@@ -720,7 +766,7 @@ describe("storage state", () => {
     const dir = authIn(tempDir());
     fs.writeFileSync(path.join(dir, "c.mjs"), 'export default { storageState: "auth.json" };\n');
     const run = await capture(["/signed-in"], { config: path.join(dir, "c.mjs") });
-    assert.equal(run.code, 0, context(run));
+    assert.equal(run.code, 1, context(run));
     const res = results(run.outDir);
     const r = result(res, "/signed-in", 1440);
     assert.deepEqual(
@@ -840,7 +886,7 @@ describe("network blocking", () => {
 describe("crops", () => {
   test("a change too tall for one legible crop is clipped to its top, not shrunk or split", async () => {
     const run = await capture(["/tall-region"]);
-    assert.equal(run.code, 0, context(run));
+    assert.equal(run.code, 1, context(run));
     const r = result(results(run.outDir), "/tall-region", 1440);
     assert.equal(r.crops.length, 1, context(run));
     const [c] = r.crops;
@@ -893,7 +939,7 @@ describe("element attribution", () => {
     const [e] = result(results(run.outDir), "/labelled", 1440).regions[0]!.elements!;
     assert.match(e!.selector, /aria-label="Second\\a block"/, context(run));
     const again = await capture(["/labelled"], { selector: e!.selector });
-    assert.equal(again.code, 0, context(again));
+    assert.equal(again.code, 1, context(again));
     assert.equal(result(results(again.outDir), "/labelled", 1440).selector?.left, e!.selector);
   });
 });
@@ -1015,19 +1061,19 @@ describe("the output directory", () => {
   test("a previous run with region crops and results.json is wiped and reused", async () => {
     const dir = path.join(tempDir(), "out");
     const first = await into(dir, ["/color"]);
-    assert.equal(first.code, 0, context(first));
+    assert.equal(first.code, 1, context(first));
     assert.ok(fs.existsSync(path.join(dir, "color.1440.c1.png")), context(first));
     assert.ok(fs.existsSync(path.join(dir, "results.json")));
     const second = await into(dir, ["/color"]);
-    assert.equal(second.code, 0, context(second));
+    assert.equal(second.code, 1, context(second));
   });
 
   test("a previous run of a route pair is wiped and reused", async () => {
     const dir = path.join(tempDir(), "out");
     const first = await into(dir, ["/flex-vs-grid::/float-vs-flex"]);
-    assert.equal(first.code, 0, context(first));
+    assert.equal(first.code, 1, context(first));
     const second = await into(dir, ["/flex-vs-grid::/float-vs-flex"]);
-    assert.equal(second.code, 0, context(second));
+    assert.equal(second.code, 1, context(second));
     assert.doesNotMatch(second.stderr, /refusing to wipe/, context(second));
   });
 

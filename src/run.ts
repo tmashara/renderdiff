@@ -504,13 +504,16 @@ export async function run({
     spawn(opener, [reportPath], { detached: true, stdio: "ignore" }).unref();
   }
 
-  // A measured failure outranks an unmeasured route, so an error can't hide a threshold failure.
+  // A measured failure outranks an unmeasured route, so an error can't hide a diff.
   const below = results.filter(
     (r) =>
-      r.status === "compared" && !r.accepted && cfg.threshold !== null && r.score < cfg.threshold,
+      r.status === "compared" &&
+      !r.accepted &&
+      (cfg.threshold === null ? r.diffPixels > 0 : r.score < cfg.threshold),
   );
   if (below.length) {
-    console.error(`\n✗ ${below.length} route(s) below ${pct(cfg.threshold!)}.`);
+    const what = cfg.threshold === null ? "differ" : `below ${pct(cfg.threshold)}`;
+    console.error(`\n✗ ${below.length} route(s) ${what}.`);
   }
   return below.length ? 1 : results.some((r) => r.status === "error") ? 3 : 0;
 }

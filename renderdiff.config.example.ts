@@ -92,6 +92,7 @@ export default {
   //
   // Each needs exactly one of `selector` (a Playwright selector) or `locate`. Without
   // `urlPath` it applies to every route; on a pair it matches either side's path.
+  // `maskMedia: true` (or --mask-media) adds one for iframes, video and video.js text tracks.
   masks: [
     {
       // Baked in at build time from a nightly job, so a local tree and a production
