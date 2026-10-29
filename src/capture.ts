@@ -325,7 +325,8 @@ export async function capture(
       const variant = [weight, f.style, f.stretch].filter(
         (v) => !["normal", "400", "100%"].includes(v),
       );
-      const name = [f.family, ...variant].join(" ");
+      // `new FontFace("My Face")` reports `"My Face"`; the same @font-face reports `My Face`.
+      const name = [f.family.replace(/^"(.*)"$/, "$1"), ...variant].join(" ");
       if (f.status === "error") failed.push(`font ${name}`);
       // A face still loading at the timeout was requested; reading it as missing would be flaky.
       else if (f.status !== "unloaded") loaded.push(name);

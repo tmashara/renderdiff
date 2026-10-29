@@ -37,7 +37,8 @@ Breaking any of these produces a flaky suite, and the flake looks like a renderd
 3. **No webfonts.** `shared/base.css` sets a local monospace stack. A webfont means a
    network fetch and a possible FOUT, which differs between two loads seconds apart. The
    exception is `shared/blank.ttf`, a glyph-less face used by `fonts`: text falls back to
-   the local stack on both sides.
+   the local stack on both sides. It was generated with fontTools (`.notdef` only, empty
+   cmap), so there is no licence to carry.
 4. **No external assets.** Images come from `/shared/img/` on the fixture origin. Nothing
    leaves localhost, so the suite works offline and in CI.
 5. **Identical text on both sides.** Only the inline `<style>` and the class names differ.
