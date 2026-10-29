@@ -52,6 +52,8 @@ export interface ComparedResult extends BaseResult {
   alignedScore: number | null;
   /** innerText line diff; `added` is on left only, `removed` on right only. */
   text: TextDiff;
+  /** Reasons of `data-renderdiff-mask` elements either side carried. Absent when none did. */
+  masked?: string[];
   /** Paths relative to the out dir. */
   images: { left: string; right: string; diff: string };
   /** At most three: bands, tallest first, then the largest regions. Not one per region. */
@@ -459,7 +461,12 @@ const listed = (errors: ErrorResult[], stale: Accepted[]) =>
 <ul>${stale.map((a) => `<li><code>${esc(a.route)}</code> @${a.width}px — ${esc(a.reason)}</li>`).join("")}</ul></section>`
     : "");
 
-const neutralized = (meta: RunMeta) => `<details>
+const neutralized = (meta: RunMeta, results: RouteResult[]) => {
+  const reasons = [
+    ...meta.masks.map((m) => m.reason),
+    ...new Set(results.flatMap((r) => (r.status === "compared" ? (r.masked ?? []) : []))),
+  ];
+  return `<details>
   <summary>What was neutralized</summary>
   <p>Blocked on both sides — analytics, consent, and A/B tooling that would otherwise
      rewrite the DOM differently on each load:</p>
@@ -467,8 +474,8 @@ const neutralized = (meta: RunMeta) => `<details>
   <p>Masked, because they drift — painted over on both sides, so they can neither pass
      nor fail:</p>
   ${
-    meta.masks.length
-      ? `<ul>${meta.masks.map((m) => `<li>${esc(m.reason)}</li>`).join("")}</ul>`
+    reasons.length
+      ? `<ul>${reasons.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>`
       : `<p><em>None configured.</em></p>`
   }
   <p>Pinned on both sides: clock starts at <code>${esc(meta.clock)}</code> on every load, a seeded
@@ -484,6 +491,7 @@ const neutralized = (meta: RunMeta) => `<details>
   <p>Magenta is also padding where one page is taller or wider than the other. It counts
      against the score on purpose — see the height delta on the row.</p>
 </details>`;
+};
 
 export async function writeReport(
   results: RouteResult[],
@@ -521,7 +529,7 @@ ${stats(compared).sorted.map(card).join("\n")}
 
 ${listed(errors, stale)}
 
-${neutralized(meta)}
+${neutralized(meta, results)}
 </main>
 `;
 
@@ -668,7 +676,7 @@ ${
     : ""
 }
 
-${neutralized(meta)}
+${neutralized(meta, results)}
 `;
 
   const out = path.join(outDir, "evidence.html");

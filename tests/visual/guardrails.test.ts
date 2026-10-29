@@ -426,6 +426,23 @@ describe("masks", () => {
     ]);
   });
 
+  test("a page masks what it marks and hides what it flags, and the report lists the mark's reason", async () => {
+    const run = await capture(["/cooperate"]);
+    assert.equal(run.code, 1, `the control box still differs${context(run)}`);
+    const r = result(results(run.outDir), "/cooperate", 1440);
+    assert.ok(r.diffPixels > 0, context(run));
+    assert.ok(r.regions.length > 0, context(run));
+    for (const g of r.regions) {
+      assert.ok(g.elements?.length, `a region was not located${context(run)}`);
+      for (const e of g.elements) assert.match(e.selector, /control/, context(run));
+    }
+    assert.deepEqual([r.text.added, r.text.removed], [["Version one"], ["Version two"]]);
+    assert.deepEqual(r.masked, ["rotating quote (data-renderdiff-mask)"]);
+    assert.deepEqual(parseReport(run.report()!).maskReasons, [
+      "rotating quote (data-renderdiff-mask)",
+    ]);
+  });
+
   test("content that varies per load is painted out, clean and listed", async () => {
     const run = await capture(["/drifting", "/color"]);
     assert.equal(run.code, 1, `/color still differs${context(run)}`);
