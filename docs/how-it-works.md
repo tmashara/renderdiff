@@ -34,6 +34,10 @@ honestly. This is what renderdiff does to make sure of that.
   noise from that origin: they're painted magenta on both sides, reported per comparison
   as `unstable`, and excluded from the measurement — the score is over the remaining
   pixels. A route more than 25% unstable errors as `page did not settle`.
+- **Rechecks a differing shot** — reloads the right side once in a fresh context. The
+  elements that differ between the two loads are `varies`: painted out on both sides like a
+  mask, excluded from the score, and listed with the mask that would cover them. Off with
+  `--no-recheck`, and under `--cache-right`, whose replay serves the same bytes each load.
 - **Counts a pixel as changed** when pixelmatch's YIQ colour distance is over threshold
   0.05 (a delta of about 88), with anti-aliased pixels left out. Its default of 0.1 passed
   Tailwind v3 → v4 `pink-500` as identical; a recolour still smaller than that passes. The

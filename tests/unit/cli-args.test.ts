@@ -60,6 +60,7 @@ describe("help and version", () => {
       "--mask",
       "--mask-media",
       "--no-freeze-video",
+      "--no-recheck",
     ]) {
       assert.ok(r.stdout.includes(flag), `--help does not mention ${flag}`);
     }

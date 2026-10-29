@@ -35,11 +35,11 @@ Pixels decide the score and the exit code in every mode.
    § Reference and routes; moved page, component, sign-in, click state: § Scoping.
 2. **Baseline**: base vs base. Before changing code, the untouched change side against the
    reference; if the change is already made, the base build served on two ports. Whatever
-   differs varies per load: mask it (`--mask-media` for iframes, `--mask <sel>` or a config
-   mask with a `reason`; video is already frozen; a looping carousel: stop it with a
-   `before` hook on both sides, or mask it), and rerun until clean. Against production instead:
-   open each difference, then `--accept "differs before the change"`. § Masks, accepts and
-   thresholds.
+   differs varies per load: mask it (a `varies` line prints the mask; `--mask-media` for
+   iframes, `--mask <sel>` or a config mask with a `reason`; video is already frozen; a
+   looping carousel: stop it with a `before` hook on both sides, or mask it), and rerun
+   until clean. Against production instead: open each difference, then
+   `--accept "differs before the change"`. § Masks, accepts and thresholds.
 3. **Change, run all routes at default widths, read each row in this order**: `ERROR` →
    `failed` (a missing stylesheet or font explains the whole row: fix, rerun) → `text` →
    `h`/`w`, `band`, `aligned`, `line` → `dom` (`sel prop l→r` is a computed value: find the

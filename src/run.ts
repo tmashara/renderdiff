@@ -3,11 +3,12 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { chromium, errors, type Browser, type Page } from "playwright";
+import { chromium, errors, type Browser, type BrowserContext, type Page } from "playwright";
+import sharp from "sharp";
 import { applyAccepted, readAccepted, unacceptable, updateAccepted } from "./accept.ts";
 import { CACHE_DIR, cacheFile, replayable, REPLAY_TTL, saveRecording, shotId } from "./cache.ts";
 import { cancelUnstable, capture, HookError, prepare, step, type Shot } from "./capture.ts";
-import { compare, crops, type Band, type Region } from "./compare.ts";
+import { compare, crops, type Band, type Box, type Region } from "./compare.ts";
 import { diffSnapshots, fmtComputed, pageError } from "./computed.ts";
 import { locate, snapshot, type ElementDiff } from "./locate.ts";
 import {
@@ -60,6 +61,8 @@ interface RunOpts {
   acceptedFile: string;
   /** Replay the right side's traffic from the out dir's recording, or record one. */
   cacheRight: boolean;
+  /** Reload a differing shot's right side in a fresh context to find what varies per load. */
+  recheck: boolean;
 }
 
 const slug = (url: string) =>
@@ -170,6 +173,7 @@ export async function run({
   rerun,
   acceptedFile,
   cacheRight,
+  recheck,
 }: RunOpts): Promise<number> {
   const names = routes.map(name);
   const setup = {
@@ -319,13 +323,73 @@ export async function run({
         }
         // A replay that went live in part compared against two different moments of the reference.
         if (missed) rightShot.failed.push(`${missed} request(s) not in the recording, loaded live`);
+        const raw = [leftShot.png, rightShot.png] as const;
         const unstablePixels = await cancelUnstable(leftShot, rightShot);
 
-        const { diffPng, spots, ...metrics } = await compare(leftShot, rightShot);
+        let { diffPng, spots, ...metrics } = await compare(leftShot, rightShot);
         if (unstablePixels > MAX_UNSTABLE_SHARE * metrics.totalPixels) {
           throw new Error(`page did not settle: ${unstablePixels}px unstable at ${key}`);
         }
-        const measured = metrics.totalPixels - unstablePixels;
+        let varies: Region[] = [];
+        let variesPixels = 0;
+        if (recheck && !har && metrics.diffPixels) {
+          let ctx: BrowserContext | undefined;
+          try {
+            ctx = await browser.newContext({
+              ...CONTEXT_OPTIONS,
+              storageState: cfg.storageState.right ?? undefined,
+            });
+            const again = { left: pages.left, right: await ctx.newPage() };
+            await prepare(again.right, cfg, now);
+            const shot = await shoot(
+              again,
+              cfg.right + route.right,
+              route,
+              "right",
+              width,
+              cfg,
+              now,
+            );
+            const self = await compare({ ...rightShot, png: raw[1] }, shot);
+            if (self.diffPixels) {
+              const found = self.spots.filter((s) => s.kind === "region");
+              const named = await Promise.race([
+                locate([pages.right, again.right], [rightShot, shot], found, [
+                  masksFor(cfg, pages.right, route),
+                  masksFor(cfg, again.right, route),
+                ]).catch(() => null),
+                sleep(LOCATE_TIMEOUT, null, { ref: false }),
+              ]);
+              named?.forEach((els, i) => (found[i]!.target.elements = els));
+              const regions = self.regions.map(({ hash, ...g }) => g);
+              // Element boxes, not the pixels that changed: those miss the left's own value.
+              const mask = await boxMask(
+                raw[1],
+                regions.flatMap((g) => {
+                  const own = g.elements?.flatMap((e) => (e.left ? [e.left] : [])) ?? [];
+                  return own.length ? own : [g];
+                }),
+              );
+              const u = rightShot.unstable;
+              const l = { ...leftShot, png: raw[0] };
+              const r = {
+                ...rightShot,
+                png: raw[1],
+                unstable: u ? mask.map((v, i) => v | u[i]!) : mask,
+              };
+              const painted = await cancelUnstable(l, r);
+              ({ diffPng, spots, ...metrics } = await compare(l, r));
+              [leftShot.png, rightShot.png] = [l.png, r.png];
+              varies = regions;
+              variesPixels = painted - unstablePixels;
+            }
+          } catch {
+            // A hint, like locate: a failed recheck leaves the shot as first measured.
+          } finally {
+            await ctx?.close().catch(() => {});
+          }
+        }
+        const measured = metrics.totalPixels - unstablePixels - variesPixels;
         metrics.score = measured > 0 ? 1 - metrics.diffPixels / measured : 0;
         const base = `${stems.get(key)}.${width}`;
         const images = {
@@ -384,6 +448,7 @@ export async function run({
           status: "compared",
           ...metrics,
           unstablePixels,
+          ...(variesPixels ? { varies, variesPixels } : {}),
           images,
           crops: cropped,
           accepted: false,
@@ -642,6 +707,56 @@ async function shoot(
   }
 }
 
+/** A per-pixel mask the size of `png`, set inside each box. */
+async function boxMask(png: Buffer, boxes: Box[]): Promise<Uint8Array> {
+  const { width = 0, height = 0 } = await sharp(png).metadata();
+  const mask = new Uint8Array(width * height);
+  for (const b of boxes) {
+    const [x0, y0] = [Math.max(0, Math.floor(b.x)), Math.max(0, Math.floor(b.y))];
+    const [x1, y1] = [
+      Math.min(width, Math.ceil(b.x + b.w)),
+      Math.min(height, Math.ceil(b.y + b.h)),
+    ];
+    for (let y = y0; y < y1; y++) mask.fill(1, y * width + x0, y * width + Math.max(x0, x1));
+  }
+  return mask;
+}
+
+/** Routes whose right side differed between two loads, and the mask that would cover it. */
+function fmtVaries(results: RouteResult[], routes: string[]): string[] {
+  const rows = results.filter((r): r is ComparedResult => r.status === "compared" && !!r.varies);
+  const selectors = (rs: ComparedResult[]) => [
+    ...new Set(
+      rs.flatMap((r) =>
+        r.varies!.flatMap((g) => g.elements ?? []).map((e) => e.selector.replace(/::\w+$/, "")),
+      ),
+    ),
+  ];
+  const out: string[] = [];
+  const masks: string[] = [];
+  for (const route of routes) {
+    const rs = rows.filter((r) => name(r) === route);
+    if (!rs.length) continue;
+    const sels = selectors(rs);
+    const px = rs.reduce((n, r) => n + r.variesPixels!, 0);
+    out.push(
+      `varies ${route} @${rs.map((r) => r.width).join(",")}  ` +
+        `${px.toLocaleString("en-US")}px  ${sels.join(" ") || "(not located)"}`,
+    );
+    for (const s of sels) {
+      masks.push(
+        `{ selector: ${JSON.stringify(s)}, urlPath: ${JSON.stringify(rs[0]!.right)}, reason: "varies per load" }`,
+      );
+    }
+  }
+  const sels = selectors(rows);
+  if (sels.length) {
+    out.push(`  --mask ${sels.map((s) => `'${s.replace(/'/g, `'\\''`)}'`).join(" --mask ")}`);
+    out.push(`  masks: [${masks.join(", ")}]`);
+  }
+  return out;
+}
+
 function summarize(
   results: RouteResult[],
   routes: string[],
@@ -677,6 +792,8 @@ function summarize(
 
   const computed = fmtComputed(results, routes);
   if (computed.length) console.log(`\n${computed.join("\n")}`);
+  const varies = fmtVaries(results, routes);
+  if (varies.length) console.log(`\n${varies.join("\n")}`);
 
   console.log(`\nReport: ${reportPath}`);
   console.log(`Results: ${resultsPath}`);
@@ -769,7 +886,7 @@ export function compact(
   }
   if (accepted.length) out.unshift(`accepted: ${accepted.join(" ")}`);
   if (clean.length) out.unshift(`clean: ${clean.join(" ")}`);
-  out.push(...fmtComputed(results, routes));
+  out.push(...fmtComputed(results, routes), ...fmtVaries(results, routes));
   const all = results.filter((r): r is ComparedResult => r.status === "compared");
   const compared = all.filter((r) => !r.accepted);
   const shots = compared.filter((r) => r.diffPixels > 0).length;
