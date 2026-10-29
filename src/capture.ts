@@ -23,11 +23,10 @@ export interface Shot {
 }
 
 /**
- * Runs in the page: pause every video, open shadow roots included, and stub `play()` so nothing
- * restarts it. One that has played is rewound to frame 0; one that hasn't keeps its poster.
+ * Runs in the page, behind `prepare`'s init script: pause every video, open shadow roots
+ * included. One that played anyway is rewound to frame 0; one that hasn't keeps its poster.
  */
 function freezeVideo() {
-  HTMLMediaElement.prototype.play = () => Promise.resolve();
   const videos = (root: Document | ShadowRoot): HTMLVideoElement[] => [
     ...Array.from(root.querySelectorAll("video")),
     ...Array.from(root.querySelectorAll("*")).flatMap((e) =>
@@ -127,6 +126,18 @@ export async function prepare(page: Page, cfg: ResolvedConfig, now: number): Pro
   }
   // Time flows, so Date-based debounce and busy-waits work; `capture` rewinds it per load.
   await page.clock.install({ time: now });
+  // From the first script on, so no video starts and each keeps its poster however fast it loads.
+  if (cfg.freezeVideo)
+    await page.addInitScript(() => {
+      HTMLMediaElement.prototype.play = () => Promise.resolve();
+      document.addEventListener(
+        "loadstart",
+        (e) => {
+          if (e.target instanceof HTMLMediaElement) e.target.autoplay = false;
+        },
+        true,
+      );
+    });
   // mulberry32 with a fixed seed, re-seeded on every navigation.
   await page.addInitScript(() => {
     let s = 0x9e3779b9;

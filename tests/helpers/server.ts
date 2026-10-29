@@ -25,11 +25,15 @@ export type Side = "left" | "right";
  */
 const IMG_DELAY_MS = 150;
 
+/** The right side's video comes later, so a page that plays it differs by load timing. */
+const VIDEO_DELAY_MS = 400;
+
 const CONTENT_TYPES: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".svg": "image/svg+xml",
   ".png": "image/png",
+  ".webm": "video/webm",
   ".html": "text/html; charset=utf-8",
 };
 
@@ -66,13 +70,17 @@ async function pageHtml(pathname: string, side: Side): Promise<string | null> {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Serve a file from `fixtures/shared/`. Path-traversal guarded — it is still a server. */
-async function sharedFile(pathname: string): Promise<{ body: Buffer; type: string } | null> {
+async function sharedFile(
+  pathname: string,
+  side: Side,
+): Promise<{ body: Buffer; type: string } | null> {
   const rel = pathname.slice("/shared/".length);
   const file = path.resolve(SHARED_DIR, rel);
   if (!file.startsWith(SHARED_DIR + path.sep) || !fs.existsSync(file)) {
     return null;
   }
   if (rel.startsWith("img/")) await sleep(IMG_DELAY_MS);
+  if (rel.startsWith("video/") && side === "right") await sleep(VIDEO_DELAY_MS);
   return {
     body: fs.readFileSync(file),
     type: CONTENT_TYPES[path.extname(file)] ?? "application/octet-stream",
@@ -104,7 +112,7 @@ function handler(side: Side, hits: Map<string, number>): http.RequestListener {
 
       try {
         if (pathname.startsWith("/shared/")) {
-          const asset = await sharedFile(pathname);
+          const asset = await sharedFile(pathname, side);
           if (!asset) return send(404, "text/plain", "not found");
           return send(200, asset.type, asset.body);
         }

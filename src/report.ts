@@ -392,7 +392,7 @@ ${
      <code>Math.random</code>, timezone <code>${CONTEXT_OPTIONS.timezoneId}</code>, locale
      <code>${CONTEXT_OPTIONS.locale}</code>, <code>${CONTEXT_OPTIONS.colorScheme}</code> colour
      scheme, reduced motion, CSS animations and transitions off${
-       cfg.freezeVideo ? ", videos paused at frame 0 with video.js overlays hidden" : ""
+       cfg.freezeVideo ? ", videos kept from playing with video.js overlays hidden" : ""
      }.</p>
   <p>Unstable pixels — ones that changed between two shots of the same load — are painted
      magenta on both sides, counted on each card, and excluded from the measurement. A route

@@ -132,7 +132,7 @@ describe("keys", () => {
     assert.equal(cfg().freezeVideo, true);
     assert.equal(cfg({}, { freezeVideo: false }).freezeVideo, false);
     assert.equal(cfg({ freezeVideo: true }, { freezeVideo: false }).freezeVideo, true);
-    assert.match(cfg().neutralizeCss, /\.vjs-control-bar\{visibility:hidden/);
+    assert.match(cfg().neutralizeCss, /\.vjs-control-bar \*\{visibility:hidden/);
     assert.doesNotMatch(cfg({ freezeVideo: false }).neutralizeCss, /vjs/);
   });
 });

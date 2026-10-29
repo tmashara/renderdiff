@@ -438,6 +438,13 @@ describe("selector masks", () => {
     ]);
   });
 
+  test("autoplaying, script-played and late videos keep their poster on both sides", async () => {
+    const run = await capture(["/video"]);
+    assert.equal(run.code, 0, context(run));
+    const r = result(results(run.outDir), "/video", 1440);
+    assert.deepEqual([r.diffPixels, r.unstablePixels], [0, 0], context(run));
+  });
+
   test("--mask-media paints iframes; freezing video hides video.js overlays", async () => {
     const bare = await capture(["/media"]);
     assert.ok(result(results(bare.outDir), "/media", 1440).diffPixels > 0, context(bare));

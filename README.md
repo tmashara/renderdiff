@@ -104,8 +104,8 @@ renderdiff <left-origin> <right-origin> <route…> [options]
 | `--selector <sel>` | Compare the one element this Playwright selector matches, on both sides, instead of the whole page. Applies to every route, over the config's per-route `selector`. |
 | `--left-selector <sel>`, `--right-selector <sel>` | That side's selector, over `--selector`. One without the other side (or `--selector`) is an error. |
 | `--mask <sel>` | Paint this Playwright selector over on both sides, on every route; repeatable. Added to the config's masks and listed in the report as coverage given up. |
-| `--mask-media` | Mask every `iframe` on every route, as config `maskMedia: true` does. |
-| `--no-freeze-video` | Leave videos playing and video.js overlays visible, as config `freezeVideo: false` does. By default every `video` is paused at frame 0 and `.vjs-text-track-display` / `.vjs-control-bar` are hidden. |
+| `--mask-media` | Mask every `iframe` on every route, as config `maskMedia: true` does. Video isn't masked: it is frozen by default, so the player's box and styles are still compared. |
+| `--no-freeze-video` | Leave videos playing and video.js overlays visible, as config `freezeVideo: false` does. By default no `video` plays, from the page's first script on, so each shows its poster (one that started anyway is paused at frame 0), and `.vjs-text-track-display` / `.vjs-control-bar` are hidden. Without freezing, videos play through the lazy-load scroll and the shots, so expect unstable pixels or `did not settle`; with `--mask-media` too, they are neither masked nor frozen. |
 | `--storage-state <file>` | Start both sides with this Playwright storage state (cookies, localStorage), e.g. signed in. Relative to cwd. Over the config's `storageState`. |
 | `--left-storage-state <file>`, `--right-storage-state <file>` | That side's storage state, over `--storage-state`. One side alone is fine. |
 | `--accept <reason>` | Record this run's differences as accepted, with a reason. See **Accepted differences and reruns**. |
