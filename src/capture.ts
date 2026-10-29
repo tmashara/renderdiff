@@ -1,5 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import type { Locator, Page, Request } from "playwright";
+import type { Locator, Page, Request, Response } from "playwright";
 import sharp from "sharp";
 import { label, MASK_COLOR, masksFor, type ResolvedConfig, type Route } from "./config.ts";
 
@@ -69,6 +69,14 @@ const MAX_PAGE_AREA = 1440 * 40_000;
 
 /** Requests still open per page, when the last one opened or closed, and stylesheets that failed. */
 const network = new WeakMap<Page, { open: Set<Request>; last: number; failed: Set<string> }>();
+/** Each page's last main-frame document response; redirect hops come first, so it is the final one. */
+const doc = new WeakMap<Page, Response>();
+
+const html = (r: Response) => {
+  const type = r.headers()["content-type"];
+  return !type || /^\s*(text\/html|application\/xhtml\+xml)\b/i.test(type);
+};
+
 /** The step each page's capture is on, for the shot deadline to name. */
 export const step = new WeakMap<Page, string>();
 
@@ -113,6 +121,7 @@ export async function prepare(page: Page, cfg: ResolvedConfig, now: number): Pro
   });
   page.on("response", (r) => {
     if (r.status() >= 400) sheet(r.request());
+    if (r.request().isNavigationRequest() && r.frame() === page.mainFrame()) doc.set(page, r);
   });
   // A request the old document left open never finishes or fails, so it can't hold the next load.
   page.on("framenavigated", (f) => {
@@ -167,12 +176,20 @@ export async function capture(
   await page.clock.setSystemTime(now);
   // Here, not on framenavigated, which a pushState during hydration fires too.
   network.get(page)!.failed.clear();
-  const res = await page.goto(url, {
-    waitUntil: "domcontentloaded",
-    timeout: 45_000,
-  });
+  doc.delete(page);
+  const res = await page
+    .goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 })
+    .catch((e: unknown) => {
+      const d = doc.get(page);
+      if (!d || html(d)) throw e;
+      return d;
+    });
   if (res && res.status() >= 400) {
     throw new Error(`HTTP ${res.status()} at ${url}`);
+  }
+  if (res && !html(res)) {
+    const type = res.headers()["content-type"]!.split(";")[0]!.trim();
+    throw new Error(`not an HTML page: server sent ${type} at ${url}`);
   }
   if (route.before) {
     step.set(page, "before hook");
