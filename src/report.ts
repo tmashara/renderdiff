@@ -97,6 +97,8 @@ export interface CropResult {
 export interface ErrorResult extends BaseResult {
   status: "error";
   error: string;
+  /** The two differing frames per unsettled side, out-dir relative. */
+  frames?: string[];
 }
 
 export type RouteResult = ComparedResult | ErrorResult;

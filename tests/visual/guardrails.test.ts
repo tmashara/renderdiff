@@ -207,11 +207,32 @@ describe("the stability check", () => {
   });
 
   test("a page that is mostly unstable is an error, not a score", async () => {
+    const before = site.hits("/unsettled");
     const run = await capture(["/unsettled"]);
     assert.equal(run.code, 3, context(run));
+    assert.equal(site.hits("/unsettled") - before, 4, "each side is loaded twice");
     const report = parseReport(run.report()!);
     assert.equal(report.errors.length, 1, context(run));
-    assert.match(report.errors[0]!.message, /page did not settle: \d+px unstable at \/unsettled/);
+    const { message } = report.errors[0]!;
+    assert.match(message, /page did not settle: \d+px unstable at \/unsettled, again on retry/);
+    assert.match(message, /differ within \d+×\d+ at \(\d+,\d+\)/);
+    const r = results(run.outDir).results[0]!;
+    const frames = r.status === "error" ? (r.frames ?? []) : [];
+    assert.ok(frames.length === 2 || frames.length === 4, `frames: ${frames}`);
+    for (const f of frames) {
+      assert.ok(message.includes(f.replace(/-b\.png$/, "-a.png")), `${f} is not named`);
+      assert.ok((await sharp(run.file(f)).metadata()).width, `${f} is not an image`);
+    }
+  });
+
+  test("a page that settles on the retry is compared as usual", async () => {
+    const before = site.hits("/unsettled-once");
+    const run = await capture(["/unsettled-once"]);
+    assert.equal(run.code, 0, context(run));
+    assert.equal(site.hits("/unsettled-once") - before, 4, "each side is loaded twice");
+    const r = result(results(run.outDir), "/unsettled-once", 1440);
+    assert.equal(r.diffPixels, 0, context(run));
+    assert.equal(r.unstablePixels, 0, context(run));
   });
 
   test("a static page reports nothing unstable", async () => {
@@ -1156,9 +1177,14 @@ describe("the output directory", () => {
   test("an interrupted run's directory, with images but no report, is reused", async () => {
     const dir = tempDir();
     fs.writeFileSync(path.join(dir, "x.1440.left.png"), "");
+    fs.writeFileSync(path.join(dir, "x.1440.left.unsettled-a.png"), "");
     const run = await into(dir);
     assert.equal(run.code, 0, context(run));
     assert.ok(!fs.existsSync(path.join(dir, "x.1440.left.png")), "the old run was not wiped");
+    assert.ok(
+      !fs.existsSync(path.join(dir, "x.1440.left.unsettled-a.png")),
+      "the old frames were not wiped",
+    );
   });
 });
 

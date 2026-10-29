@@ -244,7 +244,8 @@ sides differed at capture time, even when its pixels were painted out as unstabl
 Pixels that changed between two shots of the *same* page load, so they're noise from that
 origin (a ticker, a carousel). They're painted magenta on both sides and excluded from the
 score, and a route with any is never on the `clean:` line. More than 25% unstable is an
-error, `page did not settle`.
+error, `page did not settle`, after one retry, with the two frames saved as
+`{slug}.{width}.{side}.unsettled-a.png`/`-b.png`.
 
 ## Crops
 

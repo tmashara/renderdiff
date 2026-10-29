@@ -9,6 +9,8 @@ export interface Shot {
   png: Buffer;
   /** One byte per pixel of `png`, set where the last two shots of this load disagreed. */
   unstable: Uint8Array | null;
+  /** The frame before `png`, set only when the two differed. */
+  prev?: Buffer;
   /** Why this side looks blank, or null. Only an error when both sides do. */
   blank: string | null;
   /**
@@ -362,7 +364,16 @@ export async function capture(
     const png = await shoot();
     if (png.equals(prev)) return { png, unstable: null, blank, text, origin, failed, marked };
     if (n === tries)
-      return { png, unstable: await differing(prev, png), blank, text, origin, failed, marked };
+      return {
+        png,
+        prev,
+        unstable: await differing(prev, png),
+        blank,
+        text,
+        origin,
+        failed,
+        marked,
+      };
     prev = png;
   }
 }

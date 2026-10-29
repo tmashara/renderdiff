@@ -38,6 +38,7 @@ export const GUARDRAILS = [
   "clock",
   "ticker",
   "unsettled",
+  "unsettled-once",
   "sprite",
   "short",
   "tall-region",
@@ -61,7 +62,7 @@ export const GUARDRAILS = [
 export const ALL: string[] = [...EQUIVALENCE, ...CONTROLS, ...GUARDRAILS];
 
 /** Routes whose markup comes from a `page.ts` generator instead of static files. */
-export const GENERATED = ["tall", "drifting"];
+export const GENERATED = ["tall", "drifting", "unsettled-once"];
 
 /** Routes that deliberately do not link `shared/base.css`. */
 export const SELF_CONTAINED = ["blank", "sprite", "tall", "frameset"];
