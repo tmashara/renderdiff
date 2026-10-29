@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layout parity</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for the shot deadline. The page wedges its renderer on the first stylesheet
+   renderdiff injects, so the capture never returns and must error at the deadline. */
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Hung page guard rail</h1>
+<p class="lede">The page loads normally, then spins forever as soon as a style element is added to its head. Nothing after that point can run, so the shot has to be abandoned rather than waited on.</p>
+
+<section class="notes">
+<h2>Notes</h2>
+<p>A renderer that never answers would otherwise hold the run open with no output. Each shot has a deadline, and on expiry the page is replaced so the next route still compares.</p>
+</section>
+</div>
+<script>
+new MutationObserver(() => { for (;;); }).observe(document.head, { childList: true });
+</script>
+</body>
+</html>

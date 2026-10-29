@@ -6,7 +6,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { chromium, errors, type Browser, type Page } from "playwright";
 import { applyAccepted, readAccepted, unacceptable, updateAccepted } from "./accept.ts";
 import { CACHE_DIR, cacheFile, replayable, REPLAY_TTL, saveRecording, shotId } from "./cache.ts";
-import { cancelUnstable, capture, HookError, prepare, type Shot } from "./capture.ts";
+import { cancelUnstable, capture, HookError, prepare, step, type Shot } from "./capture.ts";
 import { compare, crops, type Band, type Region } from "./compare.ts";
 import { diffSnapshots, fmtComputed, pageError } from "./computed.ts";
 import { locate, snapshot, type ElementDiff } from "./locate.ts";
@@ -36,6 +36,8 @@ import {
 const LOCATE_TIMEOUT = 5_000;
 /** A full-page walk reads every element's style; past this, report the snapshot as failed. */
 const COMPUTED_TIMEOUT = 15_000;
+/** Bounds one capture: a renderer that dies or never returns from an evaluate would hang the run. */
+const SHOT_TIMEOUT = (Math.max(0, Number(process.env.RENDERDIFF_SHOT_TIMEOUT)) || 120) * 1000;
 
 /** Past this share of a page unstable, too little was measured for a score to mean anything. */
 const MAX_UNSTABLE_SHARE = 0.25;
@@ -283,10 +285,9 @@ export async function run({
           : { update: true, updateContent: "embed", updateMode: "minimal" },
       );
     }
-    const leftPage = await leftCtx.newPage();
-    const rightPage = await rightCtx.newPage();
-    await prepare(leftPage, cfg, now);
-    await prepare(rightPage, cfg, now);
+    const pages = { left: await leftCtx.newPage(), right: await rightCtx.newPage() };
+    await prepare(pages.left, cfg, now);
+    await prepare(pages.right, cfg, now);
 
     for (let job = queue.shift(); job; job = queue.shift()) {
       const { route, width } = job;
@@ -300,8 +301,8 @@ export async function run({
         missed = 0;
         // allSettled, not all: a page must not start the next job while still loading this one.
         const settled = await Promise.allSettled([
-          shoot(leftPage, cfg.left + route.left, route, "left", width, cfg, now),
-          shoot(rightPage, cfg.right + route.right, route, "right", width, cfg, now),
+          shoot(pages, cfg.left + route.left, route, "left", width, cfg, now),
+          shoot(pages, cfg.right + route.right, route, "right", width, cfg, now),
         ]);
         const failed = settled.find((r) => r.status === "rejected");
         if (failed) throw failed.reason;
@@ -338,9 +339,9 @@ export async function run({
         const [made, named] = await Promise.all([
           crops(leftShot.png, rightShot.png, spots),
           Promise.race([
-            locate([leftPage, rightPage], [leftShot, rightShot], spots, [
-              masksFor(cfg, leftPage, route),
-              masksFor(cfg, rightPage, route),
+            locate([pages.left, pages.right], [leftShot, rightShot], spots, [
+              masksFor(cfg, pages.left, route),
+              masksFor(cfg, pages.right, route),
             ]).catch(() => null),
             sleep(LOCATE_TIMEOUT, null, { ref: false }),
           ]),
@@ -357,7 +358,7 @@ export async function run({
           });
         const computed = cfg.computed
           ? await Promise.race([
-              Promise.all([snap(leftPage, "left"), snap(rightPage, "right")]).then(
+              Promise.all([snap(pages.left, "left"), snap(pages.right, "right")]).then(
                 ([l, r]) => ({ computed: diffSnapshots(l, r) }),
                 (e: Error) => ({ computed: null, computedError: e.message }),
               ),
@@ -602,7 +603,7 @@ const transient = (e: unknown) =>
 
 /** One retry for a transient failure: a live site can time out once on a cold edge. */
 async function shoot(
-  page: Page,
+  pages: Record<"left" | "right", Page>,
   url: string,
   route: Route,
   side: "left" | "right",
@@ -610,12 +611,27 @@ async function shoot(
   cfg: ResolvedConfig,
   now: number,
 ): Promise<Shot> {
+  const once = async () => {
+    const page = pages[side];
+    const shot = await Promise.race([
+      capture(page, url, route, side, width, cfg, now),
+      sleep(SHOT_TIMEOUT, null, { ref: false }),
+    ]);
+    if (shot) return shot;
+    const at = step.get(page);
+    // Awaited: page.clock is the context's, so prepare() and the next capture would reach a closing page.
+    await page.close();
+    pages[side] = await page.context().newPage();
+    await prepare(pages[side], cfg, now);
+    const E = at === "before hook" ? HookError : errors.TimeoutError;
+    throw new E(`timeout after ${SHOT_TIMEOUT / 1000}s at ${at} on ${side}`);
+  };
   try {
-    return await capture(page, url, route, side, width, cfg, now);
+    return await once();
   } catch (e) {
     if (!transient(e)) throw e;
-    await page.waitForTimeout(1000);
-    return await capture(page, url, route, side, width, cfg, now);
+    await pages[side].waitForTimeout(1000);
+    return await once();
   }
 }
 

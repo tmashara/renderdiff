@@ -69,6 +69,8 @@ const MAX_PAGE_AREA = 1440 * 40_000;
 
 /** Requests still open per page, when the last one opened or closed, and stylesheets that failed. */
 const network = new WeakMap<Page, { open: Set<Request>; last: number; failed: Set<string> }>();
+/** The step each page's capture is on, for the shot deadline to name. */
+export const step = new WeakMap<Page, string>();
 
 /** Never finish, so they would hold network idle open until its timeout. */
 const STREAMS = new Set(["eventsource", "websocket", "ping"]);
@@ -159,6 +161,7 @@ export async function capture(
   cfg: ResolvedConfig,
   now: number,
 ): Promise<Shot> {
+  step.set(page, "load");
   await page.setViewportSize({ width, height: 900 });
   const maxHeight = Math.max(40_000, Math.floor(MAX_PAGE_AREA / width));
   await page.clock.setSystemTime(now);
@@ -172,6 +175,7 @@ export async function capture(
     throw new Error(`HTTP ${res.status()} at ${url}`);
   }
   if (route.before) {
+    step.set(page, "before hook");
     try {
       await route.before(page, { side, route: label(route), width });
     } catch (e) {
@@ -180,6 +184,7 @@ export async function capture(
       );
     }
   }
+  step.set(page, "settle");
   await page.addStyleTag({ content: cfg.neutralizeCss });
   // Before the scroll too, so autoplay never starts and page state driven by playback stays put.
   if (cfg.freezeVideo) await page.evaluate(freezeVideo);
@@ -282,6 +287,7 @@ export async function capture(
     );
   }
 
+  step.set(page, "screenshot");
   const measure = async (l: Locator) => {
     const b = await l.boundingBox();
     if (!b?.width || !b.height) throw new Error(`selector "${selector}" has no box ${where}`);

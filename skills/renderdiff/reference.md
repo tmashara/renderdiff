@@ -112,6 +112,7 @@ Report (`--open`, for a human): green from 99.5%, amber to 97%, red below.
 | `selector "…" matched N elements on left (/a), expected 1` | Make it unique (an id, `data-test`, `>> nth=0`), or list the route once per element. |
 | `selector "…" has no box on …` / `is off the page on …` | Matched an element not rendered (`display: none`, zero size) or outside the page. |
 | `before hook failed on left: …` | The hook threw. Never retried. |
+| `timeout after 120s at settle on left` | That side never finished the step (`load`, `before hook`, `settle`, `screenshot`): a hung script, a dead renderer, a hook that never resolves. Retried once in a fresh page, except a hung hook. For a page that is just very slow, raise `RENDERDIFF_SHOT_TIMEOUT` (seconds). |
 
 A failed `--computed` snapshot (`snapshot failed on /a@1440 (…)` on the `computed:` line) is
 not a route error: the pixel result stands.
