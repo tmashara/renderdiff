@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Divider control</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* CONTROL for pseudo-elements, lines and re-parenting. The right draws a 1px divider with
+   ::before; the left lost it, and wraps the card in a div that indents it 16px. */
+.rule { position: relative; height: 1px; margin: 32px 0; }
+.wrap { padding-left: 16px; }
+.card { width: 160px; height: 48px; margin-top: var(--gap); background: var(--fill); }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Divider control</h1>
+<p class="lede">This pair is deliberately different. A one-pixel divider drawn by a pseudo-element is gone on the left, and a card moved into a new wrapper.</p>
+<div class="rule"></div>
+<section class="notes">
+<h2>Notes</h2>
+<p>The pixels say a thin line vanished and a card moved. The element list should say which pseudo-element went, and that the card's pairing crossed a structure change.</p>
+</section>
+<section class="cards"><div class="wrap"><div class="card">Card</div></div></section>
+</div>
+</body>
+</html>

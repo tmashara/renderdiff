@@ -5,7 +5,16 @@ import { fmtComputed, groupFindings, type ComputedDiff, type Finding } from "./c
 import type { Band, Box, Region, TextDiff } from "./compare.ts";
 import { CONTEXT_OPTIONS, name, type ResolvedConfig, type Sides } from "./config.ts";
 import type { ElementDiff } from "./locate.ts";
-import { floor4, fmtBand, fmtElements, fmtFailed, fmtRegion, pct, signed } from "./format.ts";
+import {
+  floor4,
+  fmtBand,
+  fmtElements,
+  fmtFailed,
+  fmtLine,
+  fmtRegion,
+  pct,
+  signed,
+} from "./format.ts";
 
 interface BaseResult {
   /** The route: `/a`, or `/a::/b` for a pair. */
@@ -224,7 +233,7 @@ function findings(r: ComparedResult): string {
         .slice(0, LIST_CAP)
         .map(
           (g) =>
-            `<li>${fmtRegion(g)} — ${g.pixels.toLocaleString("en-US")} px${dom(g.elements)}</li>`,
+            `<li>${fmtRegion(g)} — ${g.pixels.toLocaleString("en-US")} px${g.line ? `, ${fmtLine(g.line)}` : ""}${dom(g.elements)}</li>`,
         )
         .join("")}</ul>`,
     );

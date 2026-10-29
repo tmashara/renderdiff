@@ -23,6 +23,7 @@ import fs from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
 import { after, before, test } from "node:test";
+import { fmtLine } from "../../src/format.ts";
 import { CONTROLS, toPath } from "../helpers/corpus.ts";
 import {
   cleanupTempDirs,
@@ -141,7 +142,7 @@ for (const width of WIDTHS) {
     assert.deepEqual(r.text, { added: [], removed: [] }, "a recolour changes no text");
     const listed = card(report, "/color", width).regions;
     assert.deepEqual(
-      listed.map(({ dom, ...b }) => b),
+      listed.map(({ dom, line, ...b }) => b),
       [{ x: g.x, y: g.y, w: g.w, h: g.h, pixels: g.pixels }],
       "the card lists the same single region",
     );
@@ -189,7 +190,7 @@ for (const width of WIDTHS) {
   });
 }
 
-for (const route of ["/color", "/nav"]) {
+for (const route of ["/color", "/nav", "/divider"]) {
   for (const width of WIDTHS) {
     test(`results.json agrees with the report card for ${route} @${width}`, () => {
       const r = result(results(run.outDir), route, width);
@@ -202,7 +203,9 @@ for (const route of ["/color", "/nav"]) {
       assert.equal(r.widthDelta, c.widthDelta);
       assert.equal(r.unstablePixels, c.unstablePixels);
       assert.deepEqual(
-        r.regions.slice(0, 5).map(({ elements, hash, ...g }) => g),
+        r.regions
+          .slice(0, 5)
+          .map(({ elements, hash, line, ...g }) => ({ ...g, line: line ? fmtLine(line) : null })),
         c.regions.map(({ dom, ...g }) => g),
       );
       assert.deepEqual(r.text, { added: c.added, removed: c.removed });
@@ -254,6 +257,26 @@ for (const width of WIDTHS) {
     assert.deepEqual(r.regions[0]!.elements![0]!.changed, {
       "background-color": ["rgb(246, 51, 154)", "rgb(236, 72, 153)"],
     });
+  });
+}
+
+for (const width of WIDTHS) {
+  test(`divider @${width} names the lost ::before line, and the card's re-parented pairing`, () => {
+    const r = result(results(run.outDir), "/divider", width);
+    const line = r.regions.find((g) => g.line);
+    assert.deepEqual(line && [line.line!.side, line.line!.h], ["right", 1], context(run));
+    const named = r.regions.flatMap((g) => g.elements ?? []);
+    const rule = named.find((e) => e.selector.endsWith(".rule::before"));
+    assert.equal(rule?.side, "right", JSON.stringify(named));
+    const card = named.find((e) => e.selector.endsWith(".card"));
+    assert.equal(card?.reparented, true, JSON.stringify(named));
+    const rows = parseSummary(run.stdout).routes.get("/divider")!.rows;
+    assert.ok(
+      rows.some((x) => /line -1px@y/.test(x.text)),
+      context(run),
+    );
+    assert.match(run.stdout, /-div\.rule::before/, context(run));
+    assert.match(run.stdout, /\(re-parented\)/, context(run));
   });
 }
 

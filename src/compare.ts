@@ -27,12 +27,23 @@ export interface Region {
   h: number;
   /** Differing pixels inside it. */
   pixels: number;
+  /** When it is a thin horizontal run across the page: its row, height and the side that draws it. */
+  line?: Line;
   /** The elements under it; absent when not looked at. */
   elements?: ElementDiff[];
   /** Both sides' pixels under it, hashed, for matching it against accepted ones. */
   hash?: string;
   /** The reason of the accepted difference it matched. */
   accepted?: string;
+}
+
+export interface Line {
+  /** Top row, in left page px. */
+  y: number;
+  /** 1 or 2. */
+  h: number;
+  /** Which side draws it; null when both do, e.g. a recolour. */
+  side: "left" | "right" | null;
 }
 
 /** Rows one side has that the other lacks, at `y` in that side's own coordinates. */
@@ -150,7 +161,7 @@ export async function compare(left: Shot, right: Shot): Promise<Diff> {
   const aligned = diffPixels
     ? align(l, r, w, cw, lh, rh)
     : { bands: [], alignedScore: null, regions: [], spots: [] };
-  const found = aligned.regions ?? regions(out, w, cw, Math.min(lh, rh));
+  const found = aligned.regions ?? regions(out, w, cw, Math.min(lh, rh), l, r);
   const spots = aligned.regions
     ? aligned.spots
     : [
@@ -262,9 +273,16 @@ function textDiff(a: string[], b: string[]): TextDiff {
 
 /**
  * Connected components (8-way) over 16px cells holding any pixel pixelmatch painted as a diff,
- * within the top-left `w`×`h` of the `stride`-wide diff.
+ * within the top-left `w`×`h` of the `stride`-wide diff of `a` and `b`.
  */
-function regions(out: Buffer, stride: number, w: number, h: number): Region[] {
+function regions(
+  out: Buffer,
+  stride: number,
+  w: number,
+  h: number,
+  a: Buffer,
+  b: Buffer,
+): Region[] {
   const cw = Math.ceil(w / CELL),
     ch = Math.ceil(h / CELL);
   const cells = new Uint32Array(cw * ch);
@@ -272,7 +290,7 @@ function regions(out: Buffer, stride: number, w: number, h: number): Region[] {
     const row = ((y / CELL) | 0) * cw;
     for (let x = 0, o = y * stride * 4; x < w; x++, o += 4) {
       // diffColor red; unchanged pixels are grey and AA ones yellow, so neither matches.
-      if (out[o] === 255 && out[o + 1] === 0 && out[o + 2] === 0) {
+      if (red(out, o)) {
         cells[row + ((x / CELL) | 0)]!++;
       }
     }
@@ -307,15 +325,66 @@ function regions(out: Buffer, stride: number, w: number, h: number): Region[] {
         }
       }
     }
-    found.push({
+    const g: Region = {
       x: x0 * CELL,
       y: y0 * CELL,
       w: Math.min(w, (x1 + 1) * CELL) - x0 * CELL,
       h: Math.min(h, (y1 + 1) * CELL) - y0 * CELL,
       pixels,
-    });
+    };
+    const l = g.h <= 2 * CELL && line(g, out, stride, w, h, a, b);
+    found.push(l ? { ...g, line: l } : g);
   }
   return found.sort((a, b) => b.pixels - a.pixels);
+}
+
+const red = (out: Buffer, o: number) => out[o] === 255 && out[o + 1] === 0 && out[o + 2] === 0;
+
+/**
+ * A region whose red pixels sit in 1–2 rows spanning at least half the width and filling most of
+ * that run. A side draws it when its pixels there differ from the rows on both sides of it.
+ */
+function line(
+  g: Region,
+  out: Buffer,
+  stride: number,
+  w: number,
+  h: number,
+  a: Buffer,
+  b: Buffer,
+): Line | null {
+  let x0 = w,
+    y0 = h,
+    x1 = -1,
+    y1 = -1,
+    n = 0;
+  for (let y = g.y; y < g.y + g.h; y++)
+    for (let x = g.x; x < g.x + g.w; x++)
+      if (red(out, (y * stride + x) * 4)) {
+        x0 = Math.min(x0, x);
+        x1 = Math.max(x1, x);
+        y0 = Math.min(y0, y);
+        y1 = Math.max(y1, y);
+        n++;
+      }
+  const lh = y1 - y0 + 1,
+    lw = x1 - x0 + 1;
+  // ponytail: half the compared width counts as across the page; full width only if it misfires
+  if (lh > 2 || lw < w / 2 || n < 0.5 * lw * lh) return null;
+  const around = [y0 - 1, y1 + 1].filter((y) => y >= 0 && y < h);
+  if (!around.length) return null;
+  const pa = new Uint32Array(a.buffer, a.byteOffset, (a.length / 4) | 0),
+    pb = new Uint32Array(b.buffer, b.byteOffset, (b.length / 4) | 0);
+  let da = 0,
+    db = 0;
+  for (let y = y0; y <= y1; y++)
+    for (let x = x0; x <= x1; x++) {
+      if (!red(out, (y * stride + x) * 4)) continue;
+      if (around.every((n) => pa[y * stride + x] !== pa[n * stride + x])) da++;
+      if (around.every((n) => pb[y * stride + x] !== pb[n * stride + x])) db++;
+    }
+  const [sa, sb] = [da > n / 2, db > n / 2];
+  return { y: y0, h: lh, side: sa === sb ? null : sa ? "left" : "right" };
 }
 
 /** FNV-1a over each row's RGBA words. */
@@ -422,12 +491,16 @@ function align(l: Buffer, r: Buffer, w: number, cw: number, lh: number, rh: numb
   const out = Buffer.alloc(rows.length * stride);
   const diff = pixelmatch(a, b, out, w, rows.length, PIXELMATCH);
   const measured = rows.length * w - masked;
-  const found = diff ? regions(out, w, cw, rows.length) : [];
+  const found = diff ? regions(out, w, cw, rows.length, a, b) : [];
   const side = (g: Region, s: 0 | 1) => {
     const y = rows[g.y]![s];
     return { y, h: rows[g.y + g.h - 1]![s] + 1 - y };
   };
-  const regs = found.map((g) => ({ ...g, ...side(g, 0) }));
+  const regs = found.map((g) => ({
+    ...g,
+    ...side(g, 0),
+    ...(g.line ? { line: { ...g.line, y: rows[g.line.y]![0] } } : {}),
+  }));
   found.forEach((g, i) => {
     spots.push({
       kind: "region",
