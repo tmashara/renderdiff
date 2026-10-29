@@ -135,7 +135,7 @@ range rather than on a boundary, so a layout switch never flaps between runs.
 | --- | --- |
 | `0` | No route errored and no shot differs (with `--threshold`: none scored below it). Accepted differences don't count; nor do unstable pixels or a failed asset alone, which still get their own row. |
 | `1` | A shot differs, or with `--threshold` scored below it. Wins over `3` when both happen. A difference that can't be accepted (unstable pixels beside it, content that varies per load, a width change, a height change whose rows don't align) exits 1 even on the `--accept` run. |
-| `2` | Bad arguments or config, an origin that isn't responding, an unreadable storage state or `renderdiff.accepted.json`, an out dir holding files renderdiff didn't write, or a `--rerun-failed` that doesn't repeat the last run. |
+| `2` | Bad arguments or config, an origin that isn't responding, a `--sitemap` it can't fetch or read, an unreadable storage state or `renderdiff.accepted.json`, an out dir holding files renderdiff didn't write, or a `--rerun-failed` that doesn't repeat the last run. |
 | `3` | A route errored, so it went unmeasured, or the run crashed (e.g. no Chromium). |
 
 ### Moved pages, components, interactions, sign-in

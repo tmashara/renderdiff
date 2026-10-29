@@ -206,8 +206,8 @@ const HELP = `
   Writes report.html, results.json and crops of each change to --out. Exits 1 if any
   shot differs and isn't accepted (with --threshold, only if one scores below it;
   --threshold 0 never fails on a diff), 3 if a route errored (unmeasured) or the run
-  crashed, 2 on bad arguments or config, an origin that is down, or an out dir it won't
-  wipe.
+  crashed, 2 on bad arguments or config, an origin that is down, a sitemap it can't use,
+  or an out dir it won't wipe.
 
   Options
     --left <url>        Left origin, instead of the first positional one.
@@ -304,14 +304,16 @@ const ENTITY: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', 
 
 /** The `<loc>` paths of one sitemap, host dropped, and whether it is a sitemap index. */
 async function locs(url: URL): Promise<{ index: boolean; paths: string[] }> {
-  let res: Response;
+  let res: Response, xml: string;
   try {
     res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+    xml = await res.text();
   } catch (e) {
-    throw new Error(`sitemap: could not fetch ${url} (${e instanceof Error ? e.message : e})`);
+    // Node's fetch says only "fetch failed"; the cause names ECONNREFUSED, ENOTFOUND, ...
+    const why = e instanceof Error ? (e.cause instanceof Error ? e.cause : e).message : e;
+    throw new Error(`sitemap: could not fetch ${url} (${why})`);
   }
   if (res.status >= 400) throw new Error(`sitemap: HTTP ${res.status} at ${url}`);
-  const xml = await res.text();
   if (!/<(urlset|sitemapindex)[\s>]/.test(xml)) throw new Error(`sitemap: ${url} is not a sitemap`);
   const paths = [...xml.matchAll(/<loc>\s*(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?\s*<\/loc>/gs)].flatMap(
     (m) => {

@@ -75,8 +75,8 @@ describe("--sitemap", () => {
     assert.ok(r.stdout.includes(`${R}/about`), r.stdout);
   });
 
-  test("decodes XML entities in a <loc>", async () => {
-    pages["/sitemap.xml"] = { body: urlset("https://example.com/s?a=1&amp;b=2") };
+  test("decodes XML entities in a <loc> and trims the whitespace around it", async () => {
+    pages["/sitemap.xml"] = { body: urlset("\n    https://example.com/s?a=1&amp;b=2\n  ") };
     const r = await dry(["--sitemap"]);
     assert.equal(r.code, 0, r.stderr);
     assert.deepEqual(listed(r.stdout), ["/s?a=1&b=2"]);
