@@ -112,7 +112,25 @@ export function collapseInherited(changes: StyleChange[], snaps: Snapshot[] = []
   });
 }
 
-export function diffSnapshots(left: Snapshot, right: Snapshot): ComputedDiff {
+/** `from`'s origin, also protocol-relative, written as `to`'s: in keys, markup and styles. */
+function rebase(s: Snapshot, from: string, to: string): Snapshot {
+  const [f, t] = [new URL(from), new URL(to)];
+  if (f.origin === t.origin || f.origin === "null" || t.origin === "null") return s;
+  const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // Not `:46110` for `:4611`, nor `localhost.example.com` for `localhost`.
+  const re = new RegExp(`(${esc(f.protocol)})?//${esc(f.host)}(?![\\w.:-])`, "g");
+  // Origins hold no `"` or `\`, so the JSON text rewrites like the strings it encodes.
+  return JSON.parse(
+    JSON.stringify(s).replace(re, (_, p?: string) => `${p ? t.protocol : ""}//${t.host}`),
+  ) as Snapshot;
+}
+
+export function diffSnapshots(
+  left: Snapshot,
+  right: Snapshot,
+  origins?: [string, string],
+): ComputedDiff {
+  if (origins) left = rebase(left, ...origins);
   const html = (s: Snapshot, k: string) => (s[k] ? normalizeAssets(s[k].html) : null);
   // Under an element `b` has display:none, so `b` never walked it: a style change, not markup.
   const hiddenIn = (b: Snapshot, k: string) => {

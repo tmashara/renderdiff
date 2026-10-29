@@ -531,7 +531,7 @@ test("--computed names the changed rule's property, once across widths, and the 
     ...renderdiffArgs({
       left: site.left,
       right: site.right,
-      routes: ["/margin", "/color", "/inserted"],
+      routes: ["/margin", "/color", "/inserted", "/origin"],
       widths: WIDTHS,
     }),
     "--computed",
@@ -543,6 +543,8 @@ test("--computed names the changed rule's property, once across widths, and the 
     rows.filter((x) => x.url === route).map((x) => x.status === "compared" && x.computed?.dom);
   assert.deepEqual(dom("/margin"), [0, 0], context(r));
   assert.deepEqual(dom("/color"), [0, 0]);
+  assert.deepEqual(dom("/origin"), [0, 0], context(r));
+  assert.ok(!summary.computed!.some((f) => f.at.some((a) => a.url === "/origin")), context(r));
   assert.ok(dom("/inserted").every((n) => typeof n === "number" && n > 0));
   const blog = summary.computed!.find((f) => f.key.endsWith(`a[href="#blog"]`));
   assert.deepEqual(blog && [blog.prop, blog.values, blog.at], [
@@ -561,7 +563,7 @@ test("--computed names the changed rule's property, once across widths, and the 
   assert.ok(inserted?.status === "compared" && inserted.computed!.unmatched.left.length === 1);
   assert.match(
     r.stdout,
-    /^computed: \d+ findings?; dom identical on 2 of 3 route\(s\), differs \/inserted/m,
+    /^computed: \d+ findings?; dom identical on 3 of 4 route\(s\), differs \/inserted/m,
   );
   assert.match(r.stdout, /a\[href="#blog"\] margin-left 24px→16px {2}\/margin@1440,375/);
 });

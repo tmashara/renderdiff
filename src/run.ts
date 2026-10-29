@@ -359,7 +359,9 @@ export async function run({
         const computed = cfg.computed
           ? await Promise.race([
               Promise.all([snap(pages.left, "left"), snap(pages.right, "right")]).then(
-                ([l, r]) => ({ computed: diffSnapshots(l, r) }),
+                ([l, r]) => ({
+                  computed: diffSnapshots(l, r, [pages.left.url(), pages.right.url()]),
+                }),
                 (e: Error) => ({ computed: null, computedError: e.message }),
               ),
               sleep(COMPUTED_TIMEOUT + 5_000, null, { ref: false }).then(() => ({

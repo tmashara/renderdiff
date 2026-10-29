@@ -137,8 +137,8 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
   `--progress` rows say `computed dom identical, N change(s)` or `dom differs (N)`.
 - `dom identical on X of Y`: every walked element's tag, attributes and own text match,
   bundler hashes in `src`/`href`/`srcset`/`poster` and generated class names (`css-1q2w3e`,
-  `Button_root__a1b2c`) aside. Then a pixel difference comes from CSS or script, and findings
-  are exact causes.
+  `Button_root__a1b2c`) aside, and the left origin read as the right's. Then a pixel
+  difference comes from CSS or script, and findings are exact causes.
 - `differs /a (N)`: N elements differ or are one-sided; findings there are hints. A class
   renamed on a wrapper re-keys its whole subtree, so a style change under it shows only as
   `dom differs` and `unmatched`.

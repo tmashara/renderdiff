@@ -206,6 +206,27 @@ describe("diffSnapshots", () => {
     assert.equal(diffSnapshots(page("/blog/20231015-a"), page("/blog/20231016-a")).dom, 1);
     assert.equal(diffSnapshots(page("/a.png", "20240101"), page("/a.png", "20240102")).dom, 1);
   });
+
+  test("an origin that differs only by port is no finding and no dom difference", () => {
+    const origins: [string, string] = ["http://127.0.0.1:4611/", "http://127.0.0.1:4612/a"];
+    const page = (o: string, path = "/a.png"): Snapshot => ({
+      body: el("<body>"),
+      [`body > a[href="http://${o}/x"]`]: el(`<a href="http://${o}/x">X`),
+      "body > img": el(`<img srcset="http://${o}${path} 1x, //${o}/b.png 2x">`, {
+        "background-image": `url("http://${o}${path}")`,
+      }),
+    });
+    assert.deepEqual(diffSnapshots(page("127.0.0.1:4611"), page("127.0.0.1:4612"), origins), {
+      dom: 0,
+      changes: [],
+      truncated: 0,
+      unmatched: { left: [], right: [] },
+    });
+    const port = diffSnapshots(page("127.0.0.1:46110"), page("127.0.0.1:46120"), origins);
+    assert.deepEqual([port.dom, port.unmatched.left.length], [3, 1]);
+    const path = diffSnapshots(page("127.0.0.1:4611", "/c.png"), page("127.0.0.1:4612"), origins);
+    assert.deepEqual([path.dom, path.changes.map((c) => c.prop)], [1, ["background-image"]]);
+  });
 });
 
 test("normalizeAssets leaves words alone", () => {
