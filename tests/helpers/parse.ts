@@ -323,7 +323,7 @@ export function parseReport(html: string): Report {
   const cards: ReportCard[] = [];
   // Split rather than one big regex: the header's optional delta badges make a single
   // pattern unreadable and order-sensitive.
-  for (const chunk of html.split('<article class="card">').slice(1)) {
+  for (const chunk of html.split(/<article class="card"[^>]*>/).slice(1)) {
     const card = chunk.slice(0, chunk.indexOf("</article>"));
     const score = /<span class="score (good|warn|bad)">([\d.]+)%<\/span>/.exec(card);
     const route = /<code>([^<]*)<\/code>/.exec(card);
@@ -384,7 +384,7 @@ export function parseReport(html: string): Report {
   const errors = listed(between(html, '<h2 class="bad">Errors</h2>', "</section>"));
   const stale = listed(between(html, "<h2>Stale accepted differences</h2>", "</section>"));
 
-  const neutralized = between(html, "<details>", "</details>");
+  const neutralized = between(html, "<summary>What was neutralized</summary>", "</details>");
   const blockPatterns = [...neutralized.matchAll(/<li><code>([^<]*)<\/code><\/li>/g)].map(
     (m) => m[1]!,
   );
