@@ -13,6 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { after, describe, test } from "node:test";
 import { cleanupTempDirs, runCli, REPO_ROOT, tempDir } from "../helpers/cli.ts";
+import { helpOptions } from "../helpers/parse.ts";
 
 after(cleanupTempDirs);
 
@@ -33,39 +34,42 @@ async function rejects(args: string[], needle: string) {
 }
 
 describe("help and version", () => {
-  test("--help exits 0 and documents every flag", async () => {
-    const r = await runCli(["--help"], { noOut: true });
-    assert.equal(r.code, 0);
-    for (const flag of [
-      "--left",
-      "--right",
-      "--width",
-      "--threshold",
-      "--out",
-      "--concurrency",
-      "--config",
-      "--dry-run",
-      "--open",
-      "--progress",
-      "--no-progress",
-      "--selector",
-      "--left-selector",
-      "--right-selector",
-      "--storage-state",
-      "--left-storage-state",
-      "--right-storage-state",
-      "--accept",
-      "--rerun-failed",
-      "--computed",
-      "--mask",
-      "--mask-media",
-      "--no-freeze-video",
-      "--no-recheck",
-      "--sitemap",
-    ]) {
-      assert.ok(r.stdout.includes(flag), `--help does not mention ${flag}`);
-    }
-    assert.equal(r.stderr, "");
+  test("the parser, --help and the docs name the same flags", async () => {
+    const help = await runCli(["--help"], { noOut: true });
+    assert.equal(help.code, 0);
+    assert.equal(help.stderr, "");
+    const flags = (s: string) => new Set(s.match(/--[a-z][a-z-]+/g));
+    const read = (f: string) => fs.readFileSync(path.join(REPO_ROOT, f), "utf8");
+    const md = (dir: string) =>
+      fs
+        .readdirSync(path.join(REPO_ROOT, dir), { recursive: true, encoding: "utf8" })
+        .filter((f) => f.endsWith(".md"))
+        .map((f) => path.join(dir, f));
+    const known = flags(help.stdout);
+    const options = helpOptions(help.stdout);
+
+    // Read as text: the parser has no flag list to import.
+    const parsed = new Set(
+      [...read("src/cli.ts").matchAll(/v === "(--[a-z-]+)"/g)].map((m) => m[1]!),
+    );
+    for (const flag of parsed)
+      assert.ok(known.has(flag), `the parser takes ${flag}, --help doesn't name it`);
+    for (const flag of options)
+      assert.ok(parsed.has(flag), `--help lists ${flag}, the parser doesn't take it`);
+
+    const readme = read("README.md");
+    const table = readme.slice(readme.indexOf("| Argument or flag"));
+    const column = table
+      .slice(0, table.indexOf("\n\n"))
+      .split("\n")
+      .map((row) => row.split("|")[1])
+      .join(" ");
+    assert.deepEqual([...new Set(options)].sort(), [...flags(column)].sort());
+
+    const foreign = new Set(["--immutable"]); // yarn install, in docs/case-study.md
+    for (const f of ["README.md", ...md("docs"), ...md("skills")])
+      for (const flag of flags(read(f)))
+        assert.ok(known.has(flag) || foreign.has(flag), `${f} names ${flag}, which --help doesn't`);
   });
 
   test("-h is the same as --help", async () => {

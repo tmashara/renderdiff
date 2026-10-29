@@ -253,10 +253,10 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
   `side` to make the sides look alike, hiding or removing an element on one side. `side` is for
   markup that legitimately differs. Say in the verdict that a hook ran (`hook: true`).
 - **Signed-in pages:** `npx playwright codegen --save-storage=auth.json <login url>`, then
-  `--storage-state auth.json` (or `--left-`/`--right-storage-state`, or config `storageState`,
-  relative to the config file). The file holds live session tokens: never commit or paste it,
-  add it to `.gitignore`. The out dir then holds signed-in screenshots and text: keep it out of
-  git too.
+  `--storage-state auth.json` (or `--left-storage-state`/`--right-storage-state`, or config
+  `storageState`, relative to the config file). The file holds live session tokens: never
+  commit or paste it, add it to `.gitignore`. The out dir then holds signed-in screenshots and
+  text: keep it out of git too.
 
 ## Config file
 

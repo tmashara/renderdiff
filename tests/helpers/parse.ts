@@ -402,3 +402,18 @@ export function card(report: Report, route: string, width: number): ReportCard {
   }
   return found;
 }
+
+/** The flags `--help` lists under Options, from each entry's first column. */
+export function helpOptions(help: string): string[] {
+  const section = help.slice(help.indexOf("\n  Options\n"), help.indexOf("\n  Default widths"));
+  return section
+    .split("\n")
+    .filter((l) => /^ {4}-/.test(l))
+    .flatMap(
+      (l) =>
+        l
+          .trim()
+          .split(/ {2,}/)[0]!
+          .match(/--[a-z][a-z-]*/g) ?? [],
+    );
+}
