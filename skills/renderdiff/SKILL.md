@@ -31,7 +31,7 @@ Pixels decide the score and the exit code in every mode.
 1. **Serve both sides as production builds**: the base commit in a `git worktree` on one
    port (right), your change on another (left), same data (static build:
    `npx serve -l 3002 dist`). Production as the reference is a later second pass. Routes:
-   every page the change can reach, from the sitemap; `--dry-run` prints the pairs.
+   every page the change can reach (`--sitemap`); `--dry-run` prints the pairs.
    § Reference and routes; moved page, component, sign-in, click state: § Scoping.
 2. **Baseline**: base vs base. Before changing code, the untouched change side against the
    reference; if the change is already made, the base build served on two ports. Whatever

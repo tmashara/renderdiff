@@ -31,7 +31,7 @@ the agent needs a cheap, trustworthy loop: change → `renderdiff` → explain e
 
 - intentional redesigns: when everything is meant to change, the score says nothing
 - cross-browser testing (Chromium only) or stored-baseline snapshot tests (both origins must be live)
-- discovering routes: you list them; there is no crawler
+- discovering routes: you list them, or `--sitemap` reads the reference's sitemap; there is no crawler
 - component libraries in isolation; Storybook-based tools fit that better
 
 ### 30-second quickstart
@@ -115,6 +115,7 @@ renderdiff <left-origin> <right-origin> <route…> [options]
 | `--cache-right` | Replay the right side's network traffic from the last `--cache-right` run in `--out`, when it's under an hour old and covers every shot; otherwise load it live and record it. Keeps `<out>/.cache/` when the out dir is wiped. See **Accepted differences and reruns**. |
 | `--no-recheck` | Don't reload a differing shot's right side to find content that varies per load. Off anyway under `--cache-right`. |
 | `--computed` | Also diff the computed style of every rendered element and its `::before`/`::after`, and say per route whether the markup is identical apart from asset hashes and origin. Pixels still decide the score and exit code. See [docs/output.md](docs/output.md#computed-styles---computed). |
+| `--sitemap[=<url>]` | Add the paths in the right side's sitemap. Default `<right>/sitemap.xml`; give another URL or path with `=`. |
 | `--dry-run` | Print the URL pairs and exit. No browser. |
 | `--open` | Open the report when the run finishes. |
 | `--progress` | A line per shot as it finishes, then the worst scores. The default on a terminal; piped, renderdiff prints one compact summary at the end. |
@@ -122,7 +123,10 @@ renderdiff <left-origin> <right-origin> <route…> [options]
 | `-h, --help` / `-v, --version` | |
 
 Routes are **literal paths**: there is no route discovery and globs are rejected. Each
-route is loaded on both origins, unless it's a pair.
+route is loaded on both origins, unless it's a pair. `--sitemap` adds every path in the right
+side's sitemap (one sitemap-index level), host ignored so a local build's production URLs work,
+files such as `.pdf` dropped. Routes you list come first and aren't repeated; `--dry-run` fetches
+the sitemap and lists them.
 
 Default widths are `1440, 1152, 896, 704, 375`: each sits mid-way inside a common breakpoint
 range rather than on a boundary, so a layout switch never flaps between runs.
@@ -131,7 +135,7 @@ range rather than on a boundary, so a layout switch never flaps between runs.
 | --- | --- |
 | `0` | No route errored and no shot differs (with `--threshold`: none scored below it). Accepted differences don't count; nor do unstable pixels or a failed asset alone, which still get their own row. |
 | `1` | A shot differs, or with `--threshold` scored below it. Wins over `3` when both happen. A difference that can't be accepted (unstable pixels beside it, content that varies per load, a width change, a height change whose rows don't align) exits 1 even on the `--accept` run. |
-| `2` | Bad arguments or config, an origin that isn't responding, an unreadable storage state or `renderdiff.accepted.json`, an out dir holding files renderdiff didn't write, or a `--rerun-failed` that doesn't repeat the last run. |
+| `2` | Bad arguments or config, an origin that isn't responding, a `--sitemap` it can't fetch or read, an unreadable storage state or `renderdiff.accepted.json`, an out dir holding files renderdiff didn't write, or a `--rerun-failed` that doesn't repeat the last run. |
 | `3` | A route errored, so it went unmeasured, or the run crashed (e.g. no Chromium). |
 
 ### Moved pages, components, interactions, sign-in
