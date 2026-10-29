@@ -86,7 +86,7 @@ is a route error, `before hook failed on left: …` (or `beforeShot …`), and i
 A route that ran one has `"hook": true` in `results.json` and a `hook` badge on its report
 card.
 Actions in a hook use Playwright's 30s default timeout, so check before clicking what may
-not be there (as above); `hideSelectors` and `extraCss` apply after the hook.
+not be there (as above); `hideSelectors` and `extraCss` apply after `before` and before `beforeShot`.
 
 The settle scrolls the whole page to load lazy content, so a state the scroll changes (a
 scroll-spy nav, a container re-measured on scroll) doesn't survive a `before` hook. Set it in
