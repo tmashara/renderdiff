@@ -41,7 +41,7 @@ honestly. This is what renderdiff does to make sure of that.
 - **Isolates state** — one browser context per origin, so cookies and localStorage never
   cross (a storage state file seeds each context on its own). Both sides of a route load at
   the same time.
-- **Retries once** per shot; a live site can time out on a cold edge.
+- **Retries once** per shot; a live site can time out on a cold edge. Each attempt has a 120s deadline (`RENDERDIFF_SHOT_TIMEOUT`, in seconds); on expiry the page is replaced and the shot errors as `timeout after 120s at <step> on <side>`.
 - **Replays, never reuses, a cached reference.** With `--cache-right`, the right side's network
   traffic comes from a HAR recorded by an earlier run, but the page is still loaded, settled and
   shot under this run's clock. Element attribution needs the live document anyway, so nothing

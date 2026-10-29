@@ -1159,3 +1159,24 @@ describe("retries", () => {
     assert.equal(site.hits("/no-such-route") - before, 2, context(run));
   });
 });
+
+describe("shot deadline", () => {
+  test("a page that never returns errors at the deadline, and the worker carries on", async () => {
+    const run = await runCli(
+      renderdiffArgs({
+        left: site.left,
+        right: site.right,
+        routes: ["/hang", "/home"],
+        widths: [1440],
+        concurrency: 1,
+      }),
+      { env: { RENDERDIFF_SHOT_TIMEOUT: "3" }, timeoutMs: 60_000 },
+    );
+    assert.equal(run.code, 3, context(run));
+    const report = parseReport(run.report()!);
+    assert.equal(report.errors.length, 1, context(run));
+    assert.match(report.errors[0]!.message, /^timeout after 3s at settle on left$/);
+    // Same worker, replaced page: the next route still compares.
+    assert.equal(cardFor(run, "/home").diffPixels, 0, context(run));
+  });
+});
