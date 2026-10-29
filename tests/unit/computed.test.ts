@@ -10,6 +10,7 @@ import {
   fmtComputed,
   groupFindings,
   normalizeAssets,
+  pageError,
   type Snapshot,
 } from "../../src/computed.ts";
 import { PROPS } from "../../src/locate.ts";
@@ -70,6 +71,57 @@ describe("diffSnapshots", () => {
       changes.map((c) => c.key),
       ["body > div > div.a"],
     );
+  });
+
+  test("a child whose own width changed inside a shrink-to-fit parent is kept", () => {
+    // `.inner { width: 100px → 200px }` inside an inline-block span that follows it.
+    const snap = (w: string): Snapshot => ({
+      "body > span": el("<span>", { display: "inline-block", width: w }),
+      "body > span > div.inner": { ...el("<div>", { width: w }), size: [w, "auto"] },
+    });
+    const d = diffSnapshots(snap("100px"), snap("200px"));
+    assert.deepEqual(
+      d.changes.map((c) => c.key),
+      ["body > span", "body > span > div.inner"],
+    );
+  });
+
+  test("a parent's own height change is kept over a height: 100% child that follows it", () => {
+    const snap = (h: string): Snapshot => ({
+      "body > div.box": { ...el("<div>", { height: h }), size: ["auto", h] },
+      "body > div.box > div.fill": { ...el("<div>", { height: h }), size: ["auto", "100%"] },
+    });
+    const d = diffSnapshots(snap("50px"), snap("80px"));
+    assert.deepEqual(
+      d.changes.map((c) => c.key),
+      ["body > div.box"],
+    );
+  });
+
+  test("a height: 100% child in an auto-height parent sizes it, so the child is kept", () => {
+    const snap = (h: string): Snapshot => ({
+      "body > div.card": { ...el("<div>", { height: h }), size: ["auto", "auto"] },
+      "body > div.card > div.inner": { ...el("<div>", { height: h }), size: ["auto", "100%"] },
+    });
+    assert.deepEqual(
+      diffSnapshots(snap("50px"), snap("80px")).changes.map((c) => c.key),
+      ["body > div.card > div.inner"],
+    );
+  });
+
+  test("an element going display: none is one finding, not its pseudo-elements too", () => {
+    const left: Snapshot = {
+      body: el("<body>"),
+      "body > p.tip": el("<p>Tip", { display: "none" }),
+    };
+    const right: Snapshot = {
+      body: el("<body>"),
+      "body > p.tip": el("<p>Tip", { display: "block" }),
+      "body > p.tip::before": el("", { content: '"→"' }),
+    };
+    assert.deepEqual(diffSnapshots(left, right).changes, [
+      { key: "body > p.tip", prop: "display", values: ["none", "block"] },
+    ]);
   });
 
   test("an element one side hides is a display change, not a markup difference", () => {
@@ -228,4 +280,17 @@ describe("groupFindings", () => {
   test("without --computed there is no block", () => {
     assert.deepEqual(fmtComputed([shot("/a", 1440, {})], ["/a"]), []);
   });
+});
+
+test("a snapshot error keeps the page's message, not page.evaluate's prefix or stack", () => {
+  // As Playwright reported a throw inside the walk, message text included.
+  const raw =
+    "page.evaluate: Error: more than 3 elements: Error: nested\n" +
+    "    at visit (eval at evaluate (:311:30), <anonymous>:1:66)\n" +
+    "    at probe (eval at evaluate (:311:30), <anonymous>:1:133)\n" +
+    "    at UtilityScript.evaluate (<anonymous>:313:16)";
+  assert.equal(pageError(new Error(raw)), "more than 3 elements: Error: nested");
+  const timeout =
+    "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator('.x')";
+  assert.equal(pageError(new Error(timeout)), timeout);
 });

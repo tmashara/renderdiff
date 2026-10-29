@@ -161,14 +161,20 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
     doesn't misalign everything after it.
   - An inserted sibling of the same tag and classes still shifts the `:nth-of-type` of the
     ones after it.
-  - A class renamed on an ancestor unmatches its whole subtree.
+  - A class added to, removed from or renamed on a wrapper re-keys its whole subtree. A
+    style change under it then shows only as `dom differs` and `unmatched`, not as a
+    finding.
 - One change high in the tree is one finding. An inherited property (`font-*`,
   `line-height`, `letter-spacing`, `text-*`, `white-space`, `color`, `visibility`) is
   dropped where the parent has the same change, so a `body` font change is one line, not
   one per element. A `width` is dropped inside a parent whose width changed, and a
   `height` around a child whose height changed, so the box that caused it is what's left.
+  A box whose own width or height is set in px on either side is kept (so a child widened
+  inside an `inline-block` is, at the cost of the odd fixed-size child a parent squeezed),
+  and a `height: 100%` child is dropped instead of the px-height parent it follows.
 - An element shown on one side and `display: none` on the other is one `display` finding;
-  its subtree counts neither as unmatched nor against `dom identical`.
+  its subtree and its `::before`/`::after` count neither as findings, unmatched nor against
+  `dom identical`.
 - A `::before`/`::after` that only one side generates shows as `content` against `none`.
   That is how a removed rule that drew an icon shows up.
 - `dom identical` means that on every width, each walked element's tag, attributes and own
@@ -180,7 +186,8 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
   - Hash-shaped tokens only: 8 or more letters and digits that alternate, between
     separators in a file name. `team_photo_2024.jpg` and `/p/abcdef123456` count as changes.
 - `dom differs (N)` counts the elements that differ or that one side lacks. Treat that
-  route's findings as hints.
+  route's findings as hints. A re-keyed element counts once on each side, so one renamed
+  wrapper with three descendants is `dom differs (8)`.
 - `unmatched` lists the outermost elements only one side has: `+` left, `-` right. The
   summary shows five routes, five each.
 - The HTML report shows the same block and puts `dom identical` / `dom differs (N)` on each
