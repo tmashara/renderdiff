@@ -497,6 +497,38 @@ describe("masks", () => {
       context(run),
     );
   });
+
+  test("unmasked, the moving, clipped and overflowing boxes all differ", async () => {
+    const run = await capture(["/mask-geometry"]);
+    assert.ok(result(results(run.outDir), "/mask-geometry", 1440).diffPixels > 0, context(run));
+  });
+
+  test("a mask follows its element, stays inside its overflow and covers what its children paint outside it", async () => {
+    const run = await capture(["/mask-geometry"], {
+      config: path.join(CONFIGS, "mask-geometry.mjs"),
+    });
+    assert.equal(run.code, 0, context(run));
+    assert.equal(result(results(run.outDir), "/mask-geometry", 1440).diffPixels, 0, context(run));
+    const pixel = async (file: string, x: number, y: number) => [
+      ...(await sharp(run.file(file))
+        .extract({ left: x, top: y, width: 1, height: 1 })
+        .removeAlpha()
+        .raw()
+        .toBuffer()),
+    ];
+    // The stage sits at page (16, 300); see the fixture's style.
+    for (const side of ["left", "right"]) {
+      const file = `mask-geometry.1440.${side}.png`;
+      const magenta = async (x: number, y: number) =>
+        (await pixel(file, x, y)).join() === "255,0,255";
+      assert.ok(await magenta(216, 580), `the moved box is unmasked on ${side}${context(run)}`);
+      assert.ok(await magenta(216, 800), `the clipped box is unmasked on ${side}`);
+      assert.ok(!(await magenta(216, 920)), `the mask spilled out of its wrapper on ${side}`);
+      assert.ok(await magenta(216, 1158), `the poster above the player is unmasked on ${side}`);
+      assert.ok(!(await magenta(666, 1230)), `the clipped slide was masked on ${side}`);
+      assert.ok(!(await magenta(216, 1480)), `the transparent menu was masked on ${side}`);
+    }
+  });
 });
 
 describe("selector masks", () => {

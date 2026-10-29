@@ -184,6 +184,9 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
   so its box is still compared. `--no-freeze-video` lets it play: expect `unstable` or
   `did not settle`.
 - Masks hide text too, so masked text leaves the text diff.
+- A mask covers what its element's children paint outside it (a video.js poster), cut to the
+  `overflow` ancestors that clip them, so one mask per player is enough. Boxes are read at
+  every shot: a mask that moves between shots shows as `unstable`, not as a stale rect.
 - Pages see `window.__RENDERDIFF__ === true` before their first script; anything hidden on it
   must be hidden in both builds.
 - Accepted entries go to `renderdiff.accepted.json` next to the config (or cwd), one per band
