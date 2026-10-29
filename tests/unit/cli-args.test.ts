@@ -52,10 +52,14 @@ describe("help and version", () => {
     const parsed = new Set(
       [...read("src/cli.ts").matchAll(/v === "(--[a-z-]+)"/g)].map((m) => m[1]!),
     );
-    for (const flag of parsed)
-      assert.ok(known.has(flag), `the parser takes ${flag}, --help doesn't name it`);
-    for (const flag of options)
-      assert.ok(parsed.has(flag), `--help lists ${flag}, the parser doesn't take it`);
+    const problems = [
+      ...[...parsed]
+        .filter((f) => !known.has(f))
+        .map((f) => `the parser takes ${f}, --help doesn't name it`),
+      ...options
+        .filter((f) => !parsed.has(f))
+        .map((f) => `--help lists ${f}, the parser doesn't take it`),
+    ];
 
     const readme = read("README.md");
     const table = readme.slice(readme.indexOf("| Argument or flag"));
@@ -64,12 +68,19 @@ describe("help and version", () => {
       .split("\n")
       .map((row) => row.split("|")[1])
       .join(" ");
-    assert.deepEqual([...new Set(options)].sort(), [...flags(column)].sort());
+    const documented = flags(column);
+    for (const f of options)
+      if (!documented.has(f)) problems.push(`--help lists ${f}, the README table doesn't`);
+    for (const f of documented)
+      if (!options.includes(f))
+        problems.push(`the README table lists ${f}, --help's Options don't`);
 
     const foreign = new Set(["--immutable"]); // yarn install, in docs/case-study.md
     for (const f of ["README.md", ...md("docs"), ...md("skills")])
       for (const flag of flags(read(f)))
-        assert.ok(known.has(flag) || foreign.has(flag), `${f} names ${flag}, which --help doesn't`);
+        if (!known.has(flag) && !foreign.has(flag))
+          problems.push(`${f} names ${flag}, which --help doesn't`);
+    assert.deepEqual(problems, []);
   });
 
   test("-h is the same as --help", async () => {
