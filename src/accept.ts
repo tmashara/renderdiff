@@ -69,11 +69,13 @@ const acceptable = (r: ComparedResult) => !unacceptable(r);
 export const unacceptable = (r: ComparedResult) =>
   r.unstablePixels
     ? "unstable"
-    : r.widthDelta
-      ? "width change"
-      : r.bands === null && r.heightDelta
-        ? "unaligned height"
-        : null;
+    : r.variesPixels
+      ? "varies per load"
+      : r.widthDelta
+        ? "width change"
+        : r.bands === null && r.heightDelta
+          ? "unaligned height"
+          : null;
 
 export function readAccepted(file: string): Accepted[] {
   if (!fs.existsSync(file)) return [];

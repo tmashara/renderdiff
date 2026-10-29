@@ -113,6 +113,7 @@ renderdiff <left-origin> <right-origin> <route…> [options]
 | `--accept <reason>` | Record this run's differences as accepted, with a reason. See **Accepted differences and reruns**. |
 | `--rerun-failed` | Rerun only what the last run in `--out` didn't find clean or accepted, keeping the rest. |
 | `--cache-right` | Replay the right side's network traffic from the last `--cache-right` run in `--out`, when it's under an hour old and covers every shot; otherwise load it live and record it. Keeps `<out>/.cache/` when the out dir is wiped. See **Accepted differences and reruns**. |
+| `--no-recheck` | Don't reload a differing shot's right side to find content that varies per load. Off anyway under `--cache-right`. |
 | `--computed` | Also diff the computed style of every rendered element and its `::before`/`::after`, and say per route whether the markup is identical apart from asset hashes and origin. Pixels still decide the score and exit code. See [docs/output.md](docs/output.md#computed-styles---computed). |
 | `--dry-run` | Print the URL pairs and exit. No browser. |
 | `--open` | Open the report when the run finishes. |
@@ -129,7 +130,7 @@ range rather than on a boundary, so a layout switch never flaps between runs.
 | Exit | Meaning |
 | --- | --- |
 | `0` | No route errored and no shot differs (with `--threshold`: none scored below it). Accepted differences don't count; nor do unstable pixels or a failed asset alone, which still get their own row. |
-| `1` | A shot differs, or with `--threshold` scored below it. Wins over `3` when both happen. A difference that can't be accepted (unstable pixels beside it, a width change, a height change whose rows don't align) exits 1 even on the `--accept` run. |
+| `1` | A shot differs, or with `--threshold` scored below it. Wins over `3` when both happen. A difference that can't be accepted (unstable pixels beside it, content that varies per load, a width change, a height change whose rows don't align) exits 1 even on the `--accept` run. |
 | `2` | Bad arguments or config, an origin that isn't responding, an unreadable storage state or `renderdiff.accepted.json`, an out dir holding files renderdiff didn't write, or a `--rerun-failed` that doesn't repeat the last run. |
 | `3` | A route errored, so it went unmeasured, or the run crashed (e.g. no Chromium). |
 
@@ -240,7 +241,7 @@ banner, your verdict, crops embedded) to attach to a ticket or publish as proof:
 - **Pins what varies between loads**: clock, `Math.random`, timezone, locale, colour scheme, reduced motion, animated image frames, video frames and video.js overlays.
 - **Kills animation, transitions and caret blink**, and hides common consent banners and dev toolbars.
 - **Settles the page**: lazy images, fonts and network idle before the shot.
-- **Shoots until stable**, and excludes pixels still moving as `unstable`.
+- **Shoots until stable**, and excludes pixels still moving as `unstable`; rechecks differing shots for content that varies per load.
 - **Isolates state** per origin, **retries once** per shot, and **stitches tall pages** past 16,384px.
 
 Each run's report ends with a "What was neutralized" section listing what was in effect.

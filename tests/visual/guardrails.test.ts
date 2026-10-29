@@ -388,11 +388,12 @@ describe("masks", () => {
   test("an unmasked drifting value costs the score", async () => {
     // Runs at 1440 only: the counter is rendered smaller at mobile, so it is a smaller share of
     // the page and the contrast with the masked run is less clear-cut.
-    const run = await capture(["/drifting"]);
+    const run = await capture(["/drifting"], { extra: ["--no-recheck"] });
     const c = cardFor(run, "/drifting");
     // Measured 99.38%. What matters is that it is not parity.
     assert.ok(c.diffPixels > 0, `the fixture did not drift${context(run)}`);
     assert.ok(c.score < 0.999, `expected < 0.999, got ${c.score}${context(run)}`);
+    assert.equal(result(results(run.outDir), "/drifting", 1440).varies, undefined, context(run));
     assert.equal(c.heightDelta, 0, "masking should never have been about height");
     assert.deepEqual(
       [c.added.length, c.removed.length],
@@ -423,6 +424,40 @@ describe("masks", () => {
     assert.deepEqual(report.maskReasons, [
       "render counter on /drifting differs between the two origins",
     ]);
+  });
+
+  test("content that varies per load is painted out, clean and listed", async () => {
+    const run = await capture(["/drifting", "/color"]);
+    assert.equal(run.code, 1, `/color still differs${context(run)}`);
+    const s = parseSummary(run.stdout);
+    assert.ok(s.clean.includes("/drifting"), context(run));
+    const res = results(run.outDir);
+    assert.equal(result(res, "/color", 1440).varies, undefined, context(run));
+    const r = result(res, "/drifting", 1440);
+    assert.equal(r.diffPixels, 0, context(run));
+    assert.ok(r.variesPixels! > 0, context(run));
+    assert.match(r.varies![0]!.elements![0]!.selector, /drift/, context(run));
+    assert.match(run.stdout, /^varies \/drifting @1440 /m);
+    assert.match(run.stdout, /^ {2}--mask '/m);
+    assert.match(run.stdout, /urlPath: "\/drifting", reason: "varies per load" \}\]$/m);
+  });
+
+  test("a real change beside varying content still differs, and can't be accepted", async () => {
+    const dir = tempDir();
+    const hook = path.join(dir, "hook.mjs");
+    fs.writeFileSync(
+      hook,
+      `export default { before: async (page, { side }) => { if (side === "left") await page.addStyleTag({ content: "h1 { color: red }" }); } };\n`,
+    );
+    const run = await capture(["/drifting"], { config: hook, extra: ["--accept", "x"] });
+    const r = result(results(run.outDir), "/drifting", 1440);
+    assert.ok(r.diffPixels > 0, context(run));
+    assert.ok(r.variesPixels! > 0, context(run));
+    assert.match(
+      run.stdout,
+      /not accepted: 1 differing shot\(s\) can't be \(1 varies per load\)/,
+      context(run),
+    );
   });
 });
 

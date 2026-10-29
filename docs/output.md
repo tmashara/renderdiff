@@ -30,8 +30,9 @@ as the largest. Under a row, `failed` lists stylesheets and font faces a side fa
 (`@w` when the row covers several widths: the first one's), and `crops` lists that row's crop
 files. Errors print in full, grouped across the widths that share a message. Clean means not
 one pixel differs, none went unmeasured as unstable and no stylesheet or font failed; a route
-with unstable pixels or a failed asset gets its own row. `--progress` gets the per-shot output
-when piped, `--no-progress` the summary on a terminal.
+with unstable pixels or a failed asset gets its own row. A shot whose only difference varied
+between two loads of the right side is clean, but listed under `varies`. `--progress` gets
+the per-shot output when piped, `--no-progress` the summary on a terminal.
 
 ## Tokens
 
@@ -46,6 +47,9 @@ when piped, `--no-progress` the summary on a terminal.
 | `line -1px@y812` | A 1–2px line across the page only the right draws (`+`: only the left; no sign: both, differently). A lost border or divider; not counted in `reg`. |
 | `3 reg` | Regions: connected patches of differing pixels. A missing link barely moves the score, but it is still a region. |
 | `unstable 1,204px` | Pixels that kept changing between shots of the same load (a ticker, a carousel). Excluded from the score, so the route is never clean. |
+| `varies /a @1440  148,480px  div.drift` | After the routes: the right side differed between two fresh loads there (a counter, a rotating banner). Those elements are painted out on both sides like a mask and left out of the score; the shot can't be accepted. `(not located)`: no element was named, its region was painted. |
+| `  --mask 'div.drift'` | The flag that masks every `varies` element, for the next run. |
+| `  masks: [{ selector: … }]` | The same as config `masks` entries, with `reason: "varies per load"`. |
 | `failed left: font Inter 700` | A stylesheet or font face that side failed to load (blocked URLs aside). Fix that first: a fallback font changes every line of text. |
 | `text -"Pricing"` | A line of visible text only the reference has (`+`: only your change). Up to three, then `(+N more)`. |
 | `dom sel prop a→b` | Element on both sides whose computed `prop` differs, left value first. |
@@ -305,6 +309,7 @@ pulls a route), scores rounded down to four decimals (so a shot that differs nev
       "score": 0.9714,           // share of measured pixels that match
       "alignedScore": 1,         // score over the aligned rows; null unless there are bands
       "diffPixels": 33120, "totalPixels": 1158000, "unstablePixels": 0,
+      "varies": [], "variesPixels": 0,   // absent unless a second right load differed: its regions, with elements, and the px painted out
       "heightDelta": -24, "widthDelta": 0,          // left − right
       "regions": [],             // left-page px; with bands, from the realigned rows
       "bands": [{ "side": "right", "y": 196, "h": 24,      // null: too different to align

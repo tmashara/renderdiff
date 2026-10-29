@@ -60,6 +60,7 @@ on stderr: `✗ 2 routes differ (10 shots).` (`below 97.00%` with `--threshold`)
 | `    dom …` | Up to three elements behind the changes, two properties each. `dom @1440 …`: from the first width of the row. |
 | `    crops …` | At most three crop PNGs per shot (bands first, tallest first, then largest regions), relative to `results.json`. |
 | `  @w  ERROR …` | Unmeasured. Grouped across widths sharing a message. See Errors. |
+| `varies /a @1440  Npx  sel` | A differing shot's right side, reloaded in a fresh context, differed from its first load there. Painted out on both sides like a mask, left out of the score (clean if nothing else differs), never accepted. Then `  --mask '…'` and `  masks: [{ …, reason: "varies per load" }]`: confirm it with a base-vs-base baseline before you use either. Off with `--no-recheck` and under `--cache-right`. |
 | `renderdiff: D of R routes differ (S of T shots), E errors, worst …` | `S` counts unaccepted shots with any differing pixel; `worst` leaves accepted shots out. With `--threshold`: `, K below 97.00%`. |
 
 **Row tokens**, in order
@@ -174,8 +175,8 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
 - Accepted entries go to `renderdiff.accepted.json` next to the config (or cwd), one per band
   or region, scoped by the run's routes and widths. A match ignores `y` and needs the same
   kind, side, box, pixel hash (4 bits a channel) and named elements, so anything else drawn
-  there still surfaces. Never accepted: a shot with unstable pixels, a width delta, or a height
-  delta without bands; `--accept` exits 1 on those. A new change can make an accepted one
+  there still surfaces. Never accepted: a shot with unstable pixels, `varies`, a width delta,
+  or a height delta without bands; `--accept` exits 1 on those. A new change can make an accepted one
   re-read as different (repeated rows aligning differently): look, then accept again.
 - **Accept where you check.** The pixel hash isn't portable: entries accepted on macOS mostly
   come back stale on a Linux CI runner. For CI, accept in CI.
@@ -293,7 +294,8 @@ For scripts and drilling into one route; the loop doesn't need it. One result pe
 
 - **Each result:** `url`, `left`, `right`, `selector` (`{ left, right }` or null), `hook`,
   `width`, `status` (`compared` or `error` with `error`); `score`, `alignedScore`,
-  `diffPixels`, `totalPixels`, `unstablePixels`, `heightDelta`, `widthDelta`; `regions`
+  `diffPixels`, `totalPixels`, `unstablePixels`, `varies` and `variesPixels` (absent unless a
+  recheck found some; regions with `elements`), `heightDelta`, `widthDelta`; `regions`
   (`x,y,w,h,pixels`, left-page px, `line` `{ y, h, side }`, `accepted` reason); `bands` (`side`,
   `y`, `h`, or null when unaligned); each with `elements` (`selector`, `side`, each side's box,
   `changed` `{ prop: [left, right] }`, `text`, `rightSelector`, `reparented`; absent when not

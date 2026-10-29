@@ -40,6 +40,10 @@ export interface ComparedResult extends BaseResult {
   widthDelta: number;
   /** Pixels that changed between shots of the same load, painted out on both sides. */
   unstablePixels: number;
+  /** Regions where a second, fresh load of the right side differed from the first. Absent when none did or it wasn't rechecked. */
+  varies?: Region[];
+  /** Pixels painted out for them on both sides, like unstable ones, and left out of the score. */
+  variesPixels?: number;
   /** Connected diff patches, largest first. */
   regions: Region[];
   /** Rows only one side has; null when the rows were too different to align. */
@@ -356,6 +360,7 @@ const head = (r: ComparedResult) => `
     ${r.heightDelta ? `<span class="delta">height ${signed(r.heightDelta)}px</span>` : ""}
     ${r.widthDelta ? `<span class="delta">width ${signed(r.widthDelta)}px</span>` : ""}
     ${r.unstablePixels ? `<span class="unstable">${r.unstablePixels.toLocaleString("en-US")} px unstable</span>` : ""}
+    ${r.variesPixels ? `<span class="unstable">${r.variesPixels.toLocaleString("en-US")} px vary per load</span>` : ""}
     ${r.alignedScore !== null ? `<span class="aligned">aligned ${pct(r.alignedScore)}</span>` : ""}
     ${r.computed ? `<span class="w">${r.computed.dom ? `dom differs (${r.computed.dom})` : "dom identical"}</span>` : ""}
     <span class="px">${r.diffPixels.toLocaleString()} / ${r.totalPixels.toLocaleString()} px differ</span>
@@ -580,6 +585,7 @@ export async function writeEvidence(
   const notes = [
     ...count(errors.length, "error(s)"),
     ...count(open.filter((r) => r.unstablePixels).length, "shot(s) with unstable pixels"),
+    ...count(open.filter((r) => r.varies).length, "shot(s) vary per load (painted out)"),
     ...count(open.filter((r) => fmtFailed(r.failed)).length, "shot(s) with failed assets"),
     ...count(
       open.filter((r) => r.diffPixels > 0 && !fails(r, meta.threshold)).length,
