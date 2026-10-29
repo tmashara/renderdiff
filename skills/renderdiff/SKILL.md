@@ -43,8 +43,9 @@ Pixels decide the score and the exit code in every mode.
 3. **Change, run all routes at default widths, read each row in this order**: `ERROR` →
    `failed` (a missing stylesheet or font explains the whole row: fix, rerun) → `text` →
    `h`/`w`, `band`, `aligned`, `line` → `dom` (`sel prop l→r` is a computed value: find the
-   *rule*) → `computed:` → `Read` the `crops` for what `dom` doesn't explain (multi-width row:
-   widest and narrowest). Every token: § Output.
+   *rule*) → `findings:` (one cause on many routes: fix it once) → `computed:` → `Read` the
+   `crops` for what `dom` doesn't explain (multi-width row: widest and narrowest). Every
+   token: § Output.
 4. **Decide every band, region, line and text line:**
 
    | It is | Do |

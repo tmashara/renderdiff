@@ -339,6 +339,9 @@ test("results.json carries the run meta and a summary that matches the report", 
     Number((summary.worst!.score * 100).toFixed(2)) / 100,
     Math.min(...report.cards.map((c) => c.score)),
   );
+  // Each control is a different change, so none groups with another.
+  assert.deepEqual(summary.findings, [], context(run));
+  assert.doesNotMatch(run.stdout, /^findings:/m);
 });
 
 test("piped stdout is one compact summary: no clean routes, widths collapsed, a verdict", () => {
@@ -524,6 +527,39 @@ test("a threshold the run clears does not fail it", async () => {
     }),
   );
   assert.equal(r.code, 0, context(r));
+});
+
+test("a finding repeated on two routes is listed once, with every route and width", async () => {
+  const r = await runCli(
+    renderdiffArgs({
+      left: site.left,
+      right: site.right,
+      // The fixture server routes on the path, so both are /nav.
+      routes: ["/nav", "/nav?again"],
+      widths: WIDTHS,
+    }),
+  );
+  assert.equal(r.code, 1, context(r));
+  const at = [
+    { url: "/nav", widths: WIDTHS },
+    { url: "/nav?again", widths: WIDTHS },
+  ];
+  assert.deepEqual(
+    results(r.outDir).summary.findings,
+    [
+      { finding: '-"Pricing"', at },
+      { finding: '-a[href="#pricing"] "Pricing"', selector: 'a[href="#pricing"]', at },
+    ],
+    context(r),
+  );
+  assert.match(r.stdout, /^findings: 2 repeated on 2\+ routes$/m);
+  assert.ok(
+    r.stdout.includes(
+      '\n  -a[href="#pricing"] "Pricing"  ×2 routes  /nav@1440,375 /nav?again@1440,375\n',
+    ),
+    context(r),
+  );
+  assert.match(r.report()!, /Findings: 2 repeated/);
 });
 
 test("--computed names the changed rule's property, once across widths, and the dom verdict", async () => {
