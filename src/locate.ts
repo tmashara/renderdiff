@@ -557,9 +557,9 @@ export async function snapshotStates(
 ): Promise<{ snap: Snapshot; unchecked: number }> {
   const t0 = Date.now();
   const run = await walker(page, masks, budget, root);
-  const { snap, states, unchecked } = await run({ collect: MAX_STATES });
   const client = await page.context().newCDPSession(page);
   try {
+    const { snap, states, unchecked } = await run({ collect: MAX_STATES });
     await Promise.all([client.send("DOM.enable"), client.send("CSS.enable")]);
     await client.send("DOM.getDocument", { depth: 0 });
     const { result } = await client.send("Runtime.evaluate", {
@@ -585,13 +585,13 @@ export async function snapshotStates(
       );
       Object.assign(snap!, (await run({ spent: Date.now() - t0, state, states })).snap);
     }
+    return { snap: snap!, unchecked: unchecked! };
   } finally {
     await client
       .send("Runtime.evaluate", { expression: "delete globalThis.__renderdiffStates" })
       .catch(() => {});
     await client.detach().catch(() => {});
   }
-  return { snap: snap!, unchecked: unchecked! };
 }
 
 /**

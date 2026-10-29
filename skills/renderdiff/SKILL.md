@@ -71,8 +71,8 @@ unaccepted difference. § Exit codes.
 2. **What you saw**: per route and width, element and property ("/pricing @1440: `.cta`
    margin-left 24px→16px").
 3. **Not verified**: errors, unstable or failed-asset rows, skipped widths, masks, accepts,
-   hooks, unshot states (menus opened by hover or click; `:active`), unopened regions, unlisted pages, and the
-   reference (base build or production).
+   hooks, unshot states (hover on non-interactive elements, open menus, `:active`), unopened
+   regions, unlisted pages, and the reference (base build or production).
 4. **Call**: parity, regression, or expected change, and why.
 
 A score without looking is not a verdict: 99.6% can be a missing nav link.

@@ -185,7 +185,9 @@ test("past 500 links the rest are counted, and the page is left resting", async 
   const before = await snapshot(p, [], BUDGET, null);
   const { snap, unchecked } = await snapshotStates(p, [], BUDGET, null);
   assert.equal(unchecked, 1);
-  assert.ok(snap[`body > a[href="#x"]:hover`]);
+  const color = PROPS.indexOf("color");
+  assert.equal(snap[`body > a[href="#x"]:hover`]?.styles[color], "rgb(255, 0, 0)");
+  assert.notEqual(snap[`body > a[href="#x"]`]?.styles[color], "rgb(255, 0, 0)");
   assert.equal(await p.evaluate(() => "__renderdiffStates" in globalThis), false);
   assert.deepEqual(await snapshot(p, [], BUDGET, null), before);
   await p.close();
