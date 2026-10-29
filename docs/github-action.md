@@ -32,6 +32,7 @@ exits non-zero.
 | `wait-timeout` | Whole seconds to wait for `left` to answer (any status under 500). Default 300. Past it, `exit-code` is 2. |
 | `out` | Output directory, over the config's `outDir`. Default `renderdiff-out`. |
 | `artifact-name` | Default `renderdiff`. |
+| `comment` | `"true"` posts the result as one PR comment and edits it on every later run. One comment per `artifact-name`, so two runs keep their own. |
 
 To run the action twice in one job, give each run its own `out` and `artifact-name`; in a
 matrix, put the matrix value in `artifact-name`. The action sets up Node 24, which later
@@ -89,6 +90,23 @@ jobs:
 ```
 
 The action waits for `left` to answer, so the server can still be starting.
+
+### Comment on the pull request
+
+With `comment: "true"` the job needs write access to pull requests:
+
+```yaml
+permissions:
+  contents: read
+  pull-requests: write
+```
+
+It works on `pull_request`, and on `deployment_status` by finding the open PR for the
+deployed commit. A fork's PR and Dependabot's get a read-only token, so the step warns and
+the result stays in the job summary. Don't switch to `pull_request_target` to get write
+access: it runs the PR's code with the base repo's token and secrets. The step needs `gh`
+on the runner (preinstalled on GitHub-hosted ones). The comment is cut at 60 000 bytes,
+with a link to the full job summary.
 
 ### Dependency upgrades from Renovate or Dependabot
 

@@ -42,6 +42,9 @@ inputs:
   artifact-name:
     description: Name of the uploaded artifact with the report, results.json and crops.
     default: renderdiff
+  comment:
+    description: "true posts the result as one PR comment and updates it on later runs. Needs pull-requests: write."
+    default: "false"
 
 outputs:
   exit-code:
@@ -151,19 +154,65 @@ runs:
           echo "### renderdiff: $verdict"
           echo
           echo "\`$LEFT\` (your change) vs \`$RIGHT\` (reference). Report, results.json and crops are in the \`$ARTIFACT\` artifact."
+        } > "$RUNNER_TEMP/renderdiff-$ARTIFACT.md"
+        {
+          cat "$RUNNER_TEMP/renderdiff-$ARTIFACT.md"
           echo
           echo '```text'
           head -c 900000 "$log"
           echo '```'
         } >> "$GITHUB_STEP_SUMMARY"
 
-    - if: always() && steps.run.outcome == 'success'
+    - id: upload
+      if: always() && steps.run.outcome == 'success'
       uses: actions/upload-artifact@v4
       with:
         name: ${{ inputs.artifact-name }}
         path: ${{ inputs.out }}
         if-no-files-found: ignore
         retention-days: 14
+
+    - if: always() && inputs.comment == 'true' && steps.run.outcome == 'success'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PR: ${{ github.event.pull_request.number }}
+        ARTIFACT: ${{ inputs.artifact-name }}
+        ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        MARKER: <!-- renderdiff:${{ inputs.artifact-name }} -->
+      run: |
+        log="$RUNNER_TEMP/renderdiff-$ARTIFACT.txt"
+        body="$RUNNER_TEMP/renderdiff-comment-$ARTIFACT.md"
+        run="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+        {
+          echo "$MARKER"
+          cat "$RUNNER_TEMP/renderdiff-$ARTIFACT.md"
+          echo
+          echo "[This run]($run)${ARTIFACT_URL:+ · [artifact]($ARTIFACT_URL)}"
+          echo
+          echo '```text'
+          # Cut lines are dropped whole so a split UTF-8 char can't glue onto the closing fence.
+          if [ "$(wc -c < "$log")" -gt 60000 ]; then head -c 60000 "$log" | sed '$d'; echo '…'; else cat "$log"; [ -z "$(tail -c1 "$log")" ] || echo; fi
+          echo '```'
+          [ "$(wc -c < "$log")" -le 60000 ] || echo "Output truncated; the full output is in the job summary of [this run]($run)."
+        } > "$body"
+
+        pr=$PR
+        if [ -z "$pr" ] && [ "$GITHUB_EVENT_NAME" = deployment_status ]; then
+          pr=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" --jq 'map(select(.state == "open"))[0].number // empty') || pr=
+        fi
+        if [ -z "$pr" ]; then
+          echo "::notice::renderdiff: no open pull request for this run, comment skipped"
+          exit 0
+        fi
+
+        if ids=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$pr/comments" --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith(env.MARKER))) | .id'); then
+          id=${ids%%$'\n'*}
+          if [ -n "$id" ]; then req=(-X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id"); else req=(-X POST "repos/$GITHUB_REPOSITORY/issues/$pr/comments"); fi
+          if [ -n "${RENDERDIFF_COMMENT_DRY_RUN:-}" ]; then echo "dry run: gh api ${req[*]}"; exit 0; fi
+          gh api "${req[@]}" -F body=@"$body" > /dev/null && exit 0
+        fi
+        echo "::warning::renderdiff: could not comment on PR #$pr (a fork or Dependabot PR gets a read-only token); the result is in the job summary"
 
     - if: steps.run.outputs.exit-code != '0'
       shell: bash
