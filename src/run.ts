@@ -313,8 +313,13 @@ export async function run({
     for (let job = queue.shift(); job; job = queue.shift()) {
       const { route, width } = job;
       const key = name(route);
-      const { before, ...where } = route;
-      const entry = { url: label(route), ...where, hook: before !== null, width };
+      const { before, beforeShot, ...where } = route;
+      const entry = {
+        url: label(route),
+        ...where,
+        hook: before !== null || beforeShot !== null,
+        width,
+      };
       const tag = `${label(route)} @${width}`;
       // Its own line: parse.ts reads the route on the row as one \S+ token.
       const sel = route.selector ? `selector ${selectorText(route.selector)}` : "";
@@ -733,7 +738,7 @@ async function shoot(
     await page.close();
     pages[side] = await page.context().newPage();
     await prepare(pages[side], cfg, now);
-    const E = at === "before hook" ? HookError : errors.TimeoutError;
+    const E = at === "before hook" || at === "beforeShot hook" ? HookError : errors.TimeoutError;
     throw new E(`timeout after ${SHOT_TIMEOUT / 1000}s at ${at} on ${side}`);
   };
   try {

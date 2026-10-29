@@ -24,11 +24,13 @@ export interface Route {
   right: string;
   selector: Sides | null;
   before: Hook | null;
+  beforeShot: Hook | null;
 }
 
 /**
- * Runs on each side after the page loads and before it settles and is shot, e.g. to open a
- * menu. `route` is the route's name (`/a`, or `/a::/b` for a pair), the same on both sides.
+ * Runs on each side, e.g. to open a menu: `before` after the page loads, before it settles;
+ * `beforeShot` after it settles, right before masks and the shot. `route` is the route's name
+ * (`/a`, or `/a::/b` for a pair), the same on both sides.
  */
 export type Hook = (
   page: Page,
@@ -41,7 +43,7 @@ export type Hook = (
  */
 export type RouteSpec =
   | string
-  | { left: string; right?: string; selector?: string | Sides; before?: Hook };
+  | { left: string; right?: string; selector?: string | Sides; before?: Hook; beforeShot?: Hook };
 
 /** `pricing` / `/pricing/` -> `/pricing`; `/` stays `/`. */
 export const normalize = (url: string) => {
@@ -64,9 +66,14 @@ export const name = (r: Pick<Route, "left" | "right" | "selector">) =>
  * Specs -> normalized, deduplicated routes; throws on an empty side or a glob. A string is a
  * pair when it has a `::` followed by `/` (or ending it, so `/a::` is an empty side, not a
  * literal), which keeps `?q=std::vector` and `/wiki/Talk:Foo` single routes. A CLI
- * `selector` replaces every route's own; a route's own `before` replaces the top-level one.
+ * `selector` replaces every route's own; a route's own `before` (or `beforeShot`) replaces the top-level one.
  */
-export function parseRoutes(specs: RouteSpec[], selector?: Sides, before?: Hook): Route[] {
+export function parseRoutes(
+  specs: RouteSpec[],
+  selector?: Sides,
+  before?: Hook,
+  beforeShot?: Hook,
+): Route[] {
   const out = new Map<string, Route>();
   for (const spec of specs) {
     let sides: [string, string];
@@ -90,18 +97,20 @@ export function parseRoutes(specs: RouteSpec[], selector?: Sides, before?: Hook)
       right: normalize(sides[1]),
       selector: selector ?? (typeof own === "string" ? { left: own, right: own } : (own ?? null)),
       before: (typeof spec === "string" ? undefined : spec.before) ?? before ?? null,
+      beforeShot: (typeof spec === "string" ? undefined : spec.beforeShot) ?? beforeShot ?? null,
     };
     const same = out.get(name(route));
-    // JSON drops a function but keeps a null, so `before` is compared on its own below.
+    // JSON drops a function but keeps a null, so hooks are compared on their own below.
     if (
       same &&
-      JSON.stringify({ ...same, before: 0 }) !== JSON.stringify({ ...route, before: 0 })
+      JSON.stringify({ ...same, before: 0, beforeShot: 0 }) !==
+        JSON.stringify({ ...route, before: 0, beforeShot: 0 })
     ) {
       throw new Error(`two routes both read as ${name(route)}; change one of their selectors`);
     }
-    if (same && same.before !== route.before) {
+    if (same && (same.before !== route.before || same.beforeShot !== route.beforeShot)) {
       throw new Error(
-        `two routes both read as ${name(route)}; they have different before hooks — merge them into one route`,
+        `two routes both read as ${name(route)}; they have different hooks — merge them into one route`,
       );
     }
     out.set(name(route), route);
@@ -237,10 +246,12 @@ export interface RenderdiffConfig {
   left?: string;
   /** Right origin, e.g. `https://example.com`. A trailing slash is stripped. */
   right?: string;
-  /** Routes to diff when none are passed on the command line. A route object may take a `selector` and a `before`. */
+  /** Routes to diff when none are passed on the command line. A route object may take a `selector`, `before` and `beforeShot`. */
   routes?: RouteSpec[];
   /** A {@link Hook} for every route without its own `before`, CLI routes included. */
   before?: Hook;
+  /** A {@link Hook} for every route without its own `beforeShot`, CLI routes included. */
+  beforeShot?: Hook;
   /**
    * Playwright storage state files (cookies, localStorage) to start each side with, e.g. to be
    * signed in. One path for both sides, or per side. Relative to the config file.
@@ -394,6 +405,7 @@ function validate(c: Record<string, unknown>, file: string) {
   }
   const hook = "a function (page, { side, route, width }) => Promise<void>";
   if (c.before !== undefined && typeof c.before !== "function") bad("before", hook);
+  if (c.beforeShot !== undefined && typeof c.beforeShot !== "function") bad("beforeShot", hook);
   const s = c.storageState as Record<string, unknown> | undefined;
   if (
     s !== undefined &&
@@ -414,18 +426,23 @@ function validate(c: Record<string, unknown>, file: string) {
     (c.routes as unknown[]).forEach((r, i) => {
       if (typeof r === "string") return;
       if (typeof r !== "object" || r === null || Array.isArray(r)) {
-        bad(`routes[${i}]`, "a string or an object { left, right?, selector?, before? }");
+        bad(
+          `routes[${i}]`,
+          "a string or an object { left, right?, selector?, before?, beforeShot? }",
+        );
       }
       const o = r as Record<string, unknown>;
       for (const key of Object.keys(o)) {
-        if (!["left", "right", "selector", "before"].includes(key)) {
+        if (!["left", "right", "selector", "before", "beforeShot"].includes(key)) {
           throw new Error(
-            `${file}: \`routes[${i}].${key}\` is not a route key (left, right, selector, before)`,
+            `${file}: \`routes[${i}].${key}\` is not a route key (left, right, selector, before, beforeShot)`,
           );
         }
       }
       if (o.before !== undefined && typeof o.before !== "function")
         bad(`routes[${i}].before`, hook);
+      if (o.beforeShot !== undefined && typeof o.beforeShot !== "function")
+        bad(`routes[${i}].beforeShot`, hook);
       const sel = o.selector as Record<string, unknown> | undefined;
       if (
         sel !== undefined &&

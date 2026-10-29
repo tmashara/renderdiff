@@ -46,6 +46,7 @@ export const GUARDRAILS = [
   "stripe",
   "frameset",
   "menu",
+  "scroll-spy",
   "signed-in",
   "fixed",
   "inserted",

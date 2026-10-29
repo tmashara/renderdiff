@@ -99,7 +99,7 @@ async function networkIdle(page: Page, quiet: number, timeout: number): Promise<
   while (Date.now() < end && (net.open.size || Date.now() - net.last < quiet)) await sleep(25);
 }
 
-/** A `before` hook threw. Never retried: the hook may have half-run against the page. */
+/** A `before` or `beforeShot` hook threw. Never retried: the hook may have half-run against the page. */
 export class HookError extends Error {}
 
 /**
@@ -201,16 +201,19 @@ export async function capture(
     const type = res.headers()["content-type"]!.split(";")[0]!.trim();
     throw new Error(`not an HTML page: server sent ${type} at ${url}`);
   }
-  if (route.before) {
-    step.set(page, "before hook");
+  const hook = async (name: "before" | "beforeShot") => {
+    const fn = route[name];
+    if (!fn) return;
+    step.set(page, `${name} hook`);
     try {
-      await route.before(page, { side, route: label(route), width });
+      await fn(page, { side, route: label(route), width });
     } catch (e) {
       throw new HookError(
-        `before hook failed on ${side}: ${e instanceof Error ? e.message : String(e)}`,
+        `${name} hook failed on ${side}: ${e instanceof Error ? e.message : String(e)}`,
       );
     }
-  }
+  };
+  await hook("before");
   step.set(page, "settle");
   await page.addStyleTag({ content: cfg.neutralizeCss });
   // Before the scroll too, so autoplay never starts and page state driven by playback stays put.
@@ -253,6 +256,8 @@ export async function capture(
   if (cfg.freezeVideo) await page.evaluate(freezeVideo);
   const failed = [...new Set([...network.get(page)!.failed, ...fonts])];
   await page.addStyleTag({ content: cfg.neutralizeCss }); // anything injected late
+  await hook("beforeShot");
+  step.set(page, "settle");
 
   const selector = route.selector?.[side];
   const where = `on ${side} (${route[side]})`;

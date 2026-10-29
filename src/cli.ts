@@ -193,7 +193,8 @@ const HELP = `
   With --storage-state, each side starts with that Playwright storage state (cookies,
   localStorage), e.g. signed in. Make one with:
     npx playwright codegen --save-storage=auth.json <url>
-  A before hook in the config runs on each page before it is shot, e.g. to open a menu.
+  A before hook in the config runs on each page before it settles, e.g. to open a menu;
+  a beforeShot hook runs after, right before the shot.
 
   --accept "<reason>" records this run's differences in renderdiff.accepted.json (next to
   the config, or in cwd); later runs report them as accepted, and anything new still shows.
@@ -347,6 +348,7 @@ async function sitemapRoutes(spec: string | true, routes: Route[]): Promise<Rout
     pages.filter((p) => !covered.has(p)),
     args.selector,
     fileConfig.before,
+    fileConfig.beforeShot,
   );
 }
 
@@ -423,7 +425,7 @@ if (!rawRoutes.length && !args.sitemap) {
 
 let routes: Route[];
 try {
-  routes = parseRoutes(rawRoutes, args.selector, fileConfig.before);
+  routes = parseRoutes(rawRoutes, args.selector, fileConfig.before, fileConfig.beforeShot);
 } catch (e) {
   die(e instanceof Error ? e.message : String(e));
 }

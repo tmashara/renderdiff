@@ -33,7 +33,7 @@ interface BaseResult {
   right: string;
   /** The element compared on each side; null for the whole page. */
   selector: Sides | null;
-  /** A `before` hook ran on both sides before the shot, so the page was measured in its state. */
+  /** A `before` or `beforeShot` hook ran on both sides before the shot, so the page was measured in its state. */
   hook: boolean;
   width: number;
 }
@@ -424,7 +424,7 @@ const head = (r: ComparedResult) => `
     <span class="score ${band(r.score)}">${pct(r.score)}</span>
     <code>${esc(name(r))}</code>
     <span class="w">@${r.width}px</span>
-    ${r.hook ? `<span class="hook">before hook</span>` : ""}
+    ${r.hook ? `<span class="hook">hook</span>` : ""}
     ${r.accepted ? `<span class="accepted">accepted: ${esc(reasons(r))}</span>` : ""}
     ${r.heightDelta ? `<span class="delta">height ${signed(r.heightDelta)}px</span>` : ""}
     ${r.widthDelta ? `<span class="delta">width ${signed(r.widthDelta)}px</span>` : ""}
