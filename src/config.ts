@@ -38,8 +38,8 @@ export type Hook = (
 ) => Promise<void>;
 
 /**
- * A route as written: `/a`, the pair `/a::/b`, or `{ left, right?, selector? }` (right
- * defaults to left).
+ * A route as written: `/a`, the pair `/a::/b`, either with ` @sel` after a path, or
+ * `{ left, right?, selector? }` (right defaults to left).
  */
 export type RouteSpec =
   | string
@@ -65,8 +65,10 @@ export const name = (r: Pick<Route, "left" | "right" | "selector">) =>
 /**
  * Specs -> normalized, deduplicated routes; throws on an empty side or a glob. A string is a
  * pair when it has a `::` followed by `/` (or ending it, so `/a::` is an empty side, not a
- * literal), which keeps `?q=std::vector` and `/wiki/Talk:Foo` single routes. A CLI
- * `selector` replaces every route's own; a route's own `before` (or `beforeShot`) replaces the top-level one.
+ * literal), which keeps `?q=std::vector` and `/wiki/Talk:Foo` single routes. Each side may end
+ * in whitespace + `@sel` (the whitespace keeps `/@user` a path), which beats a CLI `selector`,
+ * which beats a config object's own. A route's own `before` (or `beforeShot`) replaces the
+ * top-level one.
  */
 export function parseRoutes(
   specs: RouteSpec[],
@@ -77,9 +79,21 @@ export function parseRoutes(
   const out = new Map<string, Route>();
   for (const spec of specs) {
     let sides: [string, string];
+    let atSel: Sides | undefined;
     if (typeof spec === "string") {
       const i = spec.search(/::(?=\/|$)/);
-      sides = i === -1 ? [spec, spec] : [spec.slice(0, i), spec.slice(i + 2)];
+      const at = (s: string): [string, string?] => {
+        const m = /\s+@/.exec(s);
+        return m ? [s.slice(0, m.index), s.slice(m.index + m[0].length).trim()] : [s];
+      };
+      const [l, ls] = at(i === -1 ? spec : spec.slice(0, i));
+      const [r, rs] = i === -1 ? [l, ls] : at(spec.slice(i + 2));
+      sides = [l, r];
+      if ((ls === undefined) !== (rs === undefined)) {
+        throw new Error(`route ${spec}: give a selector on both sides or neither`);
+      }
+      if (ls === "" || rs === "") throw new Error(`route ${spec} has an empty selector`);
+      if (ls && rs) atSel = { left: ls, right: rs };
     } else {
       sides = [spec.left, spec.right ?? spec.left];
     }
@@ -95,7 +109,8 @@ export function parseRoutes(
     const route = {
       left: normalize(sides[0]),
       right: normalize(sides[1]),
-      selector: selector ?? (typeof own === "string" ? { left: own, right: own } : (own ?? null)),
+      selector:
+        atSel ?? selector ?? (typeof own === "string" ? { left: own, right: own } : (own ?? null)),
       before: (typeof spec === "string" ? undefined : spec.before) ?? before ?? null,
       beforeShot: (typeof spec === "string" ? undefined : spec.beforeShot) ?? beforeShot ?? null,
     };

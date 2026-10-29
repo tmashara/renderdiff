@@ -330,6 +330,34 @@ describe("selectors", () => {
 
   test("an empty selector exits 2", () =>
     rejects(["--dry-run", L, R, "/a", "--selector="], "--selector needs a value"));
+
+  test("a route's own @selector beats --selector", async () => {
+    const r = await dry(["/a @.x", "/b", "--selector", ".card"]);
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(r.stdout, /^  \/a +\S+  \|  \S+  \[\.x\]$/m);
+    assert.match(r.stdout, /^  \/b +\S+  \|  \S+  \[\.card\]$/m);
+  });
+
+  test("a pair takes an @selector per side", async () => {
+    const r = await dry(["/a @.n::/b @.o"]);
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(r.stdout, /^  \/a::\/b +\S+  \|  \S+  \[\.n \| \.o\]$/m);
+  });
+
+  test("@ without whitespace before it stays part of the path", async () => {
+    const r = await dry(["/@me", "/a?e=x@y.z", '/c @[href="mailto:x@y.z"]']);
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(r.stdout, /^Routes: 3$/m);
+    assert.match(r.stdout, /^  \/@me +\S+  \|  \S+$/m);
+    assert.match(r.stdout, /^  \/a\?e=x@y\.z +\S+  \|  \S+$/m);
+    assert.ok(r.stdout.includes('[[href="mailto:x@y.z"]]'), r.stdout);
+  });
+
+  test("an @selector on one side of a pair exits 2", () =>
+    rejects(["--dry-run", L, R, "/a::/b @.o"], "give a selector on both sides or neither"));
+
+  test("an empty @selector exits 2", () =>
+    rejects(["--dry-run", L, R, "/a @"], "has an empty selector"));
 });
 
 describe("storage state", () => {

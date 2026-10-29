@@ -37,7 +37,7 @@ interface Args extends CliOverrides {
   version: boolean;
   config?: string;
   routes: string[];
-  /** From --selector / --left-selector / --right-selector; replaces every route's own. */
+  /** From --selector / --left-selector / --right-selector; replaces a config route object's own. */
   selector?: Sides;
   /** The reason to accept this run's differences with. */
   accept?: string;
@@ -187,10 +187,12 @@ const HELP = `
   An argument starting with http:// or https:// is an origin: the first is left (your
   change), the second right (the reference); or pass --left / --right. A route is a
   literal path, loaded on both sides; /a::/b loads /a on the left and /b on the right.
+  '/a @sel' compares one element on that route ('/a @sel::/b @sel2' per side).
   No globs, no discovery.
 
   With --selector, each side compares the one element it matches instead of the page;
-  it must match exactly one. It applies to every route, over the config's own selectors.
+  it must match exactly one. It applies to every route without its own @sel, over the
+  config's own selectors.
 
   With --storage-state, each side starts with that Playwright storage state (cookies,
   localStorage), e.g. signed in. Make one with:

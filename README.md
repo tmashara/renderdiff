@@ -95,7 +95,7 @@ renderdiff <left-origin> <right-origin> <route…> [options]
 | Argument or flag | |
 | --- | --- |
 | `<origin>` | An argument starting with `http://` or `https://`. The first is left (your change), the second right (the reference); a third is an error. |
-| `<route>` | A literal path, e.g. `/about`, or a pair `/pricing::/plans` (see below). |
+| `<route>` | A literal path, e.g. `/about`, or a pair `/pricing::/plans` (see below), or `'/pricing @.cta'` for one element on that route. |
 | `--left <url>` | Left origin, instead of the first positional one. Giving both is an error. |
 | `--right <url>` | Right origin, instead of the second positional one. |
 | `--width <n>` | Viewport width; repeatable. Replaces the defaults. |
@@ -103,7 +103,7 @@ renderdiff <left-origin> <right-origin> <route…> [options]
 | `--out <dir>` | Output directory, wiped at the start of a run. Default `./renderdiff-out`. A directory holding files renderdiff didn't write is refused. |
 | `--concurrency <n>` | Parallel workers. Default half the CPU cores, between 2 and 8. Lower it when one side is someone's live site. |
 | `--config <path>` | Config file. Default: `renderdiff.config.{ts,mts,js,mjs}` in cwd. |
-| `--selector <sel>` | Compare the one element this Playwright selector matches, on both sides, instead of the whole page. Applies to every route, over the config's per-route `selector`. |
+| `--selector <sel>` | Compare the one element this Playwright selector matches, on both sides, instead of the whole page. Applies to every route without its own `@selector`, over the config's per-route `selector`. |
 | `--left-selector <sel>`, `--right-selector <sel>` | That side's selector, over `--selector`. One without the other side (or `--selector`) is an error. |
 | `--mask <sel>` | Paint this Playwright selector over on both sides, on every route; repeatable. Added to the config's masks and listed in the report as coverage given up. |
 | `--mask-media` | Mask every `iframe` on every route, as config `maskMedia: true` does. Video isn't masked: it is frozen by default, so the player's box is still compared. |
@@ -143,12 +143,13 @@ range rather than on a boundary, so a layout switch never flaps between runs.
 ```
 renderdiff http://localhost:3000 https://example.com /pricing::/plans
 renderdiff http://localhost:3000 https://example.com /pricing --selector "[data-test=plans]"
+renderdiff http://localhost:3000 https://example.com / '/pricing @section.cta'
 ```
 
 A pair `left::right` loads `/pricing` on the left and `/plans` on the right. `--selector`
 compares one element, which must match exactly once per side (`--left-selector` /
-`--right-selector` when the markup differs). A state behind a click takes a config `before`
-hook. For pages behind a login:
+`--right-selector` when the markup differs); `'/pricing @section.cta'` scopes just that route.
+A state behind a click takes a config `before` hook. For pages behind a login:
 
 ```
 npx playwright codegen --save-storage=auth.json https://example.com/login
