@@ -108,16 +108,16 @@ function maskRects(els: Element[]) {
 
 /**
  * Runs in the page: once each light-DOM lottie-player loads (waited for up to 2s), stop it
- * and seek it to `frame`. One that never loads is left alone.
+ * and seek it to `frame`. One that never loads, or throws, is left alone.
  */
-function freezeLottie(frame: number) {
+async function freezeLottie(frame: number) {
   type Player = Element & {
     getLottie?(): { isLoaded?: boolean } | null | undefined;
     stop(): void;
     seek(f: number): void;
   };
   const tick = (ms: number) => new Promise((r) => setTimeout(r, ms));
-  return Promise.all(
+  await Promise.allSettled(
     Array.from(document.querySelectorAll<Player>("lottie-player")).map(async (p) => {
       for (let i = 0; i < 40 && !p.getLottie?.()?.isLoaded; i++) await tick(50);
       if (!p.getLottie?.()?.isLoaded) return;
