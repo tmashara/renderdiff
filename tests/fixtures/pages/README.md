@@ -18,7 +18,7 @@ Three groups:
   alignment (`taller`, `nav`, and `shifted`, which has no band), the text diff (`nav`) and the
   elements each change names (`margin`, `color`, `nav`), and a lost `::before` line and a
   re-parented pairing (`divider`).
-- **Guard rails** — `blank`, `tall`, `animated`, `lazy`, `lazy-deep`, `lazy-js`, `consent`,
+- **Guard rails** — `blank`, `tall`, `animated`, `lazy`, `lazy-deep`, `lazy-js`, `lazy-grow`, `consent`,
   `drifting`, `tracker`, `clock`, `ticker`, `unsettled`, `sprite`, `short`, `tall-region`, `reorder`, `stripe`, `frameset`, `menu`, `signed-in`, `fixed`, `inserted`, `labelled`, `broken-asset`, `media`, `long`, `video`.
   One per defence in `src/capture.ts` / `src/config.ts`.
 

@@ -218,7 +218,7 @@ describe("motion", () => {
 });
 
 describe("lazy images", () => {
-  for (const route of ["/lazy-deep", "/lazy-js"]) {
+  for (const route of ["/lazy-deep", "/lazy-js", "/lazy-grow"]) {
     test(`${route}: images more than 4,000px below the fold load before the shot`, async () => {
       const run = await capture([route], { widths: [1440, 375] });
       assert.equal(run.code, 0, context(run));

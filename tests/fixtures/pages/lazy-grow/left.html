@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layout parity</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for pages that grow while scrolled. This side appends a section when the
+   bottom comes into view, and its images load only if the capture scrolls on into it. */
+.spacer { height: 1800px; margin: 0 0 32px; background: var(--fill); border: 1px solid var(--line); }
+.spacer.more { height: 2400px; }
+.gallery { display: flex; flex-direction: column; gap: var(--gap); }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Growing page guard rail</h1>
+<p class="lede">A section appended when the bottom scrolls into view, with four images more than four thousand pixels down, loaded by an IntersectionObserver on this side and directly on the other.</p>
+
+<div class="spacer"></div>
+<div id="more"></div>
+<div id="end"></div>
+<script>
+const io = new IntersectionObserver((entries) => {
+  for (const e of entries) {
+    if (!e.isIntersecting) continue;
+    io.unobserve(e.target);
+    if (e.target.id !== "end") {
+      e.target.src = e.target.dataset.src;
+      continue;
+    }
+    document.getElementById("more").innerHTML = `<div class="spacer more"></div>
+<div class="gallery">
+  <img class="shot" data-src="/shared/img/slate.svg" alt="slate">
+  <img class="shot" data-src="/shared/img/azure.svg" alt="azure">
+  <img class="shot" data-src="/shared/img/moss.svg" alt="moss">
+  <img class="shot" data-src="/shared/img/slate.svg" alt="slate">
+</div>`;
+    document.querySelectorAll("img[data-src]").forEach((img) => io.observe(img));
+  }
+});
+io.observe(document.getElementById("end"));
+</script>
+
+<section class="notes">
+<h2>Notes</h2>
+<p>Parity here means the capture followed the page down as it grew and every image it added was fetched and decoded before the shot.</p>
+</section>
+</div>
+</body>
+</html>
