@@ -1028,7 +1028,7 @@ describe("the run summary", () => {
       { count: 1, threshold: 0.99 },
       context(run),
     );
-    assert.match(run.stderr, /1 route\(s\) below 99\.00%/);
+    assert.match(run.stderr, /1 route below 99\.00% \(1 shot\)/);
   });
 });
 
