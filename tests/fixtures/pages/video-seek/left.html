@@ -14,7 +14,7 @@ video { display: block; width: 640px; margin-top: var(--gap); }
 <body>
 <div class="page">
 <h1>Video seek guard rail</h1>
-<p class="lede">One video with a poster and no set height, so its box takes the aspect ratio of whatever it shows. The page rewinds it to the start on both sides, once before its metadata loads and once after.</p>
+<p class="lede">One video with a poster and no set height, so its box takes the aspect ratio of whatever it shows. The page rewinds it to the start, on one side before its metadata loads and on the other after.</p>
 <video id="v" muted poster="/shared/img/azure.svg" src="/shared/video/clip.webm"></video>
 <script>document.getElementById("v").addEventListener("loadedmetadata", (e) => { e.target.currentTime = 0; });</script>
 </div>
