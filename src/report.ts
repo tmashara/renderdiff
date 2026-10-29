@@ -19,6 +19,7 @@ import {
   fmtBand,
   fmtElements,
   fmtFailed,
+  fmtFonts,
   fmtLine,
   fmtRegion,
   pct,
@@ -72,6 +73,8 @@ export interface ComparedResult extends BaseResult {
   accepted: boolean;
   /** Stylesheets and font faces that failed to load per side, e.g. `font Inter 700`. */
   failed: { left: string[]; right: string[] };
+  /** Web font faces only one side loaded; `added` is on left only. Absent when both loaded the same. */
+  fonts?: TextDiff;
   /** With `--cache-right`: when the recording the right side was replayed from was made, ISO. */
   rightReplayedFrom?: string;
   /** With `--computed`: the computed-style diff; null when the snapshot failed, with `computedError` saying why. */
@@ -186,6 +189,11 @@ export function pixelFindings(results: RouteResult[]): PixelFinding[] {
     }
     for (const t of r.text.added) tokens.set(`+"${t}"`, undefined);
     for (const t of r.text.removed) tokens.set(`-"${t}"`, undefined);
+    // Clean shots are walked too, and a font difference that painted nothing isn't a finding.
+    if (r.diffPixels && r.fonts) {
+      for (const t of r.fonts.added) tokens.set(`fonts +"${t}"`, undefined);
+      for (const t of r.fonts.removed) tokens.set(`fonts -"${t}"`, undefined);
+    }
     for (const [finding, selector] of tokens) {
       const f = out.get(finding) ?? { finding, ...(selector ? { selector } : {}), at: [] };
       out.set(finding, f);
@@ -384,6 +392,7 @@ function findings(r: ComparedResult, crop = cropLink): string {
   const items: string[] = [];
   const failed = fmtFailed(r.failed);
   if (failed) items.push(`<p class="failed">failed to load: ${esc(failed)}</p>`);
+  if (r.fonts) items.push(`<p class="failed">fonts ${esc(fmtFonts(r.fonts))}</p>`);
   if (r.regions.length) {
     items.push(
       `<p>${r.regions.length} region(s)</p><ul class="regions">${r.regions

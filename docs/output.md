@@ -26,9 +26,9 @@ renderdiff: 2 of 3 routes differ (6 of 15 shots), 0 errors, worst 97.41% /about@
 A row covers the widths that agree on height and width delta, bands (side and height),
 aligned score and text; the score and region count are then shown as ranges, and `unstable`
 as the largest. Under a row, `failed` lists stylesheets and font faces a side failed to load
-(fix those first), `dom` names up to three elements behind the changes, two properties each
-(`@w` when the row covers several widths: the first one's), and `crops` lists that row's crop
-files. Errors print in full, grouped across the widths that share a message. Clean means not
+(fix those first), `fonts` the web font faces only one side loaded, `dom` names up to three
+elements behind the changes, two properties each (`@w` when the row covers several widths: the
+first one's), and `crops` lists that row's crop files. Errors print in full, grouped across the widths that share a message. Clean means not
 one pixel differs, none went unmeasured as unstable and no stylesheet or font failed; a route
 with unstable pixels or a failed asset gets its own row. A shot whose only difference varied
 between two loads of the right side is clean, but listed under `varies`. `--progress` gets
@@ -51,6 +51,7 @@ the per-shot output when piped, `--no-progress` the summary on a terminal.
 | `  --mask 'div.drift'` | The flag that masks every `varies` element, for the next run. |
 | `  masks: [{ selector: … }]` | The same as config `masks` entries, with `reason: "varies per load"`. |
 | `failed left: font Inter 700` | A stylesheet or font face that side failed to load (blocked URLs aside). Fix that first: a fallback font changes every line of text. |
+| `fonts -"Inter 600" +"Roboto"` | `@font-face` or `FontFace` faces only one side requested (`-`: only the reference, `+`: only your change), as family, weight, style and stretch, `normal` left out. One still loading when read counts as requested. Web fonts only: a system font a side fell back to isn't listed. Usually the same on every route, so see `findings`. |
 | `text -"Pricing"` | A line of visible text only the reference has (`+`: only your change). Up to three, then `(+N more)`. |
 | `dom sel prop a→b` | Element on both sides whose computed `prop` differs, left value first. |
 | `dom +sel` / `-sel` | Element only on the left / only on the right. `+sel::before` / `-sel::after`: a pseudo-element only that side generates. |
@@ -58,7 +59,7 @@ the per-shot output when piped, `--no-progress` the summary on a terminal.
 | `dom sel` | On both sides and unchanged in style or position, so its own pixels changed (an image or canvas). |
 | `(re-parented)` | After a `dom` entry: paired across a structure change, so its properties may not be the cause. |
 | `1 accepted` | That many of the shot's changes are accepted; the rest are new. |
-| `findings: N repeated on 2+ routes` | After the routes: the same `dom` entry, text line or element-less band delta (`band -24px`) on two or more routes, once per line with `×N routes` and where (`/a@1440,375`, then `+N routes`), most widespread first, accepted ones aside. Top 20; `summary.findings` in results.json has them all. One cause behind many rows: fix it once. A selector names an element per page, so the same path may be a different element on another route: check one crop. |
+| `findings: N repeated on 2+ routes` | After the routes: the same `dom` entry, text line, `fonts` face or element-less band delta (`band -24px`) on two or more routes, once per line with `×N routes` and where (`/a@1440,375`, then `+N routes`), most widespread first, accepted ones aside. Top 20; `summary.findings` in results.json has them all. One cause behind many rows: fix it once. A selector names an element per page, so the same path may be a different element on another route: check one crop. |
 | `computed: N findings` | With `--computed`: each `key prop left→right` once, with the routes and widths it was seen at; `dom identical`: the markup matches apart from asset hashes and generated class names, so look at CSS or script. See [below](#computed-styles---computed). |
 | `crops …` | Up to 3 PNGs per comparison, bands first, relative to `results.json`. Left is on top or on the left, and the change is boxed in red. |
 | `ERROR …` | Unmeasured, which is neither a pass nor a fail. Exits 3. |
@@ -95,6 +96,7 @@ because an unmeasured route is not a verified one.
 | Line | `line -1px@y812` | `line -1px@y812` | `regions[i].line: { y: 812, h: 1, side: "right" }` |
 | Unstable | `(unstable 1,204px)` | `unstable 1,204px` | `unstablePixels: 1204` |
 | Failed assets | `failed left: font Inter 700` | `failed left: font Inter 700` | `failed: { left: ["font Inter 700"], right: [] }` |
+| Font faces | `fonts -"Inter 600"` | `fonts -"Inter 600"` | `fonts: { added: [], removed: ["Inter 600"] }` |
 
 Under each score, `--progress` output and the report card say where to look:
 
@@ -345,6 +347,7 @@ pulls a route), scores rounded down to four decimals (so a shot that differs nev
       "text": { "added": [], "removed": ["Pricing"] },   // added: left only; removed: right only
       "accepted": false,         // every band and region matched renderdiff.accepted.json
       "failed": { "left": [], "right": [] },   // stylesheets and font faces that didn't load: "font Inter 700", "stylesheet https://…"
+      "fonts": { "added": [], "removed": ["Inter 600"] },   // web font faces one side loaded; absent when equal
       "masked": ["rotating quote (data-renderdiff-mask)"],   // absent unless a side marked elements data-renderdiff-mask
       "computed": { "dom": 1, "changes": [], "truncated": 0, "unmatched": { "left": [], "right": ["body > nav > a[href=\"/pricing\"]"] } },   // --computed only; null: snapshot failed, "computedError" says why
       "images": { "left": "about.1440.left.png", "right": "about.1440.right.png", "diff": "about.1440.diff.png" },

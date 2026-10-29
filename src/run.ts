@@ -21,7 +21,16 @@ import {
   type ResolvedConfig,
   type Route,
 } from "./config.ts";
-import { fmtBand, fmtElements, fmtFailed, fmtLine, fmtRegion, pct, signed } from "./format.ts";
+import {
+  fmtBand,
+  fmtElements,
+  fmtFailed,
+  fmtFonts,
+  fmtLine,
+  fmtRegion,
+  pct,
+  signed,
+} from "./format.ts";
 import {
   fails,
   fmtPixelFindings,
@@ -488,6 +497,10 @@ export async function run({
 
         if (!rightShot.failed.length) recorded.push(shotId(route, width));
         const marked = [...new Set([...leftShot.marked, ...rightShot.marked])];
+        const fonts = {
+          added: leftShot.fonts.filter((f) => !rightShot.fonts.includes(f)),
+          removed: rightShot.fonts.filter((f) => !leftShot.fonts.includes(f)),
+        };
         results.push({
           ...entry,
           status: "compared",
@@ -499,6 +512,7 @@ export async function run({
           accepted: false,
           failed: { left: leftShot.failed, right: rightShot.failed },
           ...(marked.length ? { masked: marked } : {}),
+          ...(fonts.added.length || fonts.removed.length ? { fonts } : {}),
           ...computed,
           ...(replayedAt ? { rightReplayedFrom: new Date(replayedAt).toISOString() } : {}),
         });
@@ -1016,6 +1030,11 @@ export function compact(
         right: [...new Set(g.flatMap((r) => r.failed?.right ?? []))],
       });
       if (failed) out.push(`    failed ${failed}`);
+      const fonts = fmtFonts({
+        added: [...new Set(g.flatMap((r) => r.fonts?.added ?? []))],
+        removed: [...new Set(g.flatMap((r) => r.fonts?.removed ?? []))],
+      });
+      if (fonts) out.push(`    fonts ${fonts}`);
       const dom = elementsOf(g[0]!);
       if (dom.length)
         out.push(`    dom ${g.length > 1 ? `@${g[0]!.width} ` : ""}${fmtElements(dom)}`);

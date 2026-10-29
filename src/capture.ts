@@ -22,6 +22,8 @@ export interface Shot {
   origin: { x: number; y: number };
   /** Stylesheets and font faces that failed to load, e.g. `font Inter 700 italic`, `stylesheet https://…`. */
   failed: string[];
+  /** Web font faces requested (loaded or still loading), e.g. `Inter 600 italic`. Sorted. */
+  fonts: string[];
   /** Reasons of the page's `data-renderdiff-mask` elements, e.g. `rotating quote (data-renderdiff-mask)`. */
   marked: string[];
 }
@@ -316,16 +318,25 @@ export async function capture(
   const fonts = await page.evaluate(async () => {
     await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 5_000))]);
     const failed: string[] = [];
+    const loaded: string[] = [];
     document.fonts.forEach((f) => {
-      if (f.status !== "error") return;
-      const variant = [f.weight, f.style].filter((v) => v !== "normal" && v !== "400");
-      failed.push(["font", f.family, ...variant].join(" "));
+      const weight =
+        ({ normal: "400", bold: "700" } as Record<string, string>)[f.weight] ?? f.weight;
+      const variant = [weight, f.style, f.stretch].filter(
+        (v) => !["normal", "400", "100%"].includes(v),
+      );
+      // `new FontFace("My Face")` reports `"My Face"`; the same @font-face reports `My Face`.
+      const name = [f.family.replace(/^"(.*)"$/, "$1"), ...variant].join(" ");
+      if (f.status === "error") failed.push(`font ${name}`);
+      // A face still loading at the timeout was requested; reading it as missing would be flaky.
+      else if (f.status !== "unloaded") loaded.push(name);
     });
-    return failed;
+    return { failed, loaded };
   });
   await networkIdle(page, 250, 3_000);
   if (cfg.freezeVideo) await page.evaluate(freezeVideo);
-  const failed = [...new Set([...network.get(page)!.failed, ...fonts])];
+  const failed = [...new Set([...network.get(page)!.failed, ...fonts.failed])];
+  const loadedFonts = [...new Set(fonts.loaded)].sort();
   await page.addStyleTag({ content: cfg.neutralizeCss }); // anything injected late
   if (cfg.lottieFrame !== undefined) await page.evaluate(freezeLottie, cfg.lottieFrame);
   await hook("beforeShot");
@@ -452,7 +463,8 @@ export async function capture(
   for (let n = 2; ; n++) {
     await page.waitForTimeout(50);
     const png = await shoot();
-    if (png.equals(prev)) return { png, unstable: null, blank, text, origin, failed, marked };
+    if (png.equals(prev))
+      return { png, unstable: null, blank, text, origin, failed, fonts: loadedFonts, marked };
     if (n === tries)
       return {
         png,
@@ -462,6 +474,7 @@ export async function capture(
         text,
         origin,
         failed,
+        fonts: loadedFonts,
         marked,
       };
     prev = png;

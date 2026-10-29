@@ -52,6 +52,7 @@ export const GUARDRAILS = [
   "inserted",
   "labelled",
   "broken-asset",
+  "fonts",
   "media",
   "long",
   "video",

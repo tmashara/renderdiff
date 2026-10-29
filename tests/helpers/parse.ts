@@ -61,6 +61,7 @@ export interface Summary {
         widths: number[];
         text: string;
         failed: string | null;
+        fonts: string | null;
         dom: string | null;
         crops: string[];
       }[];
@@ -117,11 +118,14 @@ export function parseSummary(stdout: string): Summary {
         widths: m[1]!.split(",").map(Number),
         text: m[2]!,
         failed: null,
+        fonts: null,
         dom: null,
         crops: [],
       });
     } else if (at?.rows.length && (m = /^    failed (.*)$/.exec(line))) {
       at.rows.at(-1)!.failed = m[1]!;
+    } else if (at?.rows.length && (m = /^    fonts (.*)$/.exec(line))) {
+      at.rows.at(-1)!.fonts = m[1]!;
     } else if (at?.rows.length && (m = /^    dom (.*)$/.exec(line))) {
       at.rows.at(-1)!.dom = m[1]!;
     } else if (at?.rows.length && (m = /^    crops (.*)$/.exec(line))) {

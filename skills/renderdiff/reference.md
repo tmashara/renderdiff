@@ -44,6 +44,7 @@ accepted: /blog
 /about  clean @1152,896,704
   @1440  97.41%  h-24  band -24@y196  aligned 100.00%  text -"Pricing"
     failed right: font Inter 700
+    fonts -"Inter 600"
     dom -nav > a[href="/pricing"] "Pricing"
     crops about.1440.c1.png
   @375  ERROR HTTP 404 at http://localhost:3001/about
@@ -66,6 +67,7 @@ on stderr: `✗ 2 routes differ (10 shots).` (`below 97.00%` with `--threshold`)
 | `/a  clean @… accepted @…` | A route with something to read; the widths that are clean or accepted. |
 | `  @1440,896  <row>` | Widths agreeing on height and width delta, bands (side and height), aligned score and text; score and region count become ranges, `unstable` the largest. |
 | `    failed left: …` | Stylesheets (`stylesheet <url>`) and font faces (`font Inter 700`) that side didn't load (404, CORS, a CDN refusing localhost). Fix first: a fallback font reflows every line. |
+| `    fonts -"Inter 600" +"X"` | Web font faces (`@font-face`, `FontFace`) only one side requested: `-` the reference, `+` your change. System fallbacks aren't listed. Not a reason a shot isn't clean; pixels decide. |
 | `    dom …` | Up to three elements behind the changes, two properties each. `dom @1440 …`: from the first width of the row. |
 | `    crops …` | At most three crop PNGs per shot (bands first, tallest first, then largest regions), relative to `results.json`. |
 | `  @w  ERROR …` | Unmeasured. Grouped across widths sharing a message. See Errors. |
@@ -343,6 +345,7 @@ For scripts and drilling into one route; the loop doesn't need it. One result pe
   `y`, `h`, or null when unaligned); each with `elements` (`selector`, `side`, each side's box,
   `changed` `{ prop: [left, right] }`, `text`, `rightSelector`, `reparented`; absent when not
   looked at, `[]` when nothing was named); `text` `{ added, removed }`; `failed` `{ left, right }`;
+  `fonts` `{ added, removed }` (web font faces one side loaded, absent when equal);
   `masked` (reasons of `data-renderdiff-mask` elements, absent when none); `images`; `crops`
   (`kind`, each side's box with `h` 0 at an insertion point, `layout`, `scale`, `clipped`);
   `accepted`; `rightReplayedFrom`; with `--computed`, `computed` (`dom`, 0 = identical;

@@ -168,6 +168,8 @@ describe("authoring rules", () => {
     for (const dir of ALL) {
       // Its font face 404s on purpose, so it never loads.
       if (dir === "broken-asset") continue;
+      // Its face is blank.ttf, which draws nothing.
+      if (dir === "fonts") continue;
       for (const side of ["left", "right"] as const) {
         assert.doesNotMatch(
           await sideHtml(dir, side),
