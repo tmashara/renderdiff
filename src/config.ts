@@ -209,9 +209,9 @@ export const MASK_COLOR = "#FF00FF";
 
 /**
  * Content that renders on both sides but whose value drifts — live counters, clocks,
- * "N minutes ago". Painted over on both sides, so the noise cancels.
- * Painted over the element and anything it draws outside its box, cut to its `overflow`
- * ancestors, read again at every shot.
+ * "N minutes ago". Painted over on both sides, so the noise cancels: the element and
+ * anything it draws outside its box, cut to its `overflow` ancestors, read again at every
+ * shot.
  *
  * Masks rather than CSS: these occupy a box, and hiding one reflows the page.
  * `visibility:hidden` is no better — "9.9k" and "10.0k" size their box differently and

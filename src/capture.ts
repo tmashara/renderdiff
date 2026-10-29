@@ -73,10 +73,11 @@ function maskRects(els: Element[]) {
       a = a.parentElement
     ) {
       const s = getComputedStyle(a);
+      if (s.display === "contents") continue;
       // An absolute box escapes the overflow of ancestors below its containing block.
       if (pos === "absolute" && s.position === "static" && s.transform === "none") continue;
       pos = s.position;
-      if (s.display === "inline" || s.display === "contents") continue;
+      if (s.display === "inline") continue;
       const r = a.getBoundingClientRect();
       if (s.overflowX !== "visible")
         [left, right] = [Math.max(left, r.left), Math.min(right, r.right)];
