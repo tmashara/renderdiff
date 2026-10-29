@@ -261,6 +261,19 @@ describe("consent chrome", () => {
   });
 });
 
+describe("the area ceiling", () => {
+  test("a long page is compared at a narrow width and refused at a wide one", async () => {
+    const run = await capture(["/long"], { widths: [375, 1440] });
+    assert.equal(run.code, 3, context(run));
+    const all = results(run.outDir);
+    assert.equal(result(all, "/long", 375).diffPixels, 0, context(run));
+    assert.equal((await sharp(run.file("long.375.left.png")).metadata()).height, 50_000);
+    const wide = all.results.find((r) => r.width === 1440);
+    assert.ok(wide?.status === "error", context(run));
+    assert.match(wide.error, /50000px tall at 1440px wide, past the 40000px sanity ceiling/);
+  });
+});
+
 describe("the tiled capture path", () => {
   let run: CliResult;
 

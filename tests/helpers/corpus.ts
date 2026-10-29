@@ -50,6 +50,7 @@ export const GUARDRAILS = [
   "labelled",
   "broken-asset",
   "media",
+  "long",
 ] as const;
 
 export const ALL: string[] = [...EQUIVALENCE, ...CONTROLS, ...GUARDRAILS];

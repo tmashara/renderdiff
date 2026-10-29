@@ -34,10 +34,11 @@ const MAX_CAPTURE_HEIGHT = 16_384;
 const TILE_HEIGHT = 16_000;
 
 /**
- * Sanity ceiling. Past this a page is far likelier a broken/runaway layout than a real
- * one, and we would rather error than stitch a >100MB image. Named in the throw.
+ * Sanity ceiling on the shot's area, so a narrow page may be taller than a wide one. Past
+ * this a page is far likelier a broken/runaway layout than a real one, and we would rather
+ * error than stitch a >200MB image. Named in the throw.
  */
-const MAX_PAGE_HEIGHT = 40_000;
+const MAX_PAGE_AREA = 1440 * 40_000;
 
 /** Requests still open per page, when the last one opened or closed, and stylesheets that failed. */
 const network = new WeakMap<Page, { open: Set<Request>; last: number; failed: Set<string> }>();
@@ -120,6 +121,7 @@ export async function capture(
   now: number,
 ): Promise<Shot> {
   await page.setViewportSize({ width, height: 900 });
+  const maxHeight = Math.floor(MAX_PAGE_AREA / width);
   await page.clock.setSystemTime(now);
   // Here, not on framenavigated, which a pushState during hydration fires too.
   network.get(page)!.failed.clear();
@@ -163,7 +165,7 @@ export async function capture(
       Array.from(document.images).map((img) => img.decode().catch(() => {})),
     );
     await Promise.race([decoded, new Promise((r) => setTimeout(r, 5_000))]);
-  }, MAX_PAGE_HEIGHT);
+  }, maxHeight);
   // fonts.ready also resolves when a face fails, so the failures are read off it below.
   const fonts = await page.evaluate(async () => {
     await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 5_000))]);
@@ -231,9 +233,10 @@ export async function capture(
     .map((line) => line.replace(/\s+/g, " ").trim())
     .filter(Boolean);
   const blank = pageText < 200 && !media ? `height=${scrollHeight}, text=${pageText} chars` : null;
-  if (scrollHeight > MAX_PAGE_HEIGHT) {
+  if (scrollHeight > maxHeight) {
     throw new Error(
-      `page is ${scrollHeight}px tall, past the ${MAX_PAGE_HEIGHT}px sanity ceiling ` +
+      `page is ${scrollHeight}px tall at ${width}px wide, past the ${maxHeight}px sanity ceiling ` +
+        `for that width (${MAX_PAGE_AREA.toLocaleString("en-US")} pixels) ` +
         `at ${url} — likely a broken layout, not a real page`,
     );
   }
