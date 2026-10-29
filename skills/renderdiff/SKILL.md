@@ -73,3 +73,8 @@ unaccepted difference. § Exit codes.
 4. **Call**: parity, regression, or expected change, and why.
 
 A score without looking is not a verdict: 99.6% can be a missing nav link.
+
+After a fresh final run (never after `--rerun-failed`), write the four parts to `verdict.md`, run
+`npx renderdiff@latest report <out> --verdict verdict.md --title "<task>"` and hand over
+`evidence.html`. Offer to publish it as an Artifact for a link that opens in a browser; a ticket
+attachment is the archive copy. Accepted entries are OS-specific: build it on the OS that recorded them.

@@ -246,6 +246,17 @@ top (`stacked`, for wide changes) or on the left (`side`, for tall ones). A crop
 0.75×; a change too big for that keeps its top rows (or left columns) and is marked
 `clipped`. Height padding is never cropped.
 
+## evidence.html
+
+`renderdiff report <out-dir> [--verdict verdict.md] [--title "..."]` reads `results.json` and
+writes `evidence.html` beside it: one file with no outside references, so it can be attached
+to a ticket or published on its own. It opens with a banner: **Parity** (every shot clean or
+accepted, no errors), **Differs** (a shot that would exit 1), or **Not verified** (errors,
+unstable pixels, failed assets, diffs under `--threshold`, or a `--rerun-failed` run that reused shots). Then
+the `renderdiff:` line, the verdict file as plain text, coverage (clean and accepted routes,
+errors, stale accepts), and a card per shot that isn't clean, then one per accepted shot, with crops embedded
+as WebP. Crops past 12MB, or missing from the out dir, are left out and the banner says so. Build it after a fresh full run.
+
 ## results.json
 
 Written on every run, errors included, one result per line (so `grep '"url":"/about"'`
@@ -265,7 +276,9 @@ pulls a route), scores rounded down to four decimals (so a shot that differs nev
     "browser": { "name": "chromium", "version": "…" },   // "chrome" when it fell back
     "storageState": { "left": "auth.json", "right": null },   // file names only
     "config": "…",              // hash of what decides a shot; --rerun-failed needs it unchanged
-    "rightReplayedFrom": null   // --cache-right: when the replayed recording was made
+    "rightReplayedFrom": null,  // --cache-right: when the replayed recording was made
+    "freezeVideo": true, "platform": "darwin",   // process.platform: pixels and accepts are OS-specific
+    "rerun": null               // --rerun-failed: { "rerun": 3, "reused": 12 }
   },
   "results": [
     {

@@ -94,6 +94,7 @@ function slugs(routes: Route[]): Map<string, string> {
 /** Only a directory holding nothing but files renderdiff writes is safe to wipe. */
 const ours = (f: string) =>
   f === "report.html" ||
+  f === "evidence.html" ||
   f === "results.json" ||
   f === CACHE_DIR ||
   /^[a-z0-9_~@-]+\.[\d.]+\.(left|right|diff|c\d+)\.png$/.test(f);
@@ -106,9 +107,15 @@ function wipeable(dir: string): boolean {
 /** A stylesheet or font face failed on a side; older results.json files lack the field. */
 const broken = (r: ComparedResult) => !!(r.failed?.left.length || r.failed?.right.length);
 
-const reusable = (r: RouteResult) =>
+export const reusable = (r: RouteResult) =>
   r.status === "compared" &&
   ((r.diffPixels === 0 && r.unstablePixels === 0 && !broken(r)) || r.accepted);
+
+/** A shot that exits 1: unaccepted and differing, or with a threshold, scoring below it. */
+export const fails = (r: RouteResult, threshold: number | null) =>
+  r.status === "compared" &&
+  !r.accepted &&
+  (threshold === null ? r.diffPixels > 0 : r.score < threshold);
 
 const files = (r: RouteResult) =>
   r.status === "compared" ? [...Object.values(r.images), ...r.crops.map((c) => c.path)] : [];
@@ -175,6 +182,8 @@ export async function run({
     blockUrlPatterns: cfg.blockUrlPatterns,
     hideSelectors: cfg.hideSelectors,
     masks: cfg.masks.map(({ urlPath, reason }) => ({ urlPath, reason })),
+    freezeVideo: cfg.freezeVideo,
+    platform: process.platform,
     storageState: {
       left: cfg.storageState.left && path.basename(cfg.storageState.left),
       right: cfg.storageState.right && path.basename(cfg.storageState.right),
@@ -515,6 +524,7 @@ export async function run({
     browser: browserMeta,
     config,
     rightReplayedFrom: replays.sort()[0] ?? null,
+    rerun: prev ? { rerun: jobs.length, reused: results.length - jobs.length } : null,
   };
   const reportPath = await writeReport(results, meta, cfg, stale);
   const resultsPath = writeResults(results, meta, cfg.outDir, stale);
@@ -550,12 +560,7 @@ export async function run({
   }
 
   // A measured failure outranks an unmeasured route, so an error can't hide a diff.
-  const below = results.filter(
-    (r) =>
-      r.status === "compared" &&
-      !r.accepted &&
-      (cfg.threshold === null ? r.diffPixels > 0 : r.score < cfg.threshold),
-  );
+  const below = results.filter((r) => fails(r, cfg.threshold));
   if (below.length) {
     const n = new Set(below.map(name)).size;
     const what =
