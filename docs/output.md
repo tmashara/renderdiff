@@ -252,10 +252,11 @@ top (`stacked`, for wide changes) or on the left (`side`, for tall ones). A crop
 writes `evidence.html` beside it: one file with no outside references, so it can be attached
 to a ticket or published on its own. It opens with a banner: **Parity** (every shot clean or
 accepted, no errors), **Differs** (a shot that would exit 1), or **Not verified** (errors,
-unstable pixels, failed assets, diffs under `--threshold`, or a `--rerun-failed` run that reused shots). Then
-the `renderdiff:` line, the verdict file as plain text, coverage (clean and accepted routes,
-errors, stale accepts), and a card per shot that isn't clean, then one per accepted shot, with crops embedded
-as WebP. Crops past 12MB, or missing from the out dir, are left out and the banner says so. Build it after a fresh full run.
+unstable pixels, failed assets, diffs under `--threshold`, or a `--rerun-failed` run that
+reused shots). Then the `renderdiff:` line, the verdict file as plain text, coverage (clean
+and accepted routes, errors, stale accepts), and a card per shot that isn't clean, then one
+per accepted shot, with crops embedded as WebP. Crops past 12MB, or missing from the out dir,
+are left out and the banner says so. Build it after a fresh full run.
 
 ## results.json
 
