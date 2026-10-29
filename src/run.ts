@@ -358,8 +358,8 @@ export async function run({
               const shot = s ? rightShot : leftShot;
               if (!shot.prev || !shot.unstable) return [];
               const [a, b] = [`${base}.${side}.unsettled-a.png`, `${base}.${side}.unsettled-b.png`];
-              await Promise.all([write(a, shot.prev), write(b, raw[s]!)]);
               (frames ??= []).push(a, b);
+              await Promise.all([write(a, shot.prev), write(b, raw[s]!)]);
               const { width: w } = await sharp(raw[s]!).metadata();
               return [`${side}: ${a} vs -b differ within ${fmtRegion(bbox(shot.unstable, w))}`];
             }),
