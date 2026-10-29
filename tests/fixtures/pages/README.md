@@ -57,9 +57,10 @@ Breaking any of these produces a flaky suite, and the flake looks like a renderd
    900px tall, so a block it inserts moves the bands instead of the height, and where the
    page crosses 900px depends on the platform's monospace font. Make such a page taller
    than 900px from fixed heights alone, as `inserted` does.
-9. **No animation** except in `animated`, which exists to prove `STILL_CSS` and the frozen image animation kill it, `ticker`,
-   whose timer exists to be caught by the stability check, and `unsettled`, which recolours
-   the whole page to trip the unstable-pixel cap.
+9. **No animation** except in `animated`, which exists to prove `STILL_CSS` and the
+   image-animation launch flag kill it, `ticker`, whose timer exists to be caught by the
+   stability check, and `unsettled`, which recolours the whole page to trip the
+   unstable-pixel cap.
 
 ## Adding a route
 
