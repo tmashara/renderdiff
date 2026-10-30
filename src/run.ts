@@ -54,6 +54,7 @@ const SHOT_TIMEOUT = (Math.max(0, Number(process.env.RENDERDIFF_SHOT_TIMEOUT)) |
 
 /** Past this share of a page unstable, too little was measured for a score to mean anything. */
 const MAX_UNSTABLE_SHARE = 0.25;
+
 export const BLANK_HINT =
   "under 200 chars of text and no visible image, SVG, canvas, video, iframe or form control; " +
   "if the page is meant to be this sparse, add data-renderdiff-rendered to a visible element its own " +
