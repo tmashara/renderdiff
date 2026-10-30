@@ -38,7 +38,7 @@ To run the action twice in one job, give each run its own `out` and `artifact-na
 matrix, put the matrix value in `artifact-name`. The action sets up Node 24, which later
 steps in the job then use.
 
-Outputs: `exit-code` (0 pass, 1 a difference or below `threshold`, 2 bad input or an origin down, 3 a route
+Outputs: `exit-code` (0 pass, 1 a difference or below `threshold`, 2 bad input or an origin down (at the start or mid-run), 3 a route
 errored) and `results` (the path to `results.json`).
 
 A Vercel preview behind Deployment Protection answers the runner with its login page: a

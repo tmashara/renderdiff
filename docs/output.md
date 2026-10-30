@@ -343,7 +343,8 @@ with `--rerun-failed`: rerun into a new `--out` and merge again.
 ## results.json
 
 Written on every run, errors included, one result per line (so `grep '"url":"/about"'`
-pulls a route), scores rounded down to four decimals (so a shot that differs never reads as
+pulls a route; the lines sit inside one JSON document and end in commas, so parse the whole
+file, not each line), scores rounded down to four decimals (so a shot that differs never reads as
 `1`). Paths are relative to the out dir; results are in route-then-width order. Its types
 (`Results` and friends) are exported from the package.
 

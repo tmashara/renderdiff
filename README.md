@@ -119,7 +119,7 @@ renderdiff <left-origin> <right-origin> <route…> [options]
 | `--sitemap[=<url>]` | Add the paths in the right side's sitemap. Default `<right>/sitemap.xml`; give another URL or path with `=`. |
 | `--dry-run` | Print the URL pairs and exit. No browser. |
 | `--open` | Open the report when the run finishes. |
-| `--progress` | A line per shot as it finishes, then the worst scores. The default on a terminal; piped, renderdiff prints one compact summary at the end. |
+| `--progress` | A line per shot as it finishes, then the worst scores. The default on a terminal; piped, renderdiff prints one compact summary at the end, and `renderdiff: n/N shots` on stderr every tenth of the run. |
 | `--no-progress` | The compact summary even on a terminal. |
 | `-h, --help` / `-v, --version` | |
 

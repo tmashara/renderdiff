@@ -175,6 +175,8 @@ export const DEFAULT_BLOCK_URL_PATTERNS = [
   "**://connect.facebook.net/**",
   "**://*.onetrust.com/**",
   "**://cdn.cookielaw.org/**",
+  // Geo-IP lookups that decide whether a consent banner shows.
+  "**://get.geojs.io/**",
 ];
 
 /**
@@ -206,6 +208,16 @@ const STILL_CSS = `
 *,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}
 html{scroll-behavior:auto!important}
 `;
+
+export const alive = async (origin: string) => {
+  try {
+    return (
+      (await fetch(origin, { method: "HEAD", signal: AbortSignal.timeout(3000) })).status < 500
+    );
+  } catch {
+    return false;
+  }
+};
 
 /**
  * Browser-context settings pinned on both sides, so locale, timezone, theme and motion
@@ -286,7 +298,7 @@ export interface RenderdiffConfig {
   blockUrlPatterns?: string[];
   /** Extra selectors to hide, appended to {@link DEFAULT_HIDE_SELECTORS}. */
   hideSelectors?: string[];
-  /** Raw CSS injected after the built-in rules. An escape hatch. */
+  /** Raw CSS injected after the built-in rules, as a constructed stylesheet, so `@import` is ignored. An escape hatch. */
   extraCss?: string;
   /** Per-route regions painted over on both sides. */
   masks?: Mask[];

@@ -48,6 +48,8 @@ Pixels decide the score and the exit code in every mode.
    *rule*) → `findings:` (one cause on many routes: fix it once) → `computed:` → `Read` the
    `crops` for what `dom` doesn't explain (multi-width row: widest and narrowest). Every
    token: § Output.
+   Hundreds of shots take many minutes: run it in the background and watch stderr's
+   `renderdiff: n/N shots` lines (`--progress` for a line per shot), not the PNG count.
 4. **Decide every band, region, line and text line:**
 
    | It is | Do |

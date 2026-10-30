@@ -16,6 +16,7 @@
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import http from "node:http";
 import path from "node:path";
 import sharp from "sharp";
 import { after, before, describe, test } from "node:test";
@@ -300,6 +301,41 @@ describe("consent chrome", () => {
   });
 });
 
+test("a page whose CSP refuses inline styles still gets renderdiff's CSS", async () => {
+  const run = await capture(["/csp"]);
+  assert.equal(run.code, 0, context(run));
+  assert.equal(cardFor(run, "/csp").diffPixels, 0, context(run));
+});
+
+describe("an origin that stops responding", () => {
+  test("aborts the run with exit 2 and names the side", async () => {
+    let served = 0;
+    const right = http.createServer((req, res) => {
+      res.setHeader("content-type", "text/html");
+      if (req.method !== "GET") return res.end();
+      res.end("<!doctype html><p>" + "Served once. ".repeat(30) + "</p>");
+      if (++served === 1) {
+        right.close();
+        right.closeAllConnections();
+      }
+    });
+    await new Promise<void>((r) => right.listen(0, "127.0.0.1", r));
+    const { port } = right.address() as { port: number };
+    const run = await runCli([
+      ...renderdiffArgs({
+        left: site.left,
+        right: `http://127.0.0.1:${port}`,
+        routes: ["/", "/consent", "/csp"],
+        widths: [1440],
+        concurrency: 1,
+      }),
+    ]);
+    assert.equal(run.code, 2, context(run));
+    assert.match(run.stderr, /✗ right \(http:\/\/127\.0\.0\.1:\d+\) stopped responding mid-run/);
+    assert.equal(run.report(), null, context(run));
+  });
+});
+
 describe("the area ceiling", () => {
   test("a long page is compared at a narrow width and refused at a wide one", async () => {
     const run = await capture(["/long"], { widths: [375, 1440] });
@@ -310,6 +346,12 @@ describe("the area ceiling", () => {
     const wide = all.results.find((r) => r.width === 1440);
     assert.ok(wide?.status === "error", context(run));
     assert.match(wide.error, /50000px tall at 1440px wide, past the 40000px sanity ceiling/);
+  });
+
+  test("a selector on a page past the ceiling compares that element", async () => {
+    const run = await capture(["/long @h1"]);
+    assert.equal(run.code, 0, context(run));
+    assert.equal(cardFor(run, "/long [h1]").diffPixels, 0, context(run));
   });
 
   test("a width past 1440 still gets the 40,000px ceiling", async () => {

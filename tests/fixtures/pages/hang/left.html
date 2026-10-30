@@ -6,13 +6,13 @@
 <link rel="stylesheet" href="/shared/base.css">
 <style>
 /* GUARD RAIL for the shot deadline. The page wedges its renderer on the first stylesheet
-   renderdiff injects, so the capture never returns and must error at the deadline. */
+   renderdiff adopts, so the capture never returns and must error at the deadline. */
 </style>
 </head>
 <body>
 <div class="page">
 <h1>Hung page guard rail</h1>
-<p class="lede">The page loads normally, then spins forever as soon as a style element is added to its head. Nothing after that point can run, so the shot has to be abandoned rather than waited on.</p>
+<p class="lede">The page loads normally, then spins forever as soon as a stylesheet is adopted into the document. Nothing after that point can run, so the shot has to be abandoned rather than waited on.</p>
 
 <section class="notes">
 <h2>Notes</h2>
@@ -20,7 +20,7 @@
 </section>
 </div>
 <script>
-new MutationObserver(() => { for (;;); }).observe(document.head, { childList: true });
+Object.defineProperty(document, "adoptedStyleSheets", { get: () => [], set: () => { for (;;); } });
 </script>
 </body>
 </html>

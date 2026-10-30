@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- GUARD RAIL for CSP: inline styles are refused, so renderdiff's own CSS must still apply. -->
+<meta http-equiv="Content-Security-Policy" content="style-src 'self'">
+<title>Layout parity</title>
+<link rel="stylesheet" href="/shared/base.css">
+</head>
+<body>
+<div id="onetrust-consent-sdk"><p>We value your privacy. Accept all cookies?</p></div>
+<div class="page">
+<h1>Content Security Policy guard rail</h1>
+<p class="lede">This page refuses inline styles. Only the left side carries a consent banner; parity means the built-in hide selectors still applied, injected in a way the policy does not govern.</p>
+</div>
+</body>
+</html>
