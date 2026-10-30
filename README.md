@@ -106,6 +106,7 @@ renderdiff <left-origin> <right-origin> <route…> [options]
 | `--selector <sel>` | Compare the one element this Playwright selector matches, on both sides, instead of the whole page. Applies to every route without its own `@selector`, over the config's per-route `selector`. |
 | `--left-selector <sel>`, `--right-selector <sel>` | That side's selector, over `--selector`. One without the other side (or `--selector`) is an error. |
 | `--mask <sel>` | Paint this Playwright selector over on both sides, on every route; repeatable. Added to the config's masks and listed in the report as coverage given up. |
+| `--hide <sel>` | Hide this CSS selector (not Playwright) on both sides, on every route; repeatable. Added to the config's `hideSelectors`. For chrome that should be absent on both sides; content that drifts belongs in `--mask`. |
 | `--mask-media` | Mask every `iframe` on every route, as config `maskMedia: true` does. Video isn't masked: it is frozen by default, so the player's box is still compared. |
 | `--no-freeze-video` | Leave videos playing and video.js overlays visible, as config `freezeVideo: false` does. By default every video is paused on frame 0 (its poster if it never loads) ([how it works](https://github.com/tmashara/renderdiff/blob/main/docs/how-it-works.md)); unfrozen, expect unstable pixels or `did not settle`. `--mask-media` doesn't mask them either. |
 | `--storage-state <file>` | Start both sides with this Playwright storage state (cookies, localStorage), e.g. signed in. Relative to cwd. Over the config's `storageState`. |

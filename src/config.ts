@@ -568,6 +568,8 @@ export interface CliOverrides {
   aria?: boolean;
   /** From --mask, appended to the config's masks. */
   masks?: string[];
+  /** From --hide, appended to the config's hideSelectors. */
+  hideSelectors?: string[];
   maskMedia?: boolean;
   freezeVideo?: boolean;
 }
@@ -593,7 +595,11 @@ export function resolveConfig(file: RenderdiffConfig, cli: CliOverrides): Resolv
       ? { left: file.storageState, right: file.storageState }
       : file.storageState;
 
-  const hideSelectors = [...DEFAULT_HIDE_SELECTORS, ...(file.hideSelectors ?? [])];
+  const hideSelectors = [
+    ...DEFAULT_HIDE_SELECTORS,
+    ...(file.hideSelectors ?? []),
+    ...(cli.hideSelectors ?? []),
+  ];
   const freezeVideo = cli.freezeVideo ?? file.freezeVideo ?? true;
 
   return {
@@ -607,7 +613,8 @@ export function resolveConfig(file: RenderdiffConfig, cli: CliOverrides): Resolv
     hideSelectors,
     neutralizeCss:
       STILL_CSS +
-      `${hideSelectors.join(",")}{display:none!important}\n` +
+      // One rule each, so an invalid selector drops only its own rule.
+      hideSelectors.map((s) => `${s}{display:none!important}\n`).join("") +
       // visibility, not display, so the player keeps its layout.
       (freezeVideo
         ? ".vjs-text-track-display,.vjs-control-bar,.vjs-control-bar *{visibility:hidden!important}\n"

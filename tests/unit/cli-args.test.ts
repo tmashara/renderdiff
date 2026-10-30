@@ -153,6 +153,18 @@ describe("flag validation", () => {
     );
   });
 
+  test("--hide needs a value", async () => {
+    await rejects(["/a", "--left", L, "--right", R, "--dry-run", "--hide"], "--hide needs a value");
+    await rejects(
+      ["/a", "--left", L, "--right", R, "--dry-run", "--hide="],
+      "--hide needs a value",
+    );
+    await rejects(
+      ["/a", "--left", L, "--right", R, "--dry-run", "--hide", " "],
+      "--hide needs a value",
+    );
+  });
+
   test("--width rejects non-numbers", () =>
     rejects(
       ["/a", "--left", L, "--right", R, "--width", "wide"],

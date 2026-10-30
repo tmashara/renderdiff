@@ -327,7 +327,7 @@ export default {
 
 A mask takes exactly one of `selector` or `locate: (page) => Locator`; without `urlPath` it
 applies to every route, and on a pair it matches either side's path. `--mask <sel>` adds to the
-config's masks. Also: `threshold`, `outDir`, `concurrency`, `extraCss`, `before`,
+config's masks; `--hide <sel>` (CSS) adds to `hideSelectors`. Also: `threshold`, `outDir`, `concurrency`, `extraCss`, `before`,
 `beforeShot`, `storageState`. `hideSelectors`: match the element **exactly** (consent scripts stamp classes on
 `<html>`; a loose selector blanks the whole document and blank matches blank), and they hide
 rather than remove.
