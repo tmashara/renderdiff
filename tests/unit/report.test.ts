@@ -218,6 +218,20 @@ describe("writeReport", () => {
     assert.match(route(html, "/Docs"), /href="#Docs\.1440"/);
   });
 
+  test("a sidebar toggle swaps each card's three images for a left/right slider", async () => {
+    const html = await report([at("/a", 1440)]);
+    assert.match(html, /<input id="slide" type="checkbox">/);
+    const card = html.match(/<article class="card"[\s\S]*?<\/article>/)![0];
+    assert.match(
+      card,
+      /<div class="slider"[^>]*>\s*<img[^>]*src="a\.1440\.right\.png">\s*<div class="l"><img[^>]*src="a\.1440\.left\.png"><\/div>\s*<input type="range"/,
+    );
+    assert.deepEqual(
+      [...card.matchAll(/<a href="([^"]+)"/g)].map((m) => m[1]),
+      ["a.1440.left.png", "a.1440.right.png", "a.1440.diff.png"],
+    );
+  });
+
   test("the filter box filters lowercased route names, client-side", async () => {
     const html = await report([at("/Docs", 1440)]);
     assert.match(
