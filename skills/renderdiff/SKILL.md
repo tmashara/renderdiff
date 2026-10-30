@@ -19,7 +19,7 @@ the § named at each step.
 
 | Change | Run |
 | --- | --- |
-| CSS only, markup untouched (refactor, dead-CSS removal, token swap) | pixels + `--computed`. Expect `dom identical` on every route: then each `computed:` finding is a real style change, even on a clean route. `dom differs`: often a wrapper's class changed, re-keying its subtree (§ `--computed`). Hover menus and open menus aren't shot without a `before` hook that ends waiting for the open state, and dead-CSS removal breaks exactly those. |
+| CSS only, markup untouched (refactor, dead-CSS removal, token swap) | pixels + `--computed`. First diff the two builds (§ Reference and routes): if only asset hashes differ, no shots are needed; otherwise shoot the routes the changed rules reach. Expect `dom identical` on every route: then each `computed:` finding is a real style change, even on a clean route. `dom differs`: often a wrapper's class changed, re-keying its subtree (§ `--computed`). Hover menus and open menus aren't shot without a `before` hook that ends waiting for the open state, and dead-CSS removal breaks exactly those. |
 | Markup changes (framework, template or component migration) | pixels, plus `--aria`: `aria: identical` means a screen reader gets the same page. `--computed` findings would only be hints. |
 | Dependency or build upgrade | pixels, plus `--computed` if the markup should be identical. |
 | One component | pixels with `--selector <sel>` or `'/route @sel'`. |
