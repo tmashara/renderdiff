@@ -3,7 +3,7 @@ import { prepare } from "./capture.ts";
 import { collapseInherited, pageError, SHOWN, type Snapshot } from "./computed.ts";
 import { CONTEXT_OPTIONS, masksFor, type ResolvedConfig, type Route } from "./config.ts";
 import { SNAP_PROPS, snapshot } from "./locate.ts";
-import { COMPUTED_TIMEOUT, launch, shoot } from "./run.ts";
+import { BLANK_HINT, COMPUTED_TIMEOUT, launch, shoot } from "./run.ts";
 
 // ponytail: x/y also list the siblings a grown box pushes down; drop a y a previous sibling's height explains if it gets noisy
 const FIELDS = [...SNAP_PROPS, "x", "y"];
@@ -31,7 +31,7 @@ async function load(
     const pages = { left: await ctx.newPage() } as Record<"left" | "right", Page>;
     await prepare(pages.left, cfg, now);
     const shot = await shoot(pages, url, route, "left", width, cfg, now);
-    if (shot.blank) throw new Error(`page did not render (${shot.blank})`);
+    if (shot.blank) throw new Error(`page did not render (${shot.blank}): ${BLANK_HINT}`);
     const page = pages.left;
     const snap: Snapshot = await snapshot(page, masksFor(cfg, page, route), COMPUTED_TIMEOUT, null);
     const at = await page.evaluate(

@@ -8,7 +8,8 @@ honestly. This is what renderdiff does to make sure of that.
 - **Refuses a shot** it can't trust: an HTTP status of 400 or above on either side is an
   error naming the status. A route where *both* sides look blank — under 200 characters of
   text and no visible images, SVG, canvas, video, iframes or form controls — errors instead
-  of quietly scoring as a match. If only one side is blank, the diff shows it.
+  of quietly scoring as a match. If only one side is blank, the diff shows it. A page that is
+  sparse on purpose can carry `data-renderdiff-rendered` on an element its own content renders.
 - **Blocks analytics, consent and A/B tooling** at the network layer on both sides —
   GTM, GA, Segment, Intercom, Hotjar, LinkedIn, Meta, OneTrust, CookieLaw, VWO. Blocked
   rather than hidden, because A/B tools rewrite arbitrary DOM and CSS can't pre-empt an
