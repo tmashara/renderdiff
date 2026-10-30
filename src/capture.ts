@@ -387,7 +387,9 @@ export async function capture(
           ((root === document.documentElement ? body : root) as HTMLElement).innerText || "",
         pageText: body.innerText?.length ?? 0,
         media: Array.from(
-          document.querySelectorAll("img, svg, canvas, video, iframe, input, textarea, select"),
+          document.querySelectorAll(
+            "img, svg, canvas, video, iframe, input, textarea, select, [data-renderdiff-rendered]",
+          ),
         ).some((e) => {
           const r = e.getBoundingClientRect();
           return r.width * r.height >= 1024;

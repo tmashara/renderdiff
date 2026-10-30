@@ -125,3 +125,8 @@ An element marked `data-renderdiff-mask` is masked like a config mask, on every 
 both sides. The attribute's value is its reason in the report, `rotating quote
 (data-renderdiff-mask)` for `data-renderdiff-mask="rotating quote"`, and in the result's
 `masked` in `results.json`.
+
+A page under 200 characters of text and no visible media on both sides is refused as `page did
+not render`. If it is sparse on purpose, like a fixture page, mark an element its own content
+renders `data-renderdiff-rendered`. Not the layout shell (`<html>`, `<body>`, a layout around the
+error boundary): it is there when the page never mounts too, and that page would pass.

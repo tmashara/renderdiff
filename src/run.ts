@@ -55,6 +55,11 @@ const SHOT_TIMEOUT = (Math.max(0, Number(process.env.RENDERDIFF_SHOT_TIMEOUT)) |
 /** Past this share of a page unstable, too little was measured for a score to mean anything. */
 const MAX_UNSTABLE_SHARE = 0.25;
 
+export const BLANK_HINT =
+  "under 200 chars of text and no visible image, SVG, canvas, video, iframe or form control; " +
+  "if the page is meant to be this sparse, add data-renderdiff-rendered to a visible element its own " +
+  "content renders (not the layout shell, or a page that never mounted passes too)";
+
 interface Job {
   route: Route;
   width: number;
@@ -365,7 +370,7 @@ export async function run({
         if (leftShot.blank && rightShot.blank) {
           throw new Error(
             `page did not render on either side ` +
-              `(left: ${leftShot.blank}; right: ${rightShot.blank}) at ${key}`,
+              `(left: ${leftShot.blank}; right: ${rightShot.blank}) at ${key}: ${BLANK_HINT}`,
           );
         }
         // A replay that went live in part compared against two different moments of the reference.

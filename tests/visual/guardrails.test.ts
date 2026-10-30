@@ -108,6 +108,7 @@ describe("the render gate", () => {
     assert.match(report.errors[0]!.message, /page did not render/);
     // The message carries the numbers that explain the refusal. Measured: text=17 chars.
     assert.match(report.errors[0]!.message, /text=\d+ chars/);
+    assert.match(report.errors[0]!.message, /under 200 chars .+ add data-renderdiff-rendered/);
   });
 
   test("results.json lists the refused route as an error, beside the compared one", () => {
@@ -168,6 +169,17 @@ describe("the render gate", () => {
     const report = parseReport(run.report()!);
     assert.equal(report.errors.length, 1, context(run));
     assert.match(report.errors[0]!.message, /page did not render/);
+  });
+
+  test("a sparse page that marks itself rendered is compared, not refused", async () => {
+    const file = path.join(tempDir(), "rendered.mjs");
+    fs.writeFileSync(
+      file,
+      'export default { beforeShot: async (page) => { await page.evaluate(() => document.querySelector("p").setAttribute("data-renderdiff-rendered", "")); } };\n',
+    );
+    const run = await capture(["/blank"], { config: file });
+    assert.equal(run.code, 0, context(run));
+    assert.equal(cardFor(run, "/blank").diffPixels, 0, context(run));
   });
 
   test("a short, nearly textless page with form controls is compared, not refused", async () => {
@@ -1229,7 +1241,7 @@ describe("the run summary", () => {
     // In full: the reason is what tells a blank page from a broken asset pipeline.
     assert.match(
       blank.errors[0]!.message,
-      /^page did not render on either side \(left: .+; right: .+\) at \/blank$/,
+      /^page did not render on either side \(left: .+; right: .+\) at \/blank: under 200 chars .+data-renderdiff-rendered.+$/,
     );
     assert.deepEqual([verdict.differ, verdict.routes, verdict.errors], [0, 2, 1]);
   });

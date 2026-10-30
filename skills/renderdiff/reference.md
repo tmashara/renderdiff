@@ -123,7 +123,7 @@ Report (`--open`, for a human): green from 99.5%, amber to 97%, red below.
 | --- | --- |
 | `HTTP 404 at …` (any ≥ 400) | That side answered an error: a route missing on one origin, or a server not ready. |
 | `not an HTML page: server sent … at …` | The route is a file (PDF, image, JSON, download), not a page. Drop it from the routes. Never retried. |
-| `page did not render on either side (…)` | Both sides under 200 chars of text and no visible image, SVG, canvas, video, iframe or form control. Usually a failed asset or an app that never mounted. One blank side isn't refused; it scores low. |
+| `page did not render on either side (…)` | Both sides under 200 chars of text and no visible image, SVG, canvas, video, iframe or form control. Usually a failed asset or an app that never mounted. One blank side isn't refused; it scores low. A page that is sparse on purpose (a fixture page) passes with `data-renderdiff-rendered` on a visible element (at least 1024px² in area) its own content renders, never the layout shell (`<html>`, `<body>`, a layout around the error boundary): there it vouches for a page that never mounted too. For a page you can't edit, set it in `beforeShot` only after checking the expected content is there. |
 | `page did not settle: Npx unstable at …` | Over 25% of the page kept changing, on two loads. `<shot>.<side>.unsettled-a/-b.png` are the two differing frames, and the message gives the box they differ in. Mask or stop the moving part. |
 | `page is Npx tall at Wpx wide, past the …px sanity ceiling …` | Taller than 57,600,000px ÷ width (never under 40,000px): a runaway layout, not a page. A long page still compares one element with `--selector` or `@sel` (`element is …` when that element itself is past it). |
 | `selector "…" matched N elements on left (/a), expected 1` | Make it unique (an id, `data-test`, `>> nth=0`), or list the route once per element. |
@@ -201,6 +201,7 @@ aria: identical on 2 of 3 route(s), differs /pricing
 | Tool | Legitimate for | Never for |
 | --- | --- | --- |
 | Mask (`--mask <sel>`, config `masks` with `reason`, `--mask-media`, `data-renderdiff-mask="<reason>"` in the page) | Content *proven* to vary per load: a base-vs-base baseline differs there (clocks, star counts, rotating quotes, embeds). | Anything that differs only after your change. |
+| `data-renderdiff-rendered` in the page | A page sparse on purpose, refused as `page did not render`; on an element its own content renders. | The layout shell, or getting past a page that really didn't render. |
 | `--accept "<reason>"` | A difference you opened that exists before your change (baseline vs production) or is intended, with a reason saying which. | Getting green. |
 | `--threshold <0..1>` | A CI gate on the exit code. | Reaching green; the difference is still there. |
 
