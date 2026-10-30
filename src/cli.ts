@@ -186,7 +186,7 @@ const HELP = `
 
     renderdiff http://localhost:3000 https://example.com / /about
     renderdiff http://localhost:3000 https://example.com /pricing::/plans
-    renderdiff report <out-dir> [--verdict <file>] [--title <text>] [--markdown <file>]
+    renderdiff report <out-dir> [--verdict <file>] [--title <text>] [--markdown <file> [--base-url <url>]]
     renderdiff merge <full-out> <partial-out> --out <dir>
     renderdiff probe <url> [--width <n>] [--loads <n>]
 
@@ -214,7 +214,8 @@ const HELP = `
   evidence.html beside it: one self-contained page (crops embedded) with a parity banner and
   the --verdict file's text. --markdown <file> also writes a before/after table per route
   (right before, left after, links to the shots) for a PR description; for an intended change,
-  run with --threshold 0 --no-recheck first.
+  run with --threshold 0 --no-recheck first. --base-url <url> is a URL the shot names are
+  appended to in those links, for an out dir uploaded there.
 
   renderdiff merge writes <full-out>'s results to --out with each shot <partial-out> also
   has replaced by the partial run's, and its other shots added. Both must compare the same origins.
@@ -366,10 +367,15 @@ async function sitemapRoutes(spec: string | true, routes: Route[]): Promise<Rout
 async function report(argv: string[]): Promise<never> {
   try {
     let dir: string | undefined;
-    const opt: { "--verdict"?: string; "--title"?: string; "--markdown"?: string } = {};
+    const opt: {
+      "--verdict"?: string;
+      "--title"?: string;
+      "--markdown"?: string;
+      "--base-url"?: string;
+    } = {};
     for (let i = 0; i < argv.length; i++) {
       const v = argv[i]!;
-      if (v === "--verdict" || v === "--title" || v === "--markdown") {
+      if (v === "--verdict" || v === "--title" || v === "--markdown" || v === "--base-url") {
         const value = argv[++i];
         if (value === undefined) throw new Error(`${v} needs a value`);
         opt[v] = value;
@@ -379,8 +385,10 @@ async function report(argv: string[]): Promise<never> {
     }
     if (!dir)
       throw new Error(
-        "usage: renderdiff report <out-dir> [--verdict <file>] [--title <text>] [--markdown <file>]",
+        "usage: renderdiff report <out-dir> [--verdict <file>] [--title <text>] [--markdown <file> [--base-url <url>]]",
       );
+    if (opt["--base-url"] !== undefined && !opt["--markdown"])
+      throw new Error("--base-url needs --markdown");
     const file = path.join(dir, "results.json");
     if (!fs.existsSync(file)) throw new Error(`no ${file}; run renderdiff with --out ${dir} first`);
     const verdict =
@@ -390,7 +398,8 @@ async function report(argv: string[]): Promise<never> {
     console.log(await writeReport(data.results, data.meta, dir, data.summary.stale));
     const out = await writeEvidence(data, dir, verdict, opt["--title"]);
     console.log(`${out} (${Math.ceil(fs.statSync(out).size / 1024)} KB)`);
-    if (opt["--markdown"]) console.log(writeMarkdown(data, dir, opt["--markdown"]));
+    if (opt["--markdown"])
+      console.log(writeMarkdown(data, dir, opt["--markdown"], opt["--base-url"]));
     process.exit(0);
   } catch (e) {
     console.error(`✗ ${e instanceof Error ? e.message : String(e)}`);

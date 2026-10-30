@@ -348,7 +348,35 @@ Build it after a fresh full run.
 intended change: a `## <route>` section per route with the before (right) and after (left)
 URLs, and a `| Width | Before | After |` table linking each width's full-page shots, with
 `(h±Npx)` when the heights differ and the error in place of an errored shot. Links are
-relative to the Markdown file; uploading the images to GitHub stays manual.
+relative to the Markdown file, or `<url>/<shot>` with `--base-url <url>`: upload the out dir
+anywhere, then pass its URL so the images render in a PR description. `evidence.html` is
+self-contained and can go anywhere on its own.
+
+Cloudflare Pages gives `report.html` a per-PR URL:
+
+```bash
+npx wrangler pages project create <p> --production-branch main   # once
+npx wrangler pages deploy renderdiff-out --project-name <p> --branch pr-123
+renderdiff report renderdiff-out --markdown pr.md --base-url https://pr-123.<p>.pages.dev
+```
+
+In CI, wrangler needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. Keep branch names
+simple like `pr-123`: the alias is lowercased, sanitized and truncated. Cloudflare Access can
+keep `report.html` private, but then the images won't render in the PR: GitHub fetches
+images through its anonymous camo proxy. For private inline images, use a reports repo:
+
+```bash
+git clone --depth 1 https://github.com/<owner>/<repo> reports
+mkdir -p reports/pr-123 && cp -R renderdiff-out/. reports/pr-123/
+git -C reports add . && git -C reports commit -m pr-123 && git -C reports push
+renderdiff report renderdiff-out --markdown pr.md \
+  --base-url https://github.com/<owner>/<repo>/raw/main/pr-123
+```
+
+Those links render for viewers signed in with read access to the reports repo. Don't copy
+`raw.githubusercontent.com/...?token=` URLs instead: the token expires. Use a separate repo,
+not a branch of the main one: every clone of the main repo would download the screenshots, and
+its history keeps them after the branch is deleted.
 
 ## merge
 

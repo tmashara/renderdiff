@@ -86,4 +86,5 @@ attachment is the archive copy. Accepted entries are OS-specific: build it on th
 recorded them.
 
 For an intended change (a redesign), run with `--threshold 0 --no-recheck` and
-`report <out> --markdown pr.md` for the PR description's before/after tables.
+`report <out> --markdown pr.md` for the PR description's before/after tables; add
+`--base-url <url>` once the out dir is uploaded, so the images render in the PR.
