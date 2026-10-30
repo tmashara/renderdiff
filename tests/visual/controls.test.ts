@@ -78,6 +78,13 @@ test("a difference exits 1 without a threshold, and is not an error", () => {
   assert.deepEqual(report.errors, []);
 });
 
+test("piped, stderr counts shots in tenths, ending at the total", () => {
+  const counts = [...run.stderr.matchAll(/^renderdiff: (\d+)\/(\d+) shots$/gm)];
+  const total = CONTROLS.length * WIDTHS.length;
+  assert.ok(counts.length >= 2 && counts.length <= 10, context(run));
+  assert.deepEqual(counts.at(-1)!.slice(1).map(Number), [total, total], context(run));
+});
+
 test("every control scores below parity", () => {
   const parity = report.cards.filter((c) => c.diffPixels === 0);
   assert.deepEqual(

@@ -15,6 +15,7 @@ import path from "node:path";
 import { ACCEPTED_FILE } from "./accept.ts";
 import type { Results } from "./report.ts";
 import {
+  alive,
   label,
   loadConfig,
   normalize,
@@ -220,8 +221,8 @@ const HELP = `
   Writes report.html, results.json and crops of each change to --out. Exits 1 if any
   shot differs and isn't accepted (with --threshold, only if one scores below it;
   --threshold 0 never fails on a diff), 3 if a route errored (unmeasured) or the run
-  crashed, 2 on bad arguments or config, an origin that is down, a sitemap it can't use,
-  or an out dir it won't wipe.
+  crashed, 2 on bad arguments or config, an origin that is down (at the start or mid-run),
+  a sitemap it can't use, or an out dir it won't wipe.
 
   Options
     --left <url>        Left origin, instead of the first positional one.
@@ -259,7 +260,8 @@ const HELP = `
     --dry-run           Print the URL pairs and exit. No browser.
     --open              Open the report when the run finishes.
     --progress          A line per shot as it finishes. The default on a terminal;
-                        otherwise one summary of the differing routes at the end.
+                        otherwise one summary of the differing routes at the end,
+                        and an n/N shots line on stderr every tenth of the run.
     --no-progress       The end-of-run summary, even on a terminal.
     -h, --help          Show this.
     -v, --version       Print the version.
@@ -282,21 +284,6 @@ function die(message: string): never {
   usage();
   process.exit(2);
 }
-
-const alive = async (origin: string) => {
-  try {
-    return (
-      (
-        await fetch(origin, {
-          method: "HEAD",
-          signal: AbortSignal.timeout(3000),
-        })
-      ).status < 500
-    );
-  } catch {
-    return false;
-  }
-};
 
 /**
  * Refuse to start unless both origins answer — two error pages diffed against each

@@ -35,8 +35,9 @@ results.json · Gotchas.
 
 ## Output
 
-Piped (what an agent sees), stdout is one compact summary; `--progress` prints a line per shot
-instead, `--no-progress` forces the summary on a terminal.
+Piped (what an agent sees), stdout is one compact summary, and stderr gets
+`renderdiff: n/N shots` every tenth of the run; `--progress` prints a line per shot instead,
+`--no-progress` forces the summary on a terminal.
 
 ```
 Routes: 3
@@ -124,7 +125,7 @@ Report (`--open`, for a human): green from 99.5%, amber to 97%, red below.
 | `not an HTML page: server sent … at …` | The route is a file (PDF, image, JSON, download), not a page. Drop it from the routes. Never retried. |
 | `page did not render on either side (…)` | Both sides under 200 chars of text and no visible image, SVG, canvas, video, iframe or form control. Usually a failed asset or an app that never mounted. One blank side isn't refused; it scores low. |
 | `page did not settle: Npx unstable at …` | Over 25% of the page kept changing, on two loads. `<shot>.<side>.unsettled-a/-b.png` are the two differing frames, and the message gives the box they differ in. Mask or stop the moving part. |
-| `page is Npx tall at Wpx wide, past the …px sanity ceiling …` | Taller than 57,600,000px ÷ width (never under 40,000px): a runaway layout, not a page. |
+| `page is Npx tall at Wpx wide, past the …px sanity ceiling …` | Taller than 57,600,000px ÷ width (never under 40,000px): a runaway layout, not a page. A long page still compares one element with `--selector` or `@sel` (`element is …` when that element itself is past it). |
 | `selector "…" matched N elements on left (/a), expected 1` | Make it unique (an id, `data-test`, `>> nth=0`), or list the route once per element. |
 | `selector "…" has no box on …` / `is off the page on …` | Matched an element not rendered (`display: none`, zero size) or outside the page. |
 | `before hook failed on left: …` | The hook threw (`beforeShot hook failed …` for that hook). Never retried. |
@@ -250,7 +251,7 @@ aria: identical on 2 of 3 route(s), differs /pricing
 | --- | --- |
 | 0 | No unaccepted shot differs (with `--threshold`: none scores below it) and no route errored. Unstable pixels or a failed asset alone exit 0: read their rows. |
 | 1 | An unaccepted shot differs (with `--threshold`: scores below it; `--threshold 0` never fails). Also on an `--accept` run for what can't be accepted. Wins over 3. |
-| 2 | Bad arguments or config; an origin not responding; a bad storage state or `renderdiff.accepted.json`; an out dir holding files renderdiff didn't write; `--rerun-failed` that doesn't repeat the last run; `merge` refusing. |
+| 2 | Bad arguments or config; an origin not responding, at the start or mid-run (no report is written); a bad storage state or `renderdiff.accepted.json`; an out dir holding files renderdiff didn't write; `--rerun-failed` that doesn't repeat the last run; `merge` refusing. |
 | 3 | A route errored (unmeasured), or the run crashed (e.g. no browser). |
 
 ## Iterating
@@ -359,7 +360,8 @@ One width (the first default without `--width`), no `--selector`, no `--out`. Ex
 ## results.json
 
 For scripts and drilling into one route; the loop doesn't need it. One result per line, so
-`grep '"url":"/about"'` pulls a route. Paths are relative to the out dir.
+`grep '"url":"/about"'` pulls a route, but the lines sit inside one JSON document and end in
+commas: `JSON.parse` the whole file, not each line. Paths are relative to the out dir.
 
 - **Each result:** `url`, `left`, `right`, `selector` (`{ left, right }` or null), `hook`,
   `width`, `status` (`compared`, or `error` with `error`, and `frames` when it did not settle); `score`, `alignedScore`,

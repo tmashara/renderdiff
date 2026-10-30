@@ -12,6 +12,7 @@ import { compare, crops, type Band, type Box, type Region } from "./compare.ts";
 import { diffAria, diffSnapshots, fmtAria, fmtComputed, pageError } from "./computed.ts";
 import { locate, snapshotStates, type ElementDiff } from "./locate.ts";
 import {
+  alive,
   CONTEXT_OPTIONS,
   label,
   masksFor,
@@ -276,6 +277,13 @@ export async function run({
   const launched = jobs.length ? await launch() : null;
   const queue = [...jobs];
   let done = 0;
+  let down = "";
+  const every = Math.ceil(jobs.length / 10);
+  const tick = () => {
+    ++done;
+    if (!progress && (done % every === 0 || done === jobs.length))
+      console.error(`renderdiff: ${done}/${jobs.length} shots`);
+  };
   // Whole minute, so an HH:MM display reads the same on both sides.
   const now = Math.floor(Date.now() / 60_000) * 60_000;
   const har = launched && cacheRight ? cacheFile(cfg, browserOf(launched)) : null;
@@ -323,7 +331,7 @@ export async function run({
     await prepare(pages.left, cfg, now);
     await prepare(pages.right, cfg, now);
 
-    for (let job = queue.shift(); job; job = queue.shift()) {
+    for (let job = queue.shift(); job && !down; job = queue.shift()) {
       const { route, width } = job;
       const key = name(route);
       const { before, beforeShot, ...where } = route;
@@ -567,7 +575,7 @@ export async function run({
             ? `aria: ${aria.aria.added.length} added, ${aria.aria.removed.length} removed`
             : "",
         ].filter(Boolean);
-        ++done;
+        tick();
         if (!progress) continue;
         console.log(
           `  [${done}/${jobs.length}] ${pct(metrics.score)}  ${tag}` +
@@ -576,13 +584,16 @@ export async function run({
             details.map((d) => `\n        ${d}`).join(""),
         );
       } catch (e) {
-        results.push({
-          ...entry,
-          status: "error",
-          error: e instanceof Error ? e.message : String(e),
-          ...(frames && { frames }),
-        });
-        ++done;
+        const error = e instanceof Error ? e.message : String(e);
+        results.push({ ...entry, status: "error", error, ...(frames && { frames }) });
+        // A refused third-party URL never reaches here; recheck the origins themselves.
+        if (/ERR_CONNECTION_REFUSED/.test(error) && !down) {
+          const [l, r] = await Promise.all([alive(cfg.left), alive(cfg.right)]);
+          down = [!l && `left (${cfg.left})`, !r && `right (${cfg.right})`]
+            .filter(Boolean)
+            .join(" and ");
+        }
+        tick();
         if (progress) {
           console.log(`  [${done}/${jobs.length}] ERROR  ${tag}` + (sel && `\n        ${sel}`));
         }
@@ -600,6 +611,10 @@ export async function run({
       Array.from({ length: cfg.concurrency }, (_, i) => worker(launched.browser, i)),
     );
     await launched.browser.close();
+  }
+  if (down) {
+    console.error(`✗ ${down} stopped responding mid-run. Start it again and rerun.`);
+    return 2;
   }
   const browserMeta = launched ? browserOf(launched) : prev!.meta.browser;
   let unsaved = "";

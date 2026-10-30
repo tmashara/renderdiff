@@ -244,6 +244,13 @@ export async function prepare(page: Page, cfg: ResolvedConfig, now: number): Pro
   });
 }
 
+/** Not addStyleTag: it fails on any CSP violation logged meanwhile, and a <style> is subject to style-src. */
+function adoptCss(css: string) {
+  const sheet = new CSSStyleSheet();
+  sheet.replaceSync(css);
+  document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+}
+
 export async function capture(
   page: Page,
   url: string,
@@ -288,7 +295,7 @@ export async function capture(
   };
   await hook("before");
   step.set(page, "settle");
-  await page.addStyleTag({ content: cfg.neutralizeCss });
+  await page.evaluate(adoptCss, cfg.neutralizeCss);
   // Before the scroll too, so autoplay never starts and page state driven by playback stays put.
   if (cfg.freezeVideo) await page.evaluate(freezeVideo);
 
@@ -337,7 +344,7 @@ export async function capture(
   if (cfg.freezeVideo) await page.evaluate(freezeVideo);
   const failed = [...new Set([...network.get(page)!.failed, ...fonts.failed])];
   const loadedFonts = [...new Set(fonts.loaded)].sort();
-  await page.addStyleTag({ content: cfg.neutralizeCss }); // anything injected late
+  await page.evaluate(adoptCss, cfg.neutralizeCss); // anything injected late
   if (cfg.lottieFrame !== undefined) await page.evaluate(freezeLottie, cfg.lottieFrame);
   await hook("beforeShot");
   step.set(page, "settle");
@@ -400,13 +407,6 @@ export async function capture(
     .map((line) => line.replace(/\s+/g, " ").trim())
     .filter(Boolean);
   const blank = pageText < 200 && !media ? `height=${scrollHeight}, text=${pageText} chars` : null;
-  if (scrollHeight > maxHeight) {
-    throw new Error(
-      `page is ${scrollHeight}px tall at ${width}px wide, past the ${maxHeight}px sanity ceiling ` +
-        `for that width (${MAX_PAGE_AREA.toLocaleString("en-US")} pixels) ` +
-        `at ${url} — likely a broken layout, not a real page`,
-    );
-  }
 
   step.set(page, "screenshot");
   const measure = async (l: Locator) => {
@@ -446,6 +446,13 @@ export async function capture(
       .filter((b) => b !== null)
       .map((b) => (clip ? { ...b, x: b.x - clip.x, y: b.y - clip.y } : b));
   const area = clip ?? { x: 0, y: 0, width, height: scrollHeight };
+  if (area.height > maxHeight) {
+    throw new Error(
+      `${el ? "element" : "page"} is ${area.height}px tall at ${width}px wide, past the ${maxHeight}px sanity ceiling ` +
+        `for that width (${MAX_PAGE_AREA.toLocaleString("en-US")} pixels) ` +
+        `at ${url} — likely a broken layout, not a real page`,
+    );
+  }
   const tiled = area.height > MAX_CAPTURE_HEIGHT;
   // Read on both sides of the shot, so a box that moves while it is taken stays covered.
   const shoot = async () => {

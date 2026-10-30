@@ -182,10 +182,10 @@ not verified: dark mode, hover and focus states, the open mobile menu, and the p
   off the end of a truncated line.
 - **A flaky error on this site.** About 1 shot in 15 failed with
   `ERROR page.addStyleTag: Loading the script 'https://cloud.umami.is/script.js' violates …
-  Content Security Policy`. The site's own CSP blocks its own analytics script, and that
-  violation seems to land on renderdiff's style injection. It moves between routes and widths
-  from run to run, so `--rerun-failed` usually clears it and the next run brings a new one.
-  The message doesn't say which side failed.
+  Content Security Policy`. The site's own CSP blocks its own analytics script, and
+  Playwright's `addStyleTag` fails on any CSP violation logged while it runs, so it hit
+  whichever shot the script loaded during. Since fixed: renderdiff now injects its CSS as a
+  constructed stylesheet.
 - **Shots that can't be accepted.** The two long posts end up 1px shorter on some widths
   (`h-1 unaligned`). Accepting is documented not to cover unaligned height changes, so these
   stay red forever, but `--accept` said only `accepted 353 difference(s)` and didn't mention
