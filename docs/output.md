@@ -327,6 +327,14 @@ and a card per shot that isn't clean, then one per accepted shot, with crops emb
 WebP. Crops past 12MB, or missing from the out dir, are left out and the banner says so.
 Build it after a fresh full run.
 
+## markdown
+
+`renderdiff report <out-dir> --markdown <file>` also writes a Markdown file for documenting an
+intended change: a `## <route>` section per route with the before (right) and after (left)
+URLs, and a `| Width | Before | After |` table linking each width's full-page shots, with
+`(h±Npx)` when the heights differ and the error in place of an errored shot. Links are
+relative to the Markdown file; uploading the images to GitHub stays manual.
+
 ## merge
 
 `renderdiff merge <full-out> <partial-out> --out <dir>` writes a new out dir: the full run's

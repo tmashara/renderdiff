@@ -238,6 +238,9 @@ Everything lands in the out dir (`./renderdiff-out` by default):
 and writes `evidence.html` there: one self-contained page (a Parity / Differs / Not verified
 banner, your verdict, crops embedded) to attach to a ticket or publish as proof:
 [docs/output.md](https://github.com/tmashara/renderdiff/blob/main/docs/output.md#evidencehtml).
+For an intended change, run with `--threshold 0 --no-recheck`, then
+`renderdiff report <out> --markdown pr.md` writes a before/after table per route for the PR
+description ([docs/output.md](https://github.com/tmashara/renderdiff/blob/main/docs/output.md#markdown)).
 
 `renderdiff merge <full-out> <partial-out> --out <dir>` writes the full run's results to a new
 out dir with the shots a partial run also took (say, a few routes rerun under a new mask)

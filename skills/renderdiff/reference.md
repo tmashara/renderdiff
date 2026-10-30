@@ -330,8 +330,10 @@ rather than remove.
 
 ## `report`
 
-`renderdiff report <out> [--verdict <file>] [--title <text>]` rewrites `<out>/report.html`
-and writes `<out>/evidence.html` from `results.json`, no browser. `report.html` has a
+`renderdiff report <out> [--verdict <file>] [--title <text>] [--markdown <file>]` rewrites
+`<out>/report.html` and writes `<out>/evidence.html` from `results.json`, no browser.
+`--markdown` also writes a section per route with a `| Width | Before | After |` table (right
+before, left after, `(h±Npx)` on a height change) linking the shots relative to that file. `report.html` has a
 filterable route sidebar coloured by `--threshold` and a summary of only the differing
 shots. `evidence.html`: a Parity / Differs / Not verified banner, the `renderdiff:` line,
 the verdict file as plain text, coverage, and cards for shots that aren't clean, then
