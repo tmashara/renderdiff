@@ -84,3 +84,6 @@ After a fresh final run (never after `--rerun-failed`), write the four parts to 
 `evidence.html`. Offer to publish it as an Artifact for a link that opens in a browser; a ticket
 attachment is the archive copy. Accepted entries are OS-specific: build it on the OS that
 recorded them.
+
+For an intended change (a redesign), run with `--threshold 0 --no-recheck` and
+`report <out> --markdown pr.md` for the PR description's before/after tables.

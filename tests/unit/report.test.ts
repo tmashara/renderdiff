@@ -153,6 +153,35 @@ describe("writeEvidence", () => {
   });
 });
 
+describe("renderdiff report --markdown", () => {
+  test("a section per route, right as before, left as after, links relative to the file", async () => {
+    const out = path.join(tempDir(), "shot out");
+    fs.mkdirSync(out);
+    const imgs = (stem: string) => ({
+      left: `${stem}.left.png`,
+      right: `${stem}.right.png`,
+      diff: `${stem}.diff.png`,
+    });
+    const results = [
+      shot("/", { images: imgs("index.1440"), heightDelta: 24 }),
+      shot("/", { width: 375, images: imgs("index.375") }),
+      { ...shot("/b"), status: "error", error: "boom" } as RouteResult,
+    ];
+    writeResults(results, meta({ widths: [1440, 375] }), out, []);
+    const md = path.join(out, "..", "pr", "pr.md");
+    const r = await runCli(["report", out, "--markdown", md], { noOut: true });
+    assert.equal(r.code, 0, r.stderr);
+    const text = fs.readFileSync(md, "utf8");
+    assert.deepEqual(text.match(/^## .*/gm), ["## /", "## /b"]);
+    assert.match(text, /Before: https:\/\/example\.com\/ {2}\nAfter: http:\/\/localhost:3000\//);
+    assert.deepEqual(text.match(/^\| \d+.*/gm), [
+      "| 1440 (h+24px) | ![before](../shot%20out/index.1440.right.png) | ![after](../shot%20out/index.1440.left.png) |",
+      "| 375 | ![before](../shot%20out/index.375.right.png) | ![after](../shot%20out/index.375.left.png) |",
+      "| 1440 | error: boom | |",
+    ]);
+  });
+});
+
 describe("verdict", () => {
   const error = { ...shot("/e"), status: "error", error: "boom" } as RouteResult;
   const at = (score: number) => shot("/a", { score, diffPixels: 1 });

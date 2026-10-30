@@ -182,7 +182,7 @@ const HELP = `
 
     renderdiff http://localhost:3000 https://example.com / /about
     renderdiff http://localhost:3000 https://example.com /pricing::/plans
-    renderdiff report <out-dir> [--verdict <file>] [--title <text>]
+    renderdiff report <out-dir> [--verdict <file>] [--title <text>] [--markdown <file>]
     renderdiff merge <full-out> <partial-out> --out <dir>
     renderdiff probe <url> [--width <n>] [--loads <n>]
 
@@ -208,7 +208,9 @@ const HELP = `
 
   renderdiff report reads results.json in <out-dir>, rewrites report.html, and writes
   evidence.html beside it: one self-contained page (crops embedded) with a parity banner and
-  the --verdict file's text.
+  the --verdict file's text. --markdown <file> also writes a before/after table per route
+  (right before, left after, links to the shots) for a PR description; for an intended change,
+  run with --threshold 0 --no-recheck first.
 
   renderdiff merge writes <full-out>'s results to --out with each shot <partial-out> also
   has replaced by the partial run's, and its other shots added. Both must compare the same origins.
@@ -359,10 +361,10 @@ async function sitemapRoutes(spec: string | true, routes: Route[]): Promise<Rout
 async function report(argv: string[]): Promise<never> {
   try {
     let dir: string | undefined;
-    const opt: { "--verdict"?: string; "--title"?: string } = {};
+    const opt: { "--verdict"?: string; "--title"?: string; "--markdown"?: string } = {};
     for (let i = 0; i < argv.length; i++) {
       const v = argv[i]!;
-      if (v === "--verdict" || v === "--title") {
+      if (v === "--verdict" || v === "--title" || v === "--markdown") {
         const value = argv[++i];
         if (value === undefined) throw new Error(`${v} needs a value`);
         opt[v] = value;
@@ -371,16 +373,19 @@ async function report(argv: string[]): Promise<never> {
       else dir = v;
     }
     if (!dir)
-      throw new Error("usage: renderdiff report <out-dir> [--verdict <file>] [--title <text>]");
+      throw new Error(
+        "usage: renderdiff report <out-dir> [--verdict <file>] [--title <text>] [--markdown <file>]",
+      );
     const file = path.join(dir, "results.json");
     if (!fs.existsSync(file)) throw new Error(`no ${file}; run renderdiff with --out ${dir} first`);
     const verdict =
       opt["--verdict"] === undefined ? null : fs.readFileSync(opt["--verdict"], "utf8");
-    const { writeEvidence, writeReport } = await import("./report.ts");
+    const { writeEvidence, writeMarkdown, writeReport } = await import("./report.ts");
     const data: Results = JSON.parse(fs.readFileSync(file, "utf8"));
     console.log(await writeReport(data.results, data.meta, dir, data.summary.stale));
     const out = await writeEvidence(data, dir, verdict, opt["--title"]);
     console.log(`${out} (${Math.ceil(fs.statSync(out).size / 1024)} KB)`);
+    if (opt["--markdown"]) console.log(writeMarkdown(data, dir, opt["--markdown"]));
     process.exit(0);
   } catch (e) {
     console.error(`✗ ${e instanceof Error ? e.message : String(e)}`);

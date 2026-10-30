@@ -806,3 +806,30 @@ ${neutralized(meta, results)}
   }
   return out;
 }
+
+/** Before/after tables for a PR description: one section per route, right side as before. */
+export function writeMarkdown(data: Results, outDir: string, file: string): string {
+  const link = (img: string) =>
+    encodeURI(path.relative(path.dirname(file), path.join(outDir, img)).split(path.sep).join("/"));
+  const sections = [...Map.groupBy(data.results, name)].map(([rt, shots]) => {
+    const r0 = shots[0]!;
+    const rows = shots.map((r) =>
+      r.status === "error"
+        ? `| ${r.width} | error: ${r.error.replace(/\s+/g, " ").replace(/\|/g, "\\|")} | |`
+        : `| ${r.width}${r.heightDelta ? ` (h${signed(r.heightDelta)}px)` : ""} | ![before](${link(r.images.right)}) | ![after](${link(r.images.left)}) |`,
+    );
+    return [
+      `## ${rt}`,
+      "",
+      `Before: ${data.meta.right}${r0.right}  `,
+      `After: ${data.meta.left}${r0.left}`,
+      "",
+      "| Width | Before | After |",
+      "| --- | --- | --- |",
+      ...rows,
+    ].join("\n");
+  });
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, sections.join("\n\n") + "\n");
+  return file;
+}
