@@ -604,6 +604,16 @@ describe("selector masks", () => {
     assert.deepEqual(parseReport(run.report()!).maskReasons, ["[data-drift] (--mask)"]);
   });
 
+  test("--hide hides a selector on every route, and a bad one drops only its own rule", async () => {
+    const run = await capture(["/drifting"], {
+      extra: ["--no-recheck", "--hide", "text=nope", "--hide", "[data-drift]"],
+    });
+    assert.equal(run.code, 0, context(run));
+    const res = results(run.outDir);
+    assert.equal(result(res, "/drifting", 1440).diffPixels, 0, context(run));
+    for (const s of ["text=nope", "[data-drift]"]) assert.ok(res.meta.hideSelectors.includes(s));
+  });
+
   test("--mask adds to the config's masks", async () => {
     const run = await capture(["/drifting"], {
       config: path.join(CONFIGS, "mask-selector.mjs"),

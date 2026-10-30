@@ -116,6 +116,10 @@ function parseArgs(argv: string[]): Args {
       const s = next().trim();
       if (!s) throw new Error("--mask needs a value");
       (a.masks ??= []).push(s);
+    } else if (v === "--hide") {
+      const s = next().trim();
+      if (!s) throw new Error("--hide needs a value");
+      (a.hideSelectors ??= []).push(s);
     } else if (v === "--selector" || v === "--left-selector" || v === "--right-selector") {
       const s = next();
       if (!s) throw new Error(`${v} needs a value`);
@@ -238,6 +242,7 @@ const HELP = `
     --left-selector <sel>, --right-selector <sel>
                         That side's selector, over --selector.
     --mask <sel>        Paint this selector over on both sides, every route; repeatable.
+    --hide <sel>        Hide this CSS selector on both sides, every route; repeatable.
     --mask-media        Mask every iframe on every route.
     --no-freeze-video   Leave videos playing and video.js overlays visible.
     --storage-state <file>
@@ -270,8 +275,8 @@ const HELP = `
 
   Default widths: 1440, 1152, 896, 704, 375
 
-  Per-route masks, hidden selectors, blocked URLs and route lists go in a config file; CLI flags
-  win over it. See https://github.com/tmashara/renderdiff#readme
+  Per-route masks, blocked URLs and route lists go in a config file; CLI flags win over it
+  or add to it. See https://github.com/tmashara/renderdiff#readme
 `;
 
 const usage = () => {
