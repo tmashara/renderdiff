@@ -60,6 +60,10 @@ const INHERITED = new Set([
   "text-align",
   "text-transform",
   "white-space",
+  "word-break",
+  "overflow-wrap",
+  "hyphens",
+  "text-wrap-style",
   "color",
   "visibility",
 ]);

@@ -192,3 +192,21 @@ test("past 500 links the rest are counted, and the page is left resting", async 
   assert.deepEqual(await snapshot(p, [], BUDGET, null), before);
   await p.close();
 });
+
+test("a lint autofix swapping wrapping or clipping keywords is a finding, not inherited down", async () => {
+  const body =
+    `<div style="width:120px"><code>averyveryverylongidentifierwithoutbreaks<b>x</b></code></div>` +
+    `<span class="h">hidden</span><p>Some text.</p>`;
+  const h = ".h { position: absolute; width: 1px; height: 1px; overflow: hidden }";
+  const { d } = await diff(body, body, [
+    `${h} code { overflow-wrap: anywhere } .h { clip-path: inset(50%) }`,
+    `${h} code { word-break: break-word } .h { clip: rect(0 0 0 0) }`,
+  ]);
+  assert.equal(d.dom, 0);
+  assert.deepEqual(changed(d), [
+    ["body > div > code", "word-break"],
+    ["body > div > code", "overflow-wrap"],
+    ["body > span.h", "clip"],
+    ["body > span.h", "clip-path"],
+  ]);
+});
