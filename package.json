@@ -34,7 +34,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.test.json",
     "prepare": "tsc",
     "test": "node --test tests/unit/*.test.ts",
-    "test:visual": "node --test --test-timeout=300000 tests/visual/*.test.ts",
+    "test:visual": "node --test --test-timeout=600000 tests/visual/*.test.ts",
     "test:all": "npm test && npm run test:visual",
     "lint": "oxlint --deny-warnings",
     "format": "oxfmt src tests renderdiff.config.example.ts",

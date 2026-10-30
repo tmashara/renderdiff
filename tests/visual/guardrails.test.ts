@@ -302,7 +302,6 @@ describe("consent chrome", () => {
 });
 
 test("a page whose CSP refuses inline styles still gets renderdiff's CSS", async () => {
-  // Only the left side has a consent banner; parity means the hide selectors applied.
   const run = await capture(["/csp"]);
   assert.equal(run.code, 0, context(run));
   assert.equal(cardFor(run, "/csp").diffPixels, 0, context(run));
