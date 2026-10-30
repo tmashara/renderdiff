@@ -376,7 +376,7 @@ file, not each line), scores rounded down to four decimals (so a shot that diffe
 ```jsonc
 {
   "meta": {
-    "tool": "renderdiff", "version": "0.10.0", "generatedAt": "…",
+    "tool": "renderdiff", "version": "0.11.0", "generatedAt": "…",
     "left": "http://localhost:3000", "right": "https://example.com",
     "widths": [1440, 375], "threshold": null,
     "clock": "…",                // the instant both sides' clocks start at
