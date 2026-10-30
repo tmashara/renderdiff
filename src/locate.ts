@@ -73,7 +73,19 @@ export const PROPS = [
 ];
 
 /** `--computed` reads these too; pixel mode's `changed`, and so accepted fingerprints, don't. */
-export const SNAP_PROPS = [...PROPS, "outline", "text-decoration-line", "content"];
+export const SNAP_PROPS = [
+  ...PROPS,
+  "outline",
+  "text-decoration-line",
+  "word-break",
+  "overflow-wrap",
+  "hyphens",
+  "text-wrap-style",
+  "clip",
+  "clip-path",
+  "mask",
+  "content",
+];
 
 /** Links and controls forced into each state, per page per side. */
 export const MAX_STATES = 500;

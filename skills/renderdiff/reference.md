@@ -136,9 +136,8 @@ not a route error: the pixel result stands.
 
 ## `--computed`
 
-After each shot, reads the computed style (the `dom` properties plus `content`) of every
-rendered element and its `::before`/`::after`, on both sides, and compares the markup. One
-block after the rows:
+After each shot, reads the computed style of every rendered element and its
+`::before`/`::after`, on both sides, and compares the markup. One block after the rows:
 
 ```
 computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so findings there are hints
@@ -149,6 +148,10 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
   unmatched /pricing@1440 -body > main > section.plans:nth-of-type(3)
 ```
 
+- The properties are a fixed list, not every one: the `dom` ones plus `outline`,
+  `text-decoration-line`, `word-break`, `overflow-wrap`, `hyphens`, `text-wrap-style`,
+  `clip`, `clip-path`, `mask` and `content` (full list: docs/output.md in the renderdiff
+  repo). `0 findings` means none of those changed, not that no style did.
 - A finding is `key prop left→right`, then up to three `route@widths` (`+N routes`). One per
   distinct change across the run, most widespread first, accepted shots included; 20 shown.
   `--progress` rows say `computed dom identical, N change(s)` or `dom differs (N)`.

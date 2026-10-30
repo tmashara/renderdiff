@@ -166,11 +166,25 @@ DOM and iframes aren't searched.
 ## Computed styles (`--computed`)
 
 With `--computed`, after the shot renderdiff reads the computed style of every rendered
-element on both sides: the properties `dom` compares, plus `outline`,
-`text-decoration-line` and `content`, and `::before` and
-`::after` wherever they generate content. Masked subtrees and `script`/`style`-like tags
+element on both sides, and of `::before` and `::after` wherever they generate content.
+Masked subtrees and `script`/`style`-like tags
 are skipped; a `display: none` element is read, its subtree isn't. Script-driven
-animations are finished first. The summary gets one block, after the rows:
+animations are finished first.
+
+It reads a fixed list of properties, not every one, so `0 findings` means none of these
+changed:
+
+- Layout: `display`, `position`, `float`, `flex-direction`, `flex-wrap`,
+  `justify-content`, `align-items`, `gap`, `grid-template-columns`, `z-index`.
+- Box: `margin-*`, `padding-*`, `border-*-width`, `border-top-color`,
+  `border-top-left-radius`, `outline`, `width`, `height`.
+- Text: `font-family`, `font-size`, `font-weight`, `line-height`, `letter-spacing`,
+  `text-align`, `text-transform`, `text-decoration-line`, `white-space`, `word-break`,
+  `overflow-wrap`, `hyphens`, `text-wrap-style`, `color`.
+- Paint: `background-color`, `background-image`, `box-shadow`, `opacity`, `transform`,
+  `visibility`, `clip`, `clip-path`, `mask`, `content`.
+
+The summary gets one block, after the rows:
 
 ```
 computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so findings there are hints
@@ -197,7 +211,8 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
     style change under it then shows only as `dom differs` and `unmatched`, not as a
     finding.
 - One change high in the tree is one finding. An inherited property (`font-*`,
-  `line-height`, `letter-spacing`, `text-*`, `white-space`, `color`, `visibility`) is
+  `line-height`, `letter-spacing`, `text-*`, `white-space`, `word-break`, `overflow-wrap`,
+  `hyphens`, `color`, `visibility`) is
   dropped where the parent has the same change, so a `body` font change is one line, not
   one per element. A `width` is dropped inside a parent whose width changed, and a
   `height` around a child whose height changed, so the box that caused it is what's left.
