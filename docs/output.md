@@ -310,7 +310,9 @@ any difference fails, so there is no amber. The summary on top counts routes, sh
 differing shots, errors, accepted and stale accepted; gives the mean and the worst score,
 linked to its card; and lists only the differing shots, by route. Findings repeated on two
 or more routes, and with `--computed` the style findings, sit collapsed under it. Then a
-card per shot, lowest score first.
+card per shot, lowest score first, showing left, right and diff side by side; the sidebar's
+**Slider view** toggle swaps those for both shots stacked, tops aligned, with a divider you
+drag anywhere on the shot to reveal left on one side and right on the other.
 
 ## evidence.html
 

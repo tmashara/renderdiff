@@ -313,6 +313,7 @@ function sidebar(results: RouteResult[], threshold: number | null): string {
   <span class="ws">${shots.map((r) => shotLink(r, threshold)).join("")}</span></li>`;
   });
   return `<nav class="side">
+<label><input id="slide" type="checkbox"> Slider view</label>
 <input id="q" type="search" aria-label="Filter routes" placeholder="Filter ${routes.size} route(s)" autocomplete="off">
 <ul id="routes">
 ${items.join("\n")}
@@ -324,6 +325,9 @@ ${items.join("\n")}
     const v = q.value.trim().toLowerCase();
     for (const li of document.querySelectorAll("#routes li")) li.hidden = !li.dataset.route.includes(v);
   };
+  document.addEventListener("input", (e) => {
+    if (e.target.type === "range") e.target.parentNode.style.setProperty("--x", e.target.value + "%");
+  });
 </script>`;
 }
 
@@ -470,6 +474,11 @@ function card(r: ComparedResult): string {
     <figure><figcaption>right</figcaption><a href="${imgs.right}" target="_blank"><img loading="lazy" src="${imgs.right}"></a></figure>
     <figure><figcaption>diff</figcaption><a href="${imgs.diff}" target="_blank"><img loading="lazy" src="${imgs.diff}"></a></figure>
   </div>
+  <div class="slider" style="--x:50%">
+    <img loading="lazy" src="${imgs.right}">
+    <div class="l"><img loading="lazy" src="${imgs.left}"></div>
+    <input type="range" value="50" aria-label="Divider: left shot on the left, right shot on the right">
+  </div>
 </article>`;
 }
 
@@ -516,7 +525,7 @@ const REPORT_STYLE = `<style>
   main { padding:2rem; min-width:0 }
   .side { position:sticky; top:0; height:100vh; overflow:auto; padding:1rem;
           border-right:1px solid var(--line); font-size:12px }
-  .side input { width:100%; padding:.35rem .5rem; margin-bottom:.5rem; font:inherit; color:var(--fg);
+  .side #q { width:100%; padding:.35rem .5rem; margin-bottom:.5rem; font:inherit; color:var(--fg);
                 background:var(--card); border:1px solid var(--line); border-radius:4px }
   .side ul { list-style:none; padding:0; margin:0 }
   .side li { padding:.3rem 0; border-bottom:1px solid var(--line) }
@@ -528,6 +537,17 @@ const REPORT_STYLE = `<style>
   .summary .differs { font-size:13px; padding-left:0; list-style:none }
   .card { scroll-margin-top:1rem }
   .card:target { outline:2px solid #509ee3 }
+  .side label { display:block; margin-bottom:.5rem }
+  body:has(#slide:checked) .grid, body:not(:has(#slide:checked)) .slider { display:none }
+  /* ponytail: both shots fit the card width, so a width delta scales them apart */
+  .slider { display:grid; position:relative }
+  .slider > * { grid-area:1/1; align-self:start }
+  .slider .l { clip-path:inset(0 calc(100% - var(--x)) 0 0) }
+  .slider input { appearance:none; align-self:stretch; width:100%; height:100%; margin:0;
+                  opacity:0; cursor:ew-resize }
+  .slider::after { content:""; position:absolute; top:0; bottom:0; left:var(--x); width:2px;
+                   margin-left:-1px; background:#509ee3; pointer-events:none }
+  .slider:focus-within { outline:2px solid #509ee3 }
   @media (max-width:900px) {
     body { display:block }
     .side { position:static; height:auto; max-height:40vh; border-right:0; border-bottom:1px solid var(--line) }
