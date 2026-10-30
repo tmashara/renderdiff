@@ -24,9 +24,17 @@ results.json · Gotchas.
 - **Routes** are literal (no globs, no discovery): every template or page the change can
   reach, from the sitemap or router; skip search results, pagination and admin. `--sitemap`
   adds the right side's sitemap paths (files dropped); still list what it misses: the 404
-  page, states, moved pairs. For removed CSS, every page where its selectors could match.
-  Pages you don't list go under Not verified.
+  page, states, moved pairs. Pages you don't list go under Not verified.
   Routes normalize to no trailing slash (`/` stays `/`). `--dry-run` shows how each was read.
+- **CSS-only change:** diff the two build outputs first: every CSS file, plus the HTML and JS
+  (minified CSS: `tr '}' '\n'` gives one rule per line; pair hashed file names by their stem;
+  ignore `.map` files and `sourceMappingURL`). If they match apart from asset hashes, no route
+  needs shots; say so in the report. If HTML or JS differ too, the change isn't CSS-only. For
+  each changed or removed rule, list every page where its selectors could match: grep the
+  built HTML for its classes and ids. Element-only, `:root`/`html`/`body` and custom-property
+  rules reach every route. Classes that exist only after JS runs (`.is-open`,
+  client-rendered components) aren't in the HTML: shoot those states with a `before` hook,
+  or list them under Not verified.
 - **Baseline when the change is already made:** serve the base build twice, on two ports, and
   diff it against itself; whatever differs varies per load.
 - **States:** only the loaded state is shot. Hover, focus, open menus and dialogs need a
