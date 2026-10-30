@@ -808,9 +808,18 @@ ${neutralized(meta, results)}
 }
 
 /** Before/after tables for a PR description: one section per route, right side as before. */
-export function writeMarkdown(data: Results, outDir: string, file: string): string {
+export function writeMarkdown(
+  data: Results,
+  outDir: string,
+  file: string,
+  baseUrl?: string,
+): string {
   const link = (img: string) =>
-    encodeURI(path.relative(path.dirname(file), path.join(outDir, img)).split(path.sep).join("/"));
+    baseUrl
+      ? `${baseUrl.replace(/\/+$/, "")}/${encodeURI(img)}`
+      : encodeURI(
+          path.relative(path.dirname(file), path.join(outDir, img)).split(path.sep).join("/"),
+        );
   const sections = [...Map.groupBy(data.results, name)].map(([rt, shots]) => {
     const r0 = shots[0]!;
     const rows = shots.map((r) =>

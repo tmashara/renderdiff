@@ -180,6 +180,28 @@ describe("renderdiff report --markdown", () => {
       "| 1440 | error: boom | |",
     ]);
   });
+
+  test("--base-url links the shots under that URL, not relative to the file", async () => {
+    const out = path.join(tempDir(), "shot out");
+    fs.mkdirSync(out);
+    const images = { left: "index.1440.left.png", right: "index.1440.right.png", diff: "x.png" };
+    writeResults([shot("/", { images })], meta(), out, []);
+    const md = path.join(out, "..", "pr", "pr.md");
+    const args = ["report", out, "--markdown", md, "--base-url", "https://r.example/pr-1/"];
+    const r = await runCli(args, { noOut: true });
+    assert.equal(r.code, 0, r.stderr);
+    assert.deepEqual(fs.readFileSync(md, "utf8").match(/^\| \d+.*/gm), [
+      "| 1440 | ![before](https://r.example/pr-1/index.1440.right.png) | ![after](https://r.example/pr-1/index.1440.left.png) |",
+    ]);
+  });
+
+  test("--base-url without --markdown is a usage error", async () => {
+    const r = await runCli(["report", tempDir(), "--base-url", "https://r.example"], {
+      noOut: true,
+    });
+    assert.equal(r.code, 2);
+    assert.match(r.stderr, /--base-url needs --markdown/);
+  });
 });
 
 describe("verdict", () => {

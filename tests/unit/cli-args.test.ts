@@ -75,7 +75,14 @@ describe("help and version", () => {
       if (!options.includes(f))
         problems.push(`the README table lists ${f}, --help's Options don't`);
 
-    const foreign = new Set(["--immutable"]); // yarn install, in docs/case-study.md
+    // yarn install in docs/case-study.md; wrangler and git in docs/output.md
+    const foreign = new Set([
+      "--immutable",
+      "--production-branch",
+      "--project-name",
+      "--branch",
+      "--depth",
+    ]);
     for (const f of ["README.md", ...md("docs"), ...md("skills")])
       for (const flag of flags(read(f)))
         if (!known.has(flag) && !foreign.has(flag))
