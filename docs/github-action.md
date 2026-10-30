@@ -14,7 +14,7 @@ exits non-zero.
     threshold: "0.999"
 ```
 
-`v0` follows the latest 0.x release. Pin a full tag (`@v0.11.0`) to stay put.
+`v0` follows the latest 0.x release. Pin a full tag (`@v0.12.0`) to stay put.
 
 ## Inputs
 
