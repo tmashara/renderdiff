@@ -128,7 +128,7 @@ Report (`--open`, for a human): green from 99.5%, amber to 97%, red below.
 | `page is Npx tall at Wpx wide, past the …px sanity ceiling …` | Taller than 57,600,000px ÷ width (never under 40,000px): a runaway layout, not a page. A long page still compares one element with `--selector` or `@sel` (`element is …` when that element itself is past it). |
 | `selector "…" matched N elements on left (/a), expected 1` | Make it unique (an id, `data-test`, `>> nth=0`), or list the route once per element. |
 | `selector "…" has no box on …` / `is off the page on …` | Matched an element not rendered (`display: none`, zero size) or outside the page. |
-| `before hook failed on left: …` | The hook threw (`beforeShot hook failed …` for that hook). Never retried. |
+| `before hook failed on left: …` | The hook threw (`beforeShot hook failed …` for that hook). Never retried. `locator.waitFor: Timeout` there means the state the hook waits for wasn't reached on that side. |
 | `timeout after 120s at settle on left` | That side never finished the step (`load`, `before hook`, `settle`, `beforeShot hook`, `screenshot`): a hung script, a dead renderer, a hook that never resolves. Retried once in a fresh page, except a hung hook. For a page that is just very slow, raise `RENDERDIFF_SHOT_TIMEOUT` (seconds). |
 
 A failed `--computed` snapshot (`snapshot failed on /a@1440 (…)` on the `computed:` line) is
@@ -295,6 +295,10 @@ aria: identical on 2 of 3 route(s), differs /pricing
   banner *both* sides show, sign in, set a carousel to slide 1 on both. Not: branching on
   `side` to make the sides look alike, hiding or removing an element on one side. `side` is for
   markup that legitimately differs. Say in the verdict that a hook ran (`hook: true`).
+  End the hook by waiting for the state it opened, or a click that did nothing shoots the
+  closed state on both sides and matches:
+  `await page.locator(".menu[data-open]").waitFor({ timeout: 5_000 })` (strict: a unique
+  selector, or `.first()`). Guard with `isVisible()` only optional things like a banner.
   `beforeShot` (same forms) runs after settle, right before masks and the shot: for state the
   settle's scroll pass changes, e.g. a scroll-spy nav. Nothing settles after it, so await it.
 - **Signed-in pages:** `npx playwright codegen --save-storage=auth.json <login url>`, then
