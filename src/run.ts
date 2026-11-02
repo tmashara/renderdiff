@@ -277,6 +277,7 @@ export async function run({
       else jobs.push({ route, width });
     }
   }
+  const reused = new Set(results);
 
   const stems = slugs(routes);
   const launched = jobs.length ? await launch() : null;
@@ -722,8 +723,9 @@ export async function run({
       `stale accepted: ${stale.map((a) => `${a.route}@${a.width}`).join(" ")} — ${acceptedFile}`,
     );
   }
-  if (progress) summarize(results, names, reportPath, resultsPath);
-  else console.log(compact(results, names, resultsPath, cfg.threshold));
+  const fresh = results.filter((r) => !reused.has(r));
+  if (progress) summarize(results, names, reportPath, resultsPath, fresh);
+  else console.log(compact(results, names, resultsPath, cfg.threshold, fresh));
 
   if (open) {
     const opener = process.platform === "darwin" ? "open" : "xdg-open";
@@ -924,8 +926,11 @@ async function boxMask(png: Buffer, boxes: Box[]): Promise<Uint8Array> {
   return mask;
 }
 
+/** A selector ending in a bare tag, maybe `:nth-of-type(n)`: masking it would hide real changes. */
+const BARE = /(^|[\s>+~])[a-z][\w-]*(:nth-of-type\(\d+\))?$/;
+
 /** Routes whose right side differed between two loads, and the mask that would cover it. */
-function fmtVaries(results: RouteResult[], routes: string[]): string[] {
+export function fmtVaries(results: RouteResult[], routes: string[]): string[] {
   const rows = results.filter((r): r is ComparedResult => r.status === "compared" && !!r.varies);
   const selectors = (rs: ComparedResult[]) => [
     ...new Set(
@@ -943,15 +948,15 @@ function fmtVaries(results: RouteResult[], routes: string[]): string[] {
     const px = rs.reduce((n, r) => n + r.variesPixels!, 0);
     out.push(
       `varies ${route} @${rs.map((r) => r.width).join(",")}  ` +
-        `${px.toLocaleString("en-US")}px  ${sels.join(" ") || "(not located)"}`,
+        `${px.toLocaleString("en-US")}px painted out  ${sels.join(" ") || "(not located)"}`,
     );
-    for (const s of sels) {
+    for (const s of sels.filter((s) => !BARE.test(s))) {
       masks.push(
         `{ selector: ${JSON.stringify(s)}, urlPath: ${JSON.stringify(rs[0]!.right)}, reason: "varies per load" }`,
       );
     }
   }
-  const sels = selectors(rows);
+  const sels = selectors(rows).filter((s) => !BARE.test(s));
   if (sels.length) {
     out.push(`  --mask ${sels.map((s) => `'${s.replace(/'/g, `'\\''`)}'`).join(" --mask ")}`);
     out.push(`  masks: [${masks.join(", ")}]`);
@@ -964,6 +969,7 @@ function summarize(
   routes: string[],
   reportPath: string,
   resultsPath: string,
+  found: RouteResult[],
 ) {
   const compared = results.filter((r): r is ComparedResult => r.status === "compared");
 
@@ -992,13 +998,13 @@ function summarize(
     for (const e of errors) console.log(`  ${name(e)}@${e.width}: ${e.error}`);
   }
 
-  const repeated = fmtPixelFindings(results);
+  const repeated = fmtPixelFindings(found);
   if (repeated.length) console.log(`\n${repeated.join("\n")}`);
-  const computed = fmtComputed(results, routes);
+  const computed = fmtComputed(found, routes);
   if (computed.length) console.log(`\n${computed.join("\n")}`);
-  const aria = fmtAria(results, routes);
+  const aria = fmtAria(found, routes);
   if (aria.length) console.log(`\n${aria.join("\n")}`);
-  const varies = fmtVaries(results, routes);
+  const varies = fmtVaries(found, routes);
   if (varies.length) console.log(`\n${varies.join("\n")}`);
 
   console.log(`\nReport: ${reportPath}`);
@@ -1034,6 +1040,8 @@ export function compact(
   routes: string[],
   resultsPath: string,
   threshold: number | null,
+  /** The shots whose findings to list: a rerun's own, not the ones it reused. */
+  found = results,
 ): string {
   const out: string[] = [];
   const clean: string[] = [];
@@ -1098,10 +1106,10 @@ export function compact(
   if (accepted.length) out.unshift(`accepted: ${accepted.join(" ")}`);
   if (clean.length) out.unshift(`clean: ${clean.join(" ")}`);
   out.push(
-    ...fmtPixelFindings(results),
-    ...fmtComputed(results, routes),
-    ...fmtAria(results, routes),
-    ...fmtVaries(results, routes),
+    ...fmtPixelFindings(found),
+    ...fmtComputed(found, routes),
+    ...fmtAria(found, routes),
+    ...fmtVaries(found, routes),
   );
   const all = results.filter((r): r is ComparedResult => r.status === "compared");
   const compared = all.filter((r) => !r.accepted);

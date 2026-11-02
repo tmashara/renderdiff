@@ -236,6 +236,18 @@ describe("--rerun-failed", () => {
     }
   });
 
+  test("lists only what the rerun found, not the reused shots' findings", async () => {
+    const first = await runCli(args(["/drifting", "/color"]));
+    assert.equal(first.code, 1, context(first));
+    assert.match(first.stdout, /^varies \/drifting /m, context(first));
+    const run = await runCli(args(["/drifting", "/color"], ["--rerun-failed"]), {
+      outDir: first.outDir,
+    });
+    assert.equal(run.code, 1, context(run));
+    assert.match(run.stdout, /^rerun: 1 shot\(s\) on 1 route\(s\)/m, context(run));
+    assert.doesNotMatch(run.stdout, /^varies /m, context(run));
+  });
+
   test("a run that doesn't repeat the previous one is refused", async () => {
     const first = await runCli(args(["/color"]));
     assert.equal(first.code, 1, context(first));

@@ -532,7 +532,7 @@ describe("masks", () => {
     assert.equal(r.diffPixels, 0, context(run));
     assert.ok(r.variesPixels! > 0, context(run));
     assert.match(r.varies![0]!.elements![0]!.selector, /drift/, context(run));
-    assert.match(run.stdout, /^varies \/drifting @1440 /m);
+    assert.match(run.stdout, /^varies \/drifting @1440  [\d,]+px painted out  /m);
     assert.match(run.stdout, /^ {2}--mask '/m);
     assert.match(run.stdout, /urlPath: "\/drifting", reason: "varies per load" \}\]$/m);
   });
