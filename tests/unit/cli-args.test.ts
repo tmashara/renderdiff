@@ -128,6 +128,12 @@ describe("required arguments", () => {
   test("a missing --left is named, in the singular", () =>
     rejects(["/a", "--right", R, "--dry-run"], "left origin is required (first positional URL"));
 
+  test("an origin without a scheme is refused", () =>
+    rejects(
+      ["/a", "--left", "localhost:3000", "--right", R, "--dry-run"],
+      "left origin must be an http(s) URL, got localhost:3000",
+    ));
+
   test("a missing --right is named", () =>
     rejects(["/a", "--left", L, "--dry-run"], "right origin is required (second positional URL"));
 
@@ -462,6 +468,9 @@ describe("probe", () => {
     await rejects(["probe", U, R], "probe takes one URL");
     await rejects(["probe", U, "/b"], "probe takes one URL");
   });
+
+  test("refuses a URL without a scheme", () =>
+    rejects(["probe", "--left", "localhost:3000"], "not an http(s) URL: localhost:3000"));
 
   test("refuses --only", () => rejects(["probe", U, "--only", "/a"], "probe does not take --only"));
 

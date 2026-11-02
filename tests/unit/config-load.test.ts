@@ -112,7 +112,7 @@ describe("validation", () => {
       "bad-routes.mjs",
       /`routes\[0\]` must be a string or an object \{ left, right\?, selector\?, before\?, beforeShot\? \}/,
     ],
-    ["bad-widths.mjs", /`widths` must be an array of positive numbers/],
+    ["bad-widths.mjs", /`widths` must be a non-empty array of positive integers/],
     ["bad-threshold.mjs", /`threshold` must be a number between 0 and 1/],
     ["bad-concurrency.mjs", /`concurrency` must be a positive integer/],
     ["bad-mask-shape.mjs", /`masks` must be an array/],
@@ -153,7 +153,22 @@ describe("validation", () => {
       '{ masks: [{ reason: "x", selector: "a", locate: (p) => p.locator("a") }] }',
       /`masks\[0\]` needs exactly one of `selector` or `locate`/,
     ],
-    ['{ masks: [{ reason: "x", selector: 1 }] }', /`masks\[0\]\.selector` must be a string/],
+    [
+      '{ masks: [{ reason: "x", selector: 1 }] }',
+      /`masks\[0\]\.selector` must be a non-empty string/,
+    ],
+    [
+      '{ masks: [{ reason: "x", selector: " " }] }',
+      /`masks\[0\]\.selector` must be a non-empty string/,
+    ],
+    [
+      '{ masks: [{ reason: "x", selector: "a", urlpath: "/a" }] }',
+      /`masks\[0\]\.urlpath` is not a mask key \(selector, locate, reason, urlPath\)/,
+    ],
+    ['{ lfet: "http://x.test" }', /`lfet` is not a config key \(left, right, routes,/],
+    ['{ hideSelectors: [" "] }', /`hideSelectors` must be an array of non-empty strings/],
+    ["{ widths: [] }", /`widths` must be a non-empty array of positive integers/],
+    ["{ widths: [375.5] }", /`widths` must be a non-empty array of positive integers/],
     [
       '{ routes: [{ left: "/a", selector: 1 }] }',
       /`routes\[0\]\.selector` must be a non-empty string or \{ left, right \}/,
