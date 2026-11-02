@@ -268,7 +268,8 @@ const HELP = `
                         keeping the rest. Same origins, routes and widths as that run.
     --only <route|file> Run only the config's routes with this path (or pair), their
                         hooks and selectors kept; '/a @sel' narrows to that selector.
-                        Repeatable. A value naming a file in cwd lists one per line.
+                        Repeatable. A value naming a file in cwd lists one per line,
+                        # lines skipped.
     --cache-right       Replay the right side's network from the last --cache-right run
                         in --out, if under an hour old and covering every shot; else load
                         it live and record it. The page still renders and is shot fresh.
@@ -479,7 +480,7 @@ function only(values: string[], routes: Route[]): Route[] {
           .split(/\r?\n/)
           .map((l) => l.trim())
           .map((l, i) => [l, `--only ${v}: "${l}" (line ${i + 1})`] as const)
-          .filter(([l]) => l)
+          .filter(([l]) => l && !l.startsWith("#"))
       : [[v, `--only ${v}`] as const];
     if (file && !specs.length) throw new Error(`--only ${v} lists no routes`);
     for (const [spec, shown] of specs) {

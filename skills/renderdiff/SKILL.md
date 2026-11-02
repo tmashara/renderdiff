@@ -35,7 +35,7 @@ Pixels decide the score and the exit code in every mode.
    § Reference and routes; moved page, component, sign-in, click state: § Scoping.
    The project has a `renderdiff-<project>` skill: its build/serve commands, ports and config
    replace this step and step 2's masks. None, and the project will be run more than once:
-   [init.md](init.md) generates one (`/renderdiff init`).
+   offer `/renderdiff init` ([init.md](init.md)) after this check.
 2. **Baseline**: base vs base. Before changing code, the untouched change side against the
    reference; if the change is already made, the base build served on two ports. Whatever
    differs varies per load: mask it (a `varies` line prints the mask; `--mask-media` for

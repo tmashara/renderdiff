@@ -6,9 +6,10 @@ routes, states, noise), nothing it already says. § names are sections of
 
 ```
 renderdiff-<project>/
-  SKILL.md                     the skeleton below, ~150 lines at most
+  SKILL.md                     the skeleton below
   <app>/renderdiff.config.mjs  every setting: built-in options, masks with reason, hooks; the why in comments
   <app>/routes.txt             grouped, a comment per group, # skipped with the reason
+  <app>/serve.json             the host's URL rules, for `npx serve`
   scripts/                     only what the CLI and `npx serve` don't cover
 ```
 
@@ -34,35 +35,41 @@ source (product edits for a test).
 1. **Build.** Take the command from the real deploy (CI workflow, `vercel.json`
    `buildCommand`, `netlify.toml`, env like `DEPLOY_ENV`), not from `package.json` alone.
    Build the base in a `git worktree` and record the command that worked and its output dir.
-2. **Serve.** `npx serve -l <port> -c ../serve.json <dist>`, the `serve.json` mirroring the
-   host's clean URLs, trailing slashes and redirects (§ Reference and routes). Curl a sample
-   of routes against both and compare status and final URL with the hosting rules; a script
-   only if `serve` can't match them. One port per side plus a second base port, per app.
-   Stop with `kill $(lsof -tiTCP:<port> -sTCP:LISTEN)`: `$!` is npx, not the server. Never
-   `pkill`: other runs share the machine.
+2. **Serve.** `npx serve -l <port> -c <absolute path to <app>/serve.json> <dist>` (`-c` is
+   read against `<dist>`), the `serve.json` mirroring the host's clean URLs, trailing slashes
+   and redirects (§ Reference and routes). Curl a sample of routes against both and compare
+   status and final URL with the hosting rules; a script only if `serve` can't match them.
+   One port per side plus a second base port, per app. Stop with
+   `kill $(lsof -tiTCP:<port> -sTCP:LISTEN)`: `$!` is npx, not the server. Never `pkill`:
+   other runs share the machine.
 3. **Routes.** The sitemap, plus built `*.html` it misses (404, thank-you, noindex), minus
-   `http-equiv="refresh"` stubs. Collections: one page per template.
+   `http-equiv="refresh"` stubs. Collections: one page per template. A skipped route is its
+   own line starting with `#`; a `# reason` after a path is read as part of the route.
 4. **States**, from the source: menus, hamburger, tabs, tooltips, search, version selectors.
-   Map `?state=<name>` to a hook in the config itself (below); the hook clicks with no
-   `isVisible()` guard and ends waiting for the open state (§ Scoping). One component:
-   `'/path @sel'`.
-5. **Base vs base** on a sample (one page per template, every state). The run finds the
-   noise (`varies` lines, `renderdiff probe`), not a read of the source. Per noise, the first
-   that holds: a built-in (`maskMedia`, `freezeVideo`, `lottieFrame`, `hideSelectors`,
+   A plain path with `?state=<name>` (no pair, no `@sel`), mapped to a hook in the config
+   (below). The hook clicks with no `isVisible()` guard and ends waiting for the open state
+   (§ Scoping); a state that exists only at some widths returns early on the hook's `width`.
+   A mask for a state route needs its full path, query included, or no `urlPath`.
+   One component: `'/path @sel'`.
+5. **Base vs base** on a sample (one page per template, every state): a list file for
+   `--only`, so hooks apply (routes on the command line replace the config's). The run finds
+   the noise (`varies` lines, `renderdiff probe`; `probe` runs only the top-level `before`,
+   so a state URL is probed closed), not a read of the source. Per noise, the first that
+   holds: a built-in (`maskMedia`, `freezeVideo`, `lottieFrame`, `hideSelectors`,
    `blockUrlPatterns`), a hook that removes the cause on both sides, a mask with a `reason`
-   (§ Masks, accepts and thresholds). A page past the area ceiling goes under `# skipped`.
-   Repeat until clean; time it and estimate the full run.
+   (§ Masks, accepts and thresholds). A page past the area ceiling (§ Errors): `@sel` on its
+   main element, else `# skipped`. Repeat until clean; time it and estimate the full run.
 6. **Write the project skill** (skeleton below). Record `renderdiff --version`.
 7. **Feedback**: ask whether to add the section below. No: leave it out.
 8. **Check** each app with `--config renderdiff.config.mjs --dry-run` (every route read as
-   meant, every state with its hook), then the base-vs-base run from the written skill's own
-   commands.
+   meant), then the sample's base-vs-base run from the written skill's own commands.
 9. **Report**: what was created, what base vs base checked and on which sample, what not.
 
 ```js
 import { readFileSync } from "node:fs";
 const states = {
-  menu: async (page) => {
+  menu: async (page, { width }) => {
+    if (width < 1024) return;
     await page.locator("#menu-button").click();
     await page.locator("#menu[data-open]").waitFor({ timeout: 5_000 });
   },
@@ -71,9 +78,15 @@ const routes = readFileSync(new URL("./routes.txt", import.meta.url), "utf8")
   .split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"))
   .map((r) => {
     const state = new URL(r, "http://x").searchParams.get("state");
+    if (state && !states[state]) throw new Error(`routes.txt: no hook for state=${state}`);
     return state ? { left: r, before: states[state] } : r;
   });
-export default { left: "http://localhost:4011", right: "http://localhost:4010", routes };
+export default {
+  left: "http://localhost:4011",
+  right: "http://localhost:4010",
+  routes,
+  outDir: "/tmp/renderdiff-<project>-<app>",
+};
 ```
 
 ## Project SKILL.md skeleton
@@ -89,14 +102,18 @@ description: <project> specifics for renderdiff runs (<apps>). Use with the `ren
 
 # renderdiff on <project>
 
-Load the `renderdiff` skill first and follow its loop; this adds only what is specific here.
-Written for renderdiff <version>. Settings: `<app>/renderdiff.config.mjs`.
+Load the `renderdiff` skill first and follow its loop, its Feedback included; this adds only
+what is specific here. Written for renderdiff <version>. Settings: `<app>/renderdiff.config.mjs`.
 
 ## Build
 <per app: command from the deploy, output dir, worktree notes, secrets>
 
 ## Serve
 <command; table: app | change (left) | base (right) | second base; stop by port>
+
+## Routes
+<how routes.txt was made (sitemap + unlisted html − stubs, one page per template), to redo
+when the site changes>
 
 ## Run
 <per app: the command from <app>/, in the background; base vs base against the second base
