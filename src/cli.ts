@@ -233,9 +233,10 @@ const HELP = `
   has replaced by the partial run's, and its other shots added. Both must compare the same origins.
 
   renderdiff probe loads one URL --loads times (default 8, in parallel up to --concurrency),
-  each in a fresh browser context as a run loads a side, and lists the elements whose computed
-  style or position in their parent varies between loads: what to mask. Exits 0 if nothing
-  varies, 1 if something does, 3 if a load errored.
+  each in a fresh browser context as a run loads a side (with the storage state of the config
+  side the URL is on), and lists the elements whose computed style or position in their parent
+  varies between loads: what to mask. Exits 0 if nothing varies, 1 if something does, 3 if a
+  load errored.
 
   Writes report.html, results.json and crops of each change to --out. Exits 1 if any
   shot differs and isn't accepted (with --threshold, only if one scores below it;
@@ -496,13 +497,25 @@ function only(values: string[], routes: Route[]): Route[] {
   return routes.filter((r) => picked.has(r));
 }
 
+const PROBE_FLAGS = [
+  "--help",
+  "--version",
+  "--left",
+  "--config",
+  "--width",
+  "--concurrency",
+  "--mask",
+  "--hide",
+  "--mask-media",
+  "--no-freeze-video",
+  "--storage-state",
+];
+
 /** `renderdiff probe <url>`: load one URL several times and list what varies between loads. */
 async function probe(a: Args, loads: number): Promise<never> {
   if (!a.left) die("probe needs a URL: renderdiff probe <url>");
   if (a.right || a.routes.length) die("probe takes one URL, with its path");
   if ((a.widths?.length ?? 0) > 1) die("probe takes one --width");
-  if (a.selector) die("probe does not take --selector; it walks the whole page");
-  if (a.only) die("probe does not take --only");
   if (!isHttpUrl(a.left)) die(`not an http(s) URL: ${a.left}`);
   const u = new URL(a.left);
   let route: Route;
@@ -517,7 +530,24 @@ async function probe(a: Args, loads: number): Promise<never> {
   } catch (e) {
     die(e instanceof Error ? e.message : String(e));
   }
+  const at = (o?: string) => !!o && isHttpUrl(o) && new URL(o).origin === u.origin;
+  const side = at(fileConfig.right)
+    ? "right"
+    : at(fileConfig.left)
+      ? "left"
+      : cfg.storageState.right
+        ? "right"
+        : "left";
+  const s = cfg.storageState[side];
+  cfg.storageState = { left: s, right: s };
   if (configPath) console.log(`Config: ${configPath}`);
+  if (s) console.log(`Storage state: ${s} (${side})`);
+  if (!a.widths) {
+    const more = cfg.widths.length > 1;
+    console.log(
+      `Width: ${cfg.widths[0]}${more ? ` (first of ${cfg.widths.join(", ")}; --width <n> for another)` : ""}`,
+    );
+  }
   await preflight(cfg.left, cfg.left);
   const { probe } = await import("./probe.ts");
   try {
@@ -538,6 +568,10 @@ try {
   const argv = process.argv.slice(probing ? 3 : 2);
   if (probing) loads = takeLoads(argv);
   args = parseArgs(argv);
+  const extra =
+    probing &&
+    argv.map((t) => t.split("=")[0]!).find((f) => f.startsWith("--") && !PROBE_FLAGS.includes(f));
+  if (extra) throw new Error(`probe does not take ${extra}`);
 } catch (e) {
   die(e instanceof Error ? e.message : String(e));
 }

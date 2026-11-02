@@ -527,6 +527,50 @@ describe("probe", () => {
     await rejects(["probe", U, "--width", "1440", "--width", "375"], "probe takes one --width");
     await rejects(["probe", U, "--selector", "main"], "probe does not take --selector");
   });
+
+  test("refuses flags it would ignore", async () => {
+    await rejects(["probe", U, "--dry-run"], "probe does not take --dry-run");
+    await rejects(["probe", U, "--out=x"], "probe does not take --out");
+    await rejects(
+      ["probe", U, "--left-storage-state", "s.json"],
+      "probe does not take --left-storage-state",
+    );
+  });
+
+  test("names the width it falls back to", async () => {
+    const r = await runCli(["probe", "http://127.0.0.1:1/a"], { noOut: true });
+    assert.equal(r.code, 2, r.stderr);
+    assert.match(
+      r.stdout,
+      /Width: 1440 \(first of 1440, 1152, 896, 704, 375; --width <n> for another\)/,
+    );
+    const w = await runCli(["probe", "http://127.0.0.1:1/a", "--width", "375"], { noOut: true });
+    assert.equal(w.code, 2, w.stderr);
+    assert.doesNotMatch(w.stdout, /Width:/);
+  });
+
+  test("uses the storage state of the side the URL is on, else the configured one", async () => {
+    const project = (storageState: string) => {
+      const cwd = tempDir();
+      fs.writeFileSync(
+        path.join(cwd, "renderdiff.config.mjs"),
+        `export default { left: "http://127.0.0.1:1", right: "http://127.0.0.1:2", storageState: ${storageState} };`,
+      );
+      for (const f of ["l.json", "r.json"]) fs.writeFileSync(path.join(cwd, f), "{}");
+      return cwd;
+    };
+    const state = async (cwd: string, url: string) => {
+      const r = await runCli(["probe", url], { cwd, noOut: true });
+      assert.match(r.stderr, /not responding/);
+      return r.stdout;
+    };
+    const both = project(`{ left: "l.json", right: "r.json" }`);
+    assert.match(await state(both, "http://127.0.0.1:1/a"), /Storage state: .*l\.json \(left\)$/m);
+    assert.match(await state(both, "http://127.0.0.1:2/a"), /Storage state: .*r\.json \(right\)$/m);
+    assert.match(await state(both, "http://127.0.0.1:3/a"), /Storage state: .*r\.json \(right\)$/m);
+    const left = project(`{ left: "l.json" }`);
+    assert.match(await state(left, "http://127.0.0.1:3/a"), /Storage state: .*l\.json \(left\)$/m);
+  });
 });
 
 describe("preflight", () => {
