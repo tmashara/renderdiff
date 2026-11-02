@@ -16,6 +16,7 @@ import { ACCEPTED_FILE } from "./accept.ts";
 import type { Results } from "./report.ts";
 import {
   alive,
+  isHttpUrl,
   label,
   loadConfig,
   name,
@@ -509,7 +510,7 @@ async function probe(a: Args, loads: number): Promise<never> {
   if ((a.widths?.length ?? 0) > 1) die("probe takes one --width");
   if (a.selector) die("probe does not take --selector; it walks the whole page");
   if (a.only) die("probe does not take --only");
-  if (!URL.canParse(a.left)) die(`not a URL: ${a.left}`);
+  if (!isHttpUrl(a.left)) die(`not an http(s) URL: ${a.left}`);
   const u = new URL(a.left);
   let route: Route;
   try {

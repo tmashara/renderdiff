@@ -390,6 +390,37 @@ const CONFIG_NAMES = [
 const isStrArray = (v: unknown): v is string[] =>
   Array.isArray(v) && v.every((x) => typeof x === "string");
 
+export const isHttpUrl = (s: string) => URL.canParse(s) && /^https?:$/.test(new URL(s).protocol);
+
+type KeysOf<T> = T extends unknown ? keyof T : never;
+const CONFIG_KEYS = Object.keys({
+  left: 0,
+  right: 0,
+  routes: 0,
+  before: 0,
+  beforeShot: 0,
+  storageState: 0,
+  widths: 0,
+  threshold: 0,
+  outDir: 0,
+  concurrency: 0,
+  blockUrlPatterns: 0,
+  hideSelectors: 0,
+  extraCss: 0,
+  masks: 0,
+  computed: 0,
+  aria: 0,
+  maskMedia: 0,
+  freezeVideo: 0,
+  lottieFrame: 0,
+} satisfies Record<keyof RenderdiffConfig, 0>);
+const MASK_KEYS = Object.keys({
+  selector: 0,
+  locate: 0,
+  reason: 0,
+  urlPath: 0,
+} satisfies Record<KeysOf<Mask>, 0>);
+
 /**
  * Load a config file. An explicit `--config` path must exist; otherwise cwd is probed
  * and finding nothing is fine — the CLI works with flags alone.
@@ -447,6 +478,11 @@ function validate(c: Record<string, unknown>, file: string) {
     throw new Error(`${file}: \`${key}\` must be ${expected}`);
   };
 
+  const unknown = Object.keys(c).find((k) => !CONFIG_KEYS.includes(k));
+  if (unknown) {
+    throw new Error(`${file}: \`${unknown}\` is not a config key (${CONFIG_KEYS.join(", ")})`);
+  }
+
   for (const key of ["left", "right", "outDir", "extraCss"]) {
     if (c[key] !== undefined && typeof c[key] !== "string") bad(key, "a string");
   }
@@ -454,6 +490,9 @@ function validate(c: Record<string, unknown>, file: string) {
     if (c[key] !== undefined && !isStrArray(c[key])) {
       bad(key, "an array of strings");
     }
+  }
+  if ((c.hideSelectors as string[] | undefined)?.some((s) => !s.trim())) {
+    bad("hideSelectors", "an array of non-empty strings");
   }
   const hook = "a function (page, { side, route, width }) => Promise<void>";
   if (c.before !== undefined && typeof c.before !== "function") bad("before", hook);
@@ -517,9 +556,10 @@ function validate(c: Record<string, unknown>, file: string) {
   if (c.widths !== undefined) {
     if (
       !Array.isArray(c.widths) ||
-      !c.widths.every((w) => typeof w === "number" && Number.isFinite(w) && w > 0)
+      !c.widths.length ||
+      !c.widths.every((w) => Number.isInteger(w) && w > 0)
     ) {
-      bad("widths", "an array of positive numbers");
+      bad("widths", "a non-empty array of positive integers");
     }
   }
   if (c.computed !== undefined && typeof c.computed !== "boolean") bad("computed", "a boolean");
@@ -544,6 +584,12 @@ function validate(c: Record<string, unknown>, file: string) {
         bad(`masks[${i}]`, "an object");
         return;
       }
+      const unknown = Object.keys(o).find((k) => !MASK_KEYS.includes(k));
+      if (unknown) {
+        throw new Error(
+          `${file}: \`masks[${i}].${unknown}\` is not a mask key (${MASK_KEYS.join(", ")})`,
+        );
+      }
       if (o.urlPath !== undefined && typeof o.urlPath !== "string") {
         bad(`masks[${i}].urlPath`, "a string");
       }
@@ -551,8 +597,8 @@ function validate(c: Record<string, unknown>, file: string) {
       if ("selector" in o === "locate" in o) {
         throw new Error(`${file}: \`masks[${i}]\` needs exactly one of \`selector\` or \`locate\``);
       }
-      if (o.selector !== undefined && typeof o.selector !== "string") {
-        bad(`masks[${i}].selector`, "a string");
+      if (o.selector !== undefined && (typeof o.selector !== "string" || !o.selector.trim())) {
+        bad(`masks[${i}].selector`, "a non-empty string");
       }
       if (o.locate !== undefined && typeof o.locate !== "function") {
         bad(`masks[${i}].locate`, "a function (page) => Locator");
@@ -603,6 +649,9 @@ export function resolveConfig(file: RenderdiffConfig, cli: CliOverrides): Resolv
           ? "left origin is required (first positional URL, --left, or left in renderdiff.config.*)"
           : "right origin is required (second positional URL, --right, or right in renderdiff.config.*)",
     );
+  }
+  for (const [side, url] of Object.entries({ left, right })) {
+    if (!isHttpUrl(url)) throw new Error(`${side} origin must be an http(s) URL, got ${url}`);
   }
 
   const fileState =
