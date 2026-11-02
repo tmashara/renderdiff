@@ -25,16 +25,19 @@ export interface Route {
   selector: Sides | null;
   before: Hook | null;
   beforeShot: Hook | null;
+  /** The top-level hooks this route's own hooks replace, for their `ctx.topLevel`. */
+  topLevel: { before: Hook | null; beforeShot: Hook | null };
 }
 
 /**
  * Runs on each side, e.g. to open a menu: `before` after the page loads, before it settles;
  * `beforeShot` after it settles, right before masks and the shot. `route` is the route's name
- * (`/a`, or `/a::/b` for a pair), the same on both sides.
+ * (`/a`, or `/a::/b` for a pair), the same on both sides. `topLevel`, on a route's own hook,
+ * runs the top-level hook it replaces, when there is one.
  */
 export type Hook = (
   page: Page,
-  ctx: { side: "left" | "right"; route: string; width: number },
+  ctx: { side: "left" | "right"; route: string; width: number; topLevel?: () => Promise<void> },
 ) => Promise<void>;
 
 /**
@@ -68,7 +71,7 @@ export const name = (r: Pick<Route, "left" | "right" | "selector">) =>
  * literal), which keeps `?q=std::vector` and `/wiki/Talk:Foo` single routes. Each side may end
  * in whitespace + `@sel` (the whitespace keeps `/@user` a path), which beats a CLI `selector`,
  * which beats a config object's own. A route's own `before` (or `beforeShot`) replaces the
- * top-level one.
+ * top-level one, which it can still call as `ctx.topLevel`.
  */
 export function parseRoutes(
   specs: RouteSpec[],
@@ -106,20 +109,26 @@ export function parseRoutes(
     const glob = sides.find((s) => s.includes("*"));
     if (glob) throw new Error(`globs are not supported (${glob}) — pass literal paths.`);
     const own = typeof spec === "string" ? undefined : spec.selector;
+    const hooks: { before?: Hook; beforeShot?: Hook } = typeof spec === "string" ? {} : spec;
+    const top = (h: Hook | undefined, t: Hook | undefined) => (h && t && h !== t ? t : null);
     const route = {
       left: normalize(sides[0]),
       right: normalize(sides[1]),
       selector:
         atSel ?? selector ?? (typeof own === "string" ? { left: own, right: own } : (own ?? null)),
-      before: (typeof spec === "string" ? undefined : spec.before) ?? before ?? null,
-      beforeShot: (typeof spec === "string" ? undefined : spec.beforeShot) ?? beforeShot ?? null,
+      before: hooks.before ?? before ?? null,
+      beforeShot: hooks.beforeShot ?? beforeShot ?? null,
+      topLevel: {
+        before: top(hooks.before, before),
+        beforeShot: top(hooks.beforeShot, beforeShot),
+      },
     };
     const same = out.get(name(route));
     // JSON drops a function but keeps a null, so hooks are compared on their own below.
     if (
       same &&
-      JSON.stringify({ ...same, before: 0, beforeShot: 0 }) !==
-        JSON.stringify({ ...route, before: 0, beforeShot: 0 })
+      JSON.stringify({ ...same, before: 0, beforeShot: 0, topLevel: 0 }) !==
+        JSON.stringify({ ...route, before: 0, beforeShot: 0, topLevel: 0 })
     ) {
       throw new Error(`two routes both read as ${name(route)}; change one of their selectors`);
     }
@@ -277,9 +286,15 @@ export interface RenderdiffConfig {
   right?: string;
   /** Routes to diff when none are passed on the command line. A route object may take a `selector`, `before` and `beforeShot`. */
   routes?: RouteSpec[];
-  /** A {@link Hook} for every route without its own `before`, CLI routes included. */
+  /**
+   * A {@link Hook} for every route without its own `before` (which can call it as
+   * `ctx.topLevel`), CLI routes included.
+   */
   before?: Hook;
-  /** A {@link Hook} for every route without its own `beforeShot`, CLI routes included. */
+  /**
+   * A {@link Hook} for every route without its own `beforeShot` (which can call it as
+   * `ctx.topLevel`), CLI routes included.
+   */
   beforeShot?: Hook;
   /**
    * Playwright storage state files (cookies, localStorage) to start each side with, e.g. to be

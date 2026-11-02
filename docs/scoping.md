@@ -80,8 +80,8 @@ export default {
     },
     { left: "/docs", beforeShot: async (page) => { await page.click("[data-tab=intro]"); } },
   ],
-  // For every route without its own `before` (which replaces it), CLI routes included;
-  // a top-level `beforeShot` works the same way.
+  // For every route without its own `before` (which replaces it; that one can still run it
+  // with `await topLevel?.()`), CLI routes included; a top-level `beforeShot` works the same way.
   before: async (page, { side, route, width }) => {
     const accept = page.getByRole("button", { name: "Accept" });
     if (await accept.isVisible()) await accept.click();

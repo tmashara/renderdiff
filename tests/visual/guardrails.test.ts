@@ -910,6 +910,16 @@ describe("before hooks", () => {
     assert.equal(result(results(run.outDir), "/menu", 1440).diffPixels, 0, context(run));
   });
 
+  test("a route's own hook can run the top-level one as ctx.topLevel", async () => {
+    const run = await hooked(
+      '{ before: async (page, { side }) => { await page.locator("h1").evaluate((h, t) => (h.textContent = t), side); }, ' +
+        'routes: [{ left: "/menu", before: async (page, { topLevel }) => { await topLevel?.(); } }] }',
+    );
+    assert.equal(run.code, 1, context(run));
+    const r = result(results(run.outDir), "/menu", 1440);
+    assert.deepEqual([r.text.added, r.text.removed], [["left"], ["right"]], context(run));
+  });
+
   test("a hook that throws is a route error naming the hook, and is not retried", async () => {
     const before = site.hits("/menu");
     // A message the transient-error retry would otherwise match.

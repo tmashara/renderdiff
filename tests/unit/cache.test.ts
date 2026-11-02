@@ -7,7 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { after, describe, test } from "node:test";
 import { cacheFile, replayable, REPLAY_TTL, saveRecording, shotId } from "../../src/cache.ts";
-import { parseRoutes, resolveConfig } from "../../src/config.ts";
+import { type Hook, parseRoutes, resolveConfig } from "../../src/config.ts";
 import { cleanupTempDirs, tempDir } from "../helpers/cli.ts";
 
 after(cleanupTempDirs);
@@ -106,6 +106,17 @@ describe("keys", () => {
     assert.notEqual(shotId(route!, 1440), shotId(hooked, 1440));
     const shotHooked = parseRoutes(["/a"], undefined, undefined, async () => {})[0]!;
     assert.notEqual(shotId(route!, 1440), shotId(shotHooked, 1440));
+    const own = async () => {};
+    const withTop = (top: Hook) =>
+      shotId(parseRoutes([{ left: "/a", before: own }], undefined, top)[0]!, 1440);
+    const reload: Hook = async (page) => {
+      await page.reload();
+    };
+    assert.notEqual(
+      withTop(async () => {}),
+      withTop(reload),
+      "the top-level hook it calls",
+    );
     assert.notEqual(shotId(route!, 1440), shotId(route!, 375));
     assert.equal(shotId(route!, 1440), shotId(paired, 1440), "the left path doesn't matter");
   });

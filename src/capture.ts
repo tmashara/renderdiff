@@ -286,7 +286,9 @@ export async function capture(
     if (!fn) return;
     step.set(page, `${name} hook`);
     try {
-      await fn(page, { side, route: label(route), width });
+      const ctx = { side, route: label(route), width };
+      const top = route.topLevel[name];
+      await fn(page, top ? { ...ctx, topLevel: () => top(page, ctx) } : ctx);
     } catch (e) {
       throw new HookError(
         `${name} hook failed on ${side}: ${e instanceof Error ? e.message : String(e)}`,

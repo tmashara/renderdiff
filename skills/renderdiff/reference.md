@@ -298,7 +298,8 @@ aria: identical on 2 of 3 route(s), differs /pricing
   transformed element is shot at its axis-aligned box. `xpath=` and `>>` work; pseudo-elements
   are rejected; iframes can't be reached.
 - **`before` hooks** (config only: `before: async (page, { side, route, width }) => …` on a
-  route object, or top level for every route without its own) run after load and the HTTP
+  route object, or top level for every route without its own; a route's own gets `topLevel`
+  too, which runs the top-level one: `await topLevel?.()`) run after load and the HTTP
   check, before settle, masks and the shot. Legitimate: open a menu or tab, dismiss a modal or
   banner *both* sides show, sign in, set a carousel to slide 1 on both. Not: branching on
   `side` to make the sides look alike, hiding or removing an element on one side. `side` is for
