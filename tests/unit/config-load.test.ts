@@ -431,7 +431,7 @@ describe("--only", () => {
 
   test("a file in cwd lists routes one per line", async () => {
     const cwd = cwdOnly();
-    fs.writeFileSync(path.join(cwd, "routes.txt"), "/a @.x\n\n  /b  \n");
+    fs.writeFileSync(path.join(cwd, "routes.txt"), "# sample\n/a @.x\n\n  /b  \n# /c\n");
     const r = await dryIn(cwd, "routes.txt");
     assert.equal(r.code, 0, r.stderr);
     assert.match(r.stdout, /^Routes: 2$/m);
