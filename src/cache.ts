@@ -15,6 +15,8 @@ export const shotId = (route: Route, width: number) =>
     width,
     route.before && String(route.before),
     route.beforeShot && String(route.beforeShot),
+    route.topLevel.before && String(route.topLevel.before),
+    route.topLevel.beforeShot && String(route.topLevel.beforeShot),
   ]);
 
 /** Everything that changes what the right origin serves, so one recording never answers another. */

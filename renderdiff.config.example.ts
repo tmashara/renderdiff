@@ -24,10 +24,12 @@ export default {
     { left: "/blog", right: "/posts" },
     { left: "/pricing", selector: { left: ".plans-v2", right: ".plans" } },
     // `before` runs on each side after the page loads, before it settles and is shot, so
-    // the open menu is what gets measured. Replaces the top-level `before` for this route.
+    // the open menu is what gets measured. Replaces the top-level `before` for this route,
+    // which `topLevel` still runs.
     {
       left: "/docs",
-      before: async (page) => {
+      before: async (page, { topLevel }) => {
+        await topLevel?.();
         await page.click("[aria-label=Menu]");
       },
     },
