@@ -73,6 +73,10 @@ the change, pixels plus `--computed` for CSS-only work) and reports a verdict, n
 npx skills add tmashara/renderdiff              # Codex, Cursor, others (skills.sh)
 ```
 
+For a site you'll check more than once, `/renderdiff init` writes a `renderdiff-<project>`
+skill: the deploy's build command, serve commands and ports, route lists, hooked states and
+the masks a base-vs-base run proved necessary, so later runs start from there.
+
 ### In CI
 
 `uses: tmashara/renderdiff@v0` checks a preview deployment or a build in the job against

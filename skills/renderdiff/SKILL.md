@@ -1,6 +1,6 @@
 ---
 name: renderdiff
-description: Visual-parity check for website migrations. Use when a framework migration, CSS or design-system refactor, template rewrite, CMS move or dependency/build upgrade should not change how pages look, to prove it by screenshot-diffing your change against a local build of the base (or production, or any reference) across viewport widths. Also for "did I break the layout", visual regression checks, pixel diffs of two URLs, or running the renderdiff CLI.
+description: Visual-parity check for website migrations. Use when a framework migration, CSS or design-system refactor, template rewrite, CMS move or dependency/build upgrade should not change how pages look, to prove it by screenshot-diffing your change against a local build of the base (or production, or any reference) across viewport widths. Also for "did I break the layout", visual regression checks, pixel diffs of two URLs, running the renderdiff CLI, or setting up renderdiff for a project.
 allowed-tools: Bash(npx renderdiff:*), Bash(npx renderdiff@latest:*), Bash(renderdiff:*), Read
 ---
 
@@ -13,7 +13,7 @@ npx renderdiff@latest http://localhost:3001 http://localhost:3002 / /about /pric
 First origin = left = your change; second = right = the reference. `+` is only/more in your
 change, `-` only/more in the reference. Default widths 1440, 1152, 896, 704, 375. First run:
 `npx playwright install chromium`. Flags: `--help`. Details: [reference.md](reference.md),
-the § named at each step.
+the § named at each step. Setting up a project (`/renderdiff init`): [init.md](init.md).
 
 ## Pick the mode
 
@@ -33,6 +33,9 @@ Pixels decide the score and the exit code in every mode.
    `npx serve -l 3002 dist`). Production as the reference is a later second pass. Routes:
    every page the change can reach (`--sitemap`); `--dry-run` prints the pairs.
    § Reference and routes; moved page, component, sign-in, click state: § Scoping.
+   The project has a `renderdiff-<project>` skill: its build/serve commands, ports and config
+   replace this step and step 2's masks. None, and the project will be run more than once:
+   [init.md](init.md) generates one (`/renderdiff init`).
 2. **Baseline**: base vs base. Before changing code, the untouched change side against the
    reference; if the change is already made, the base build served on two ports. Whatever
    differs varies per load: mask it (a `varies` line prints the mask; `--mask-media` for
@@ -89,3 +92,10 @@ recorded them.
 For an intended change (a redesign), run with `--threshold 0 --no-recheck` and
 `report <out> --markdown pr.md` for the PR description's before/after tables; add
 `--base-url <url>` once the out dir is uploaded, so the images render in the PR.
+
+## Feedback
+
+Something in renderdiff itself (CLI, report, this skill) cost time or was wrong: check
+`gh issue list -R tmashara/renderdiff --state all` and drop what's already tracked. For the
+rest, put an issue draft in chat (title, the run's `renderdiff --version`, routes × widths,
+bullets ranked by time lost, each what happened and what you'd want). Never post it.
