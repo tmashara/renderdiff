@@ -9,6 +9,7 @@ renderdiff-<project>/
   SKILL.md                     the skeleton below
   <app>/renderdiff.config.mjs  every setting: built-in options, masks with reason, hooks; the why in comments
   <app>/routes.txt             grouped, a comment per group, # skipped with the reason
+  <app>/sample.txt             the base-vs-base sample, for `--only`
   <app>/serve.json             the host's URL rules, for `npx serve`
   scripts/                     only what the CLI and `npx serve` don't cover
 ```
@@ -37,8 +38,9 @@ source (product edits for a test).
    Build the base in a `git worktree` and record the command that worked and its output dir.
 2. **Serve.** `npx serve -l <port> -c <absolute path to <app>/serve.json> <dist>` (`-c` is
    read against `<dist>`), the `serve.json` mirroring the host's clean URLs, trailing slashes
-   and redirects (§ Reference and routes). Curl a sample of routes against both and compare
-   status and final URL with the hosting rules; a script only if `serve` can't match them.
+   and redirects (§ Reference and routes). Curl a sample of routes (slashless, trailing
+   slash, `.html`, unknown) on the local server and the live site, and compare status and
+   final URL; a script only if `serve` can't match them.
    One port per side plus a second base port, per app. Stop with
    `kill $(lsof -tiTCP:<port> -sTCP:LISTEN)`: `$!` is npx, not the server. Never `pkill`:
    other runs share the machine.
@@ -50,15 +52,22 @@ source (product edits for a test).
    (below). The hook clicks with no `isVisible()` guard and ends waiting for the open state
    (§ Scoping); a state that exists only at some widths returns early on the hook's `width`.
    A mask for a state route needs its full path, query included, or no `urlPath`.
-   One component: `'/path @sel'`.
-5. **Base vs base** on a sample (one page per template, every state): a list file for
-   `--only`, so hooks apply (routes on the command line replace the config's). The run finds
-   the noise (`varies` lines, `renderdiff probe`; `probe` runs only the top-level `before`,
-   so a state URL is probed closed), not a read of the source. Per noise, the first that
-   holds: a built-in (`maskMedia`, `freezeVideo`, `lottieFrame`, `hideSelectors`,
-   `blockUrlPatterns`), a hook that removes the cause on both sides, a mask with a `reason`
-   (§ Masks, accepts and thresholds). A page past the area ceiling (§ Errors): `@sel` on its
-   main element, else `# skipped`. Repeat until clean; time it and estimate the full run.
+   One component: `'/path @sel'`. Hooks run at `domcontentloaded`, before the page's own
+   scripts may have set a component up: wait for its ready marker before touching it.
+5. **Base vs base** on a sample: one page per template, every state, and every page whose
+   built HTML loads a third-party script, iframe or form (grep for `<script src="http`,
+   `<iframe src="http`): one-off pages carry most embeds. `--only sample.txt`, so hooks
+   apply (routes on the command line replace the config's). The run finds the noise
+   (`varies` lines, `renderdiff probe`; `probe` runs only the top-level `before`, so a state
+   URL is probed closed), not a read of the source. Per noise, the narrowest fix that holds:
+   a hook that stills the cause on both sides, a built-in that covers exactly it
+   (`freezeVideo`, `lottieFrame`, `blockUrlPatterns`; `maskMedia` hides every iframe, first
+   party too), a mask with a `reason` (§ Masks, accepts and thresholds). Blocking or hiding
+   takes that content out of the check: keep what you can (a lottie frame that shows
+   something, not a blank 0) and list the rest under Ignore. A page past the area ceiling
+   (§ Errors): `@sel` on its main element, else `# skipped`. Repeat until clean; noise that
+   a rerun clears and nothing reproduces goes under Ignore, not into a mask. Then the full
+   set twice: live third-party data can come out clean once by chance. Time it.
 6. **Write the project skill** (skeleton below). Record `renderdiff --version`.
 7. **Feedback**: ask whether to add the section below. No: leave it out.
 8. **Check** each app with `--config renderdiff.config.mjs --dry-run` (every route read as
@@ -85,7 +94,6 @@ export default {
   left: "http://localhost:4011",
   right: "http://localhost:4010",
   routes,
-  outDir: "/tmp/renderdiff-<project>-<app>",
 };
 ```
 
@@ -116,8 +124,9 @@ what is specific here. Written for renderdiff <version>. Settings: `<app>/render
 when the site changes>
 
 ## Run
-<per app: the command from <app>/, in the background; base vs base against the second base
-port; shots and minutes for a full run>
+<per app: the command from <app>/, in the background, `--out` a fresh dir outside this
+folder per run; base vs base against the second base port; shots and minutes for the
+sample and a full run>
 
 ## Ignore
 <leftover noise that isn't masked, and why; mask reasons live in the configs>
