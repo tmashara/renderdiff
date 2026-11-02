@@ -457,7 +457,7 @@ const head = (r: ComparedResult) => `
     ${r.heightDelta ? `<span class="delta">height ${signed(r.heightDelta)}px</span>` : ""}
     ${r.widthDelta ? `<span class="delta">width ${signed(r.widthDelta)}px</span>` : ""}
     ${r.unstablePixels ? `<span class="unstable">${r.unstablePixels.toLocaleString("en-US")} px unstable</span>` : ""}
-    ${r.variesPixels ? `<span class="unstable">${r.variesPixels.toLocaleString("en-US")} px vary per load</span>` : ""}
+    ${r.variesPixels ? `<span class="unstable">${r.variesPixels.toLocaleString("en-US")} px painted out, vary per load</span>` : ""}
     ${r.alignedScore !== null ? `<span class="aligned">aligned ${pct(r.alignedScore)}</span>` : ""}
     ${r.computed ? `<span class="w">${r.computed.dom ? `dom differs (${r.computed.dom})` : "dom identical"}</span>` : ""}
     ${r.aria ? `<span class="w">${r.aria.added.length || r.aria.removed.length ? `aria differs (+${r.aria.added.length} −${r.aria.removed.length})` : "aria identical"}</span>` : ""}
