@@ -352,10 +352,12 @@ relative to the Markdown file, or `<url>/<shot>` with `--base-url <url>`: upload
 anywhere, then pass its URL so the images render in a PR description. `evidence.html` is
 self-contained and can go anywhere on its own.
 
-Cloudflare Pages gives `report.html` a per-PR URL:
+Never upload `<out>/.cache/`: it holds `--cache-right`'s recorded traffic, cookies and auth
+headers included. Cloudflare Pages gives `report.html` a per-PR URL:
 
 ```bash
 npx wrangler pages project create <p> --production-branch main   # once
+rm -rf renderdiff-out/.cache   # wrangler has no exclude; the next --cache-right run loads live
 npx wrangler pages deploy renderdiff-out --project-name <p> --branch pr-123
 renderdiff report renderdiff-out --markdown pr.md --base-url https://pr-123.<p>.pages.dev
 ```
@@ -368,6 +370,7 @@ images through its anonymous camo proxy. For private inline images, use a report
 ```bash
 git clone --depth 1 https://github.com/<owner>/<repo> reports
 mkdir -p reports/pr-123 && cp -R renderdiff-out/. reports/pr-123/
+rm -rf reports/pr-123/.cache
 git -C reports add . && git -C reports commit -m pr-123 && git -C reports push
 renderdiff report renderdiff-out --markdown pr.md \
   --base-url https://github.com/<owner>/<repo>/raw/main/pr-123
