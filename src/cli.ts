@@ -62,6 +62,28 @@ const num = (flag: string, raw: string): number => {
   return n;
 };
 
+function* flags(argv: string[]) {
+  for (let i = 0; i < argv.length; i++) {
+    const raw = argv[i]!;
+    const eq = raw.startsWith("--") ? raw.indexOf("=") : -1;
+    const v = eq === -1 ? raw : raw.slice(0, eq);
+    const inline = eq === -1 ? undefined : raw.slice(eq + 1);
+    let took = false;
+    // A numeric flag takes a negative number, so the range check can name the problem.
+    const value = (numeric = false) => {
+      const s = inline ?? argv[i + 1];
+      const isFlag =
+        inline === undefined && s?.startsWith("-") && !(numeric && Number.isFinite(Number(s)));
+      if (s === undefined || !s.trim() || isFlag) throw new Error(`${v} needs a value`);
+      if (inline === undefined) i++;
+      took = true;
+      return s.trim();
+    };
+    yield { v, inline, value };
+    if (inline !== undefined && !took) throw new Error(`${v} takes no value`);
+  }
+}
+
 function parseArgs(argv: string[]): Args {
   const a: Args = {
     dryRun: false,
@@ -76,23 +98,7 @@ function parseArgs(argv: string[]): Args {
   const origins: string[] = [];
   const sel: { both?: string; left?: string; right?: string } = {};
   const state: typeof sel = {};
-  for (let i = 0; i < argv.length; i++) {
-    const raw = argv[i]!;
-    // Accept both `--flag value` and `--flag=value`.
-    const eq = raw.startsWith("--") ? raw.indexOf("=") : -1;
-    const v = eq === -1 ? raw : raw.slice(0, eq);
-    const inline = eq === -1 ? undefined : raw.slice(eq + 1);
-    // Require a value: the inline `--flag=value`, or the next argv token — but not
-    // another flag, which means the value was simply omitted. Only advance `i` when
-    // a positional token is actually consumed.
-    const next = () => {
-      if (inline !== undefined) return inline;
-      const peek = argv[i + 1];
-      if (peek === undefined || peek.startsWith("-")) {
-        throw new Error(`${v} needs a value`);
-      }
-      return argv[++i]!;
-    };
+  for (const { v, inline, value } of flags(argv)) {
     if (v === "--help" || v === "-h") a.help = true;
     else if (v === "--version" || v === "-v") a.version = true;
     else if (v === "--dry-run") a.dryRun = true;
@@ -108,55 +114,49 @@ function parseArgs(argv: string[]): Args {
     else if (v === "--no-freeze-video") a.freezeVideo = false;
     else if (v === "--sitemap") {
       if (inline === "") throw new Error("--sitemap= needs a URL or path");
-      a.sitemap = inline ?? true;
-    } else if (v === "--accept") {
-      a.accept = next().trim();
-      if (!a.accept) throw new Error("--accept needs a reason");
-    } else if (v === "--left") a.left = next();
-    else if (v === "--right") a.right = next();
-    else if (v === "--out") a.outDir = next();
-    else if (v === "--config") a.config = next();
-    else if (v === "--mask") {
-      const s = next().trim();
-      if (!s) throw new Error("--mask needs a value");
-      (a.masks ??= []).push(s);
-    } else if (v === "--only") {
-      const s = next().trim();
-      if (!s) throw new Error("--only needs a value");
-      (a.only ??= []).push(s);
-    } else if (v === "--hide") {
-      const s = next().trim();
-      if (!s) throw new Error("--hide needs a value");
-      (a.hideSelectors ??= []).push(s);
-    } else if (v === "--selector" || v === "--left-selector" || v === "--right-selector") {
-      const s = next();
-      if (!s) throw new Error(`${v} needs a value`);
-      sel[v === "--selector" ? "both" : v === "--left-selector" ? "left" : "right"] = s;
+      a.sitemap = inline === undefined ? true : value();
+    } else if (v === "--accept") a.accept = value();
+    else if (v === "--left") a.left = value();
+    else if (v === "--right") a.right = value();
+    else if (v === "--out") a.outDir = value();
+    else if (v === "--config") a.config = value();
+    else if (v === "--mask") (a.masks ??= []).push(value());
+    else if (v === "--only") (a.only ??= []).push(value());
+    else if (v === "--hide") (a.hideSelectors ??= []).push(value());
+    else if (v === "--selector" || v === "--left-selector" || v === "--right-selector") {
+      sel[v === "--selector" ? "both" : v === "--left-selector" ? "left" : "right"] = value();
     } else if (
       v === "--storage-state" ||
       v === "--left-storage-state" ||
       v === "--right-storage-state"
     ) {
-      const s = next();
-      if (!s) throw new Error(`${v} needs a value`);
-      state[v === "--storage-state" ? "both" : v === "--left-storage-state" ? "left" : "right"] = s;
+      state[v === "--storage-state" ? "both" : v === "--left-storage-state" ? "left" : "right"] =
+        value();
     } else if (v === "--width") {
-      const w = num("--width", next());
-      if (w <= 0) throw new Error(`--width expects a positive number, got ${w}`);
+      const w = num("--width", value(true));
+      if (!Number.isInteger(w) || w < 1) {
+        throw new Error(`--width expects a positive integer, got ${w}`);
+      }
       (a.widths ??= []).push(w);
     } else if (v === "--concurrency") {
-      const n = num("--concurrency", next());
+      const n = num("--concurrency", value(true));
       if (!Number.isInteger(n) || n < 1) {
         throw new Error(`--concurrency expects a positive integer, got ${n}`);
       }
       a.concurrency = n;
     } else if (v === "--threshold") {
-      const t = num("--threshold", next());
+      const t = num("--threshold", value(true));
       if (t < 0 || t > 1) throw new Error(`--threshold expects 0..1, got ${t}`);
       a.threshold = t;
     } else if (v.startsWith("-")) throw new Error(`unknown flag: ${v}`);
     else if (/^https?:\/\//i.test(v)) origins.push(v);
     else a.routes.push(v);
+  }
+  const xml = a.sitemap === true && [...origins, ...a.routes].find((t) => /\.xml$/i.test(t));
+  if (xml) {
+    throw new Error(
+      `use --sitemap=${xml} to read that sitemap; bare --sitemap reads the right side's`,
+    );
   }
   if (origins.length > 2) {
     throw new Error(
@@ -388,12 +388,9 @@ async function report(argv: string[]): Promise<never> {
       "--markdown"?: string;
       "--base-url"?: string;
     } = {};
-    for (let i = 0; i < argv.length; i++) {
-      const v = argv[i]!;
+    for (const { v, value } of flags(argv)) {
       if (v === "--verdict" || v === "--title" || v === "--markdown" || v === "--base-url") {
-        const value = argv[++i];
-        if (value === undefined) throw new Error(`${v} needs a value`);
-        opt[v] = value;
+        opt[v] = value();
       } else if (v.startsWith("-") || dir !== undefined)
         throw new Error(`unexpected argument: ${v}`);
       else dir = v;
@@ -427,13 +424,9 @@ async function merge(argv: string[]): Promise<never> {
   try {
     const dirs: string[] = [];
     let out: string | undefined;
-    for (let i = 0; i < argv.length; i++) {
-      const v = argv[i]!;
-      if (v === "--out") {
-        out = argv[++i];
-        if (out === undefined) throw new Error("--out needs a value");
-      } else if (v.startsWith("-") || dirs.length === 2)
-        throw new Error(`unexpected argument: ${v}`);
+    for (const { v, value } of flags(argv)) {
+      if (v === "--out") out = value();
+      else if (v.startsWith("-") || dirs.length === 2) throw new Error(`unexpected argument: ${v}`);
       else dirs.push(v);
     }
     if (dirs.length !== 2 || !out)
