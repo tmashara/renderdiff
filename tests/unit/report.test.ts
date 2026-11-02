@@ -202,6 +202,18 @@ describe("renderdiff report --markdown", () => {
     assert.equal(r.code, 2);
     assert.match(r.stderr, /--base-url needs --markdown/);
   });
+
+  test("takes --flag=value, and a missing value doesn't swallow the next flag", async () => {
+    const out = tempDir();
+    writeResults([shot("/")], meta(), out, []);
+    const md = path.join(out, "pr.md");
+    const ok = await runCli(["report", out, `--markdown=${md}`], { noOut: true });
+    assert.equal(ok.code, 0, ok.stderr);
+    assert.ok(fs.existsSync(md));
+    const r = await runCli(["report", out, "--title", "--markdown", md], { noOut: true });
+    assert.equal(r.code, 2);
+    assert.match(r.stderr, /--title needs a value/);
+  });
 });
 
 describe("verdict", () => {
@@ -386,6 +398,12 @@ describe("renderdiff merge", () => {
     );
   const merge = (a: string, b: string, out: string) =>
     runCli(["merge", a, b, "--out", out], { noOut: true });
+
+  test("--out needs a value", async () => {
+    const r = await runCli(["merge", tempDir(), tempDir(), "--out"], { noOut: true });
+    assert.equal(r.code, 2);
+    assert.match(r.stderr, /--out needs a value/);
+  });
 
   test("replaces matching shots, adds the rest, and copies only what results.json references", async () => {
     const [a, b] = [full(), partial()];

@@ -151,8 +151,45 @@ describe("flag validation", () => {
   test("a trailing flag with no value is rejected", () =>
     rejects(["/a", "--left", L, "--right", R, "--out"], "--out needs a value"));
 
-  test("a negative number is not mistaken for a value", () =>
-    rejects(["/a", "--left", L, "--right", R, "--width", "-5"], "--width needs a value"));
+  test("a negative number reaches the range check", () =>
+    rejects(
+      ["/a", "--left", L, "--right", R, "--width", "-5"],
+      "--width expects a positive integer, got -5",
+    ));
+
+  test("a blank number is rejected, not read as 0", async () => {
+    await rejects(["/a", "--left", L, "--right", R, "--threshold="], "--threshold needs a value");
+    await rejects(
+      ["/a", "--left", L, "--right", R, "--threshold", " "],
+      "--threshold needs a value",
+    );
+    await rejects(["/a", "--left", L, "--right", R, "--width="], "--width needs a value");
+  });
+
+  test("--width rejects fractions", () =>
+    rejects(
+      ["/a", "--left", L, "--right", R, "--width", "1.5"],
+      "--width expects a positive integer, got 1.5",
+    ));
+
+  test("a flag without a value rejects an inline one", () =>
+    rejects(["/a", "--left", L, "--right", R, "--dry-run=false"], "--dry-run takes no value"));
+
+  test("a bare --sitemap refuses a sitemap given as a route or origin", async () => {
+    await rejects(
+      ["--dry-run", L, R, "--sitemap", "custom.xml"],
+      "use --sitemap=custom.xml to read that sitemap",
+    );
+    await rejects(
+      ["--dry-run", "--left", L, "--sitemap", "https://prod.test/sitemap.xml", "/a"],
+      "use --sitemap=https://prod.test/sitemap.xml to read that sitemap",
+    );
+  });
+
+  test("= inside an origin or route is not an inline value", async () => {
+    const r = await runCli(["--dry-run", `${L}/?a=b`, R, "/a?x=1"], { noOut: true });
+    assert.equal(r.code, 0, r.stderr);
+  });
 
   test("--mask needs a value", async () => {
     await rejects(["/a", "--left", L, "--right", R, "--dry-run", "--mask"], "--mask needs a value");
@@ -199,7 +236,7 @@ describe("flag validation", () => {
   test("--width rejects zero and below", () =>
     rejects(
       ["/a", "--left", L, "--right", R, "--width", "0"],
-      "--width expects a positive number",
+      "--width expects a positive integer",
     ));
 
   test("--concurrency rejects fractions", () =>
@@ -221,7 +258,10 @@ describe("flag validation", () => {
     ));
 
   test("--threshold rejects below 0", () =>
-    rejects(["/a", "--left", L, "--right", R, "--threshold", "-0.5"], "--threshold needs a value"));
+    rejects(
+      ["/a", "--left", L, "--right", R, "--threshold", "-0.5"],
+      "--threshold expects 0..1, got -0.5",
+    ));
 
   test("--threshold accepts the boundaries", async () => {
     for (const t of ["0", "1", "0.975"]) {
@@ -365,8 +405,10 @@ describe("selectors", () => {
       "--left-selector needs --right-selector or --selector",
     ));
 
-  test("an empty selector exits 2", () =>
-    rejects(["--dry-run", L, R, "/a", "--selector="], "--selector needs a value"));
+  test("an empty selector exits 2", async () => {
+    await rejects(["--dry-run", L, R, "/a", "--selector="], "--selector needs a value");
+    await rejects(["--dry-run", L, R, "/a", "--selector", " "], "--selector needs a value");
+  });
 
   test("a route's own @selector beats --selector", async () => {
     const r = await dry(["/a @.x", "/b", "--selector", ".card"]);
@@ -450,9 +492,9 @@ describe("storage state", () => {
 });
 
 describe("accept and rerun", () => {
-  test("--accept needs a reason", async () => {
+  test("--accept needs a non-blank value", async () => {
     await rejects(["--dry-run", L, R, "/a", "--accept"], "--accept needs a value");
-    await rejects(["/a", "--left", L, "--right", R, "--accept", " "], "--accept needs a reason");
+    await rejects(["/a", "--left", L, "--right", R, "--accept", " "], "--accept needs a value");
   });
 
   test("--accept and --rerun-failed need a run, not --dry-run", async () => {
