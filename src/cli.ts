@@ -18,6 +18,7 @@ import {
   alive,
   label,
   loadConfig,
+  name,
   normalize,
   parseRoutes,
   resolveConfig,
@@ -38,6 +39,8 @@ interface Args extends CliOverrides {
   version: boolean;
   config?: string;
   routes: string[];
+  /** --only values: config routes to keep, or files listing them. */
+  only?: string[];
   /** From --selector / --left-selector / --right-selector; replaces a config route object's own. */
   selector?: Sides;
   /** The reason to accept this run's differences with. */
@@ -116,6 +119,10 @@ function parseArgs(argv: string[]): Args {
       const s = next().trim();
       if (!s) throw new Error("--mask needs a value");
       (a.masks ??= []).push(s);
+    } else if (v === "--only") {
+      const s = next().trim();
+      if (!s) throw new Error("--only needs a value");
+      (a.only ??= []).push(s);
     } else if (v === "--hide") {
       const s = next().trim();
       if (!s) throw new Error("--hide needs a value");
@@ -171,6 +178,10 @@ function parseArgs(argv: string[]): Args {
   if (left && right) a.selector = { left, right };
   if (a.dryRun && (a.rerunFailed || a.accept !== undefined)) {
     throw new Error(`${a.rerunFailed ? "--rerun-failed" : "--accept"} needs a run, not --dry-run`);
+  }
+  if (a.only && (a.routes.length || a.sitemap)) {
+    const drop = a.routes.length ? "the routes given on the command line" : "--sitemap";
+    throw new Error(`--only picks from the config's routes; drop ${drop}`);
   }
   if (state.both || state.left || state.right) {
     a.storageState = { left: state.left ?? state.both, right: state.right ?? state.both };
@@ -253,6 +264,9 @@ const HELP = `
     --accept <reason>   Accept this run's differences, scoped by its routes and widths.
     --rerun-failed      Rerun what the last run in --out didn't find clean or accepted,
                         keeping the rest. Same origins, routes and widths as that run.
+    --only <route|file> Run only the config's routes with this path (or pair), their
+                        hooks and selectors kept; '/a @sel' narrows to that selector.
+                        Repeatable. A value naming a file in cwd lists one per line.
     --cache-right       Replay the right side's network from the last --cache-right run
                         in --out, if under an hour old and covering every shot; else load
                         it live and record it. The page still renders and is shot fresh.
@@ -454,12 +468,47 @@ function takeLoads(argv: string[]): number {
   return loads;
 }
 
+/** The config routes the `--only` values pick; a value naming a file is a route list. */
+function only(values: string[], routes: Route[]): Route[] {
+  const names = routes.map(name);
+  const has = names.length
+    ? `the config has: ${names.slice(0, 20).join(", ")}` +
+      (names.length > 20 ? ` … and ${names.length - 20} more` : "")
+    : "the config has no routes";
+  const picked = new Set<Route>();
+  for (const v of values) {
+    const file = fs.statSync(v, { throwIfNoEntry: false })?.isFile();
+    const specs = file
+      ? fs
+          .readFileSync(v, "utf8")
+          .split(/\r?\n/)
+          .map((l) => l.trim())
+          .map((l, i) => [l, `--only ${v}: "${l}" (line ${i + 1})`] as const)
+          .filter(([l]) => l)
+      : [[v, `--only ${v}`] as const];
+    if (file && !specs.length) throw new Error(`--only ${v} lists no routes`);
+    for (const [spec, shown] of specs) {
+      const [w] = parseRoutes([spec]) as [Route];
+      const hits = routes.filter(
+        (r) => label(r) === label(w) && (!w.selector || name(r) === name(w)),
+      );
+      if (!hits.length) {
+        const typo = !file && (!v.includes("/") || /\.\w+$/.test(v)) ? " (and no such file)" : "";
+        throw new Error(`${shown} matches no config route${typo}; ${has}`);
+      }
+      for (const r of hits) picked.add(r);
+    }
+  }
+  return routes.filter((r) => picked.has(r));
+}
+
 /** `renderdiff probe <url>`: load one URL several times and list what varies between loads. */
 async function probe(a: Args, loads: number): Promise<never> {
   if (!a.left) die("probe needs a URL: renderdiff probe <url>");
   if (a.right || a.routes.length) die("probe takes one URL, with its path");
   if ((a.widths?.length ?? 0) > 1) die("probe takes one --width");
   if (a.selector) die("probe does not take --selector; it walks the whole page");
+  if (a.only) die("probe does not take --only");
   if (!URL.canParse(a.left)) die(`not a URL: ${a.left}`);
   const u = new URL(a.left);
   let route: Route;
@@ -525,13 +574,16 @@ try {
 
 const rawRoutes = args.routes.length ? args.routes : (fileConfig.routes ?? []);
 
-if (!rawRoutes.length && !args.sitemap) {
+if (args.only && !configPath) die("--only filters a config file's routes; none was found");
+
+if (!rawRoutes.length && !args.sitemap && !args.only) {
   die("no routes given.");
 }
 
 let routes: Route[];
 try {
   routes = parseRoutes(rawRoutes, args.selector, fileConfig.before, fileConfig.beforeShot);
+  if (args.only) routes = only(args.only, routes);
 } catch (e) {
   die(e instanceof Error ? e.message : String(e));
 }

@@ -12,11 +12,12 @@ export default {
   left: "http://localhost:3001",
   right: "http://localhost:3002",
 
-  // Diffed when you run bare `renderdiff` with no positional routes. `/a::/b` (or
-  // `{ left: "/a", right: "/b" }`) loads /a on the left and /b on the right — for a page
-  // the migration moved. `selector` compares one element instead of the page (a string,
-  // or `{ left, right }`); it must match exactly one, and `--selector` replaces it. List a
-  // route once per selector to compare several components of it.
+  // Diffed when you run bare `renderdiff` with no positional routes; `--only /a` runs a
+  // subset, hooks kept. `/a::/b` (or `{ left: "/a", right: "/b" }`) loads /a on the left
+  // and /b on the right — for a page the migration moved. `selector` compares one element
+  // instead of the page (a string, or `{ left, right }`); it must match exactly one, and
+  // `--selector` replaces it. List a route once per selector to compare several components
+  // of it.
   routes: [
     "/",
     "/about",

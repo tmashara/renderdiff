@@ -361,3 +361,95 @@ describe("precedence", () => {
     assert.ok(r.stdout.includes("http://cfg-right.test/a"));
   });
 });
+
+describe("--only", () => {
+  /** A temp cwd with a config whose /b route has its own selector and hook. */
+  function cwdOnly(): string {
+    const cwd = tempDir("renderdiff-cfg-");
+    fs.writeFileSync(
+      path.join(cwd, "renderdiff.config.mjs"),
+      'export default { routes: ["/a", { left: "/a", selector: ".x" }, { left: "/b", selector: ".card", before: async () => {} }, "/c::/d"] };\n',
+    );
+    return cwd;
+  }
+  const dryIn = (cwd: string, ...only: string[]) =>
+    runCli(["--dry-run", "--left", L, "--right", R, ...only.flatMap((o) => ["--only", o])], {
+      cwd,
+      noOut: true,
+    });
+
+  test("keeps a config route's own selector when picked by path", async () => {
+    const r = await dryIn(cwdOnly(), "/b/");
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(r.stdout, /^Routes: 1$/m);
+    assert.match(
+      r.stdout,
+      /^  \/b +http:\/\/left\.test\/b  \|  http:\/\/right\.test\/b  \[\.card\]$/m,
+    );
+  });
+
+  test("a path picks every selector of it; ' @sel' narrows to one", async () => {
+    const cwd = cwdOnly();
+    const all = await dryIn(cwd, "/a");
+    assert.equal(all.code, 0, all.stderr);
+    assert.match(all.stdout, /^Routes: 2$/m);
+    const one = await dryIn(cwd, "/a @.x");
+    assert.equal(one.code, 0, one.stderr);
+    assert.match(one.stdout, /^Routes: 1$/m);
+    assert.match(one.stdout, /\[\.x\]$/m);
+  });
+
+  test("repeatable, pairs included, in config order", async () => {
+    const r = await dryIn(cwdOnly(), "/c::/d", "/b");
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(r.stdout, /^Routes: 2$/m);
+    assert.ok(r.stdout.indexOf("/b") < r.stdout.indexOf("/c::/d"), r.stdout);
+  });
+
+  test("a file of blank lines is an error", async () => {
+    const cwd = cwdOnly();
+    fs.writeFileSync(path.join(cwd, "routes.txt"), "\n  \n");
+    const r = await dryIn(cwd, "routes.txt");
+    assert.equal(r.code, 2, r.stdout);
+    assert.match(r.stderr, /--only routes\.txt lists no routes/);
+  });
+
+  test("a file in cwd lists routes one per line", async () => {
+    const cwd = cwdOnly();
+    fs.writeFileSync(path.join(cwd, "routes.txt"), "/a @.x\n\n  /b  \n");
+    const r = await dryIn(cwd, "routes.txt");
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(r.stdout, /^Routes: 2$/m);
+  });
+
+  test("each value that matches nothing is an error, even beside one that matches", async () => {
+    const cwd = cwdOnly();
+    const r = await dryIn(cwd, "/a", "/typo");
+    assert.equal(r.code, 2, r.stdout);
+    assert.match(
+      r.stderr,
+      /--only \/typo matches no config route; the config has: \/a, \/a \[\.x\], \/b \[\.card\], \/c::\/d/,
+    );
+    const typo = await dryIn(cwd, "rotes.txt");
+    assert.equal(typo.code, 2);
+    assert.match(typo.stderr, /--only rotes\.txt matches no config route \(and no such file\)/);
+    fs.writeFileSync(path.join(cwd, "routes.txt"), "/a\n\n/x\n");
+    const line = await dryIn(cwd, "routes.txt");
+    assert.equal(line.code, 2);
+    assert.match(line.stderr, /--only routes\.txt: "\/x" \(line 3\) matches no config route;/);
+  });
+
+  test("needs a config file, and says when it has no routes", async () => {
+    const none = await dryIn(tempDir("renderdiff-cfg-"), "/a");
+    assert.equal(none.code, 2);
+    assert.match(none.stderr, /--only filters a config file's routes; none was found/);
+    const cwd = tempDir("renderdiff-cfg-");
+    fs.writeFileSync(
+      path.join(cwd, "renderdiff.config.mjs"),
+      "export default { widths: [800] };\n",
+    );
+    const empty = await dryIn(cwd, "/a");
+    assert.equal(empty.code, 2);
+    assert.match(empty.stderr, /--only \/a matches no config route; the config has no routes/);
+  });
+});
