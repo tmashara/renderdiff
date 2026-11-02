@@ -172,6 +172,18 @@ describe("flag validation", () => {
     );
   });
 
+  test("--only needs a value and the config's routes alone", async () => {
+    await rejects(["--left", L, "--right", R, "--dry-run", "--only"], "--only needs a value");
+    await rejects(
+      ["/a", "--left", L, "--right", R, "--dry-run", "--only", "/a"],
+      "--only picks from the config's routes; drop the routes given on the command line",
+    );
+    await rejects(
+      ["--left", L, "--right", R, "--dry-run", "--only", "/a", "--sitemap"],
+      "--only picks from the config's routes; drop --sitemap",
+    );
+  });
+
   test("--width rejects non-numbers", () =>
     rejects(
       ["/a", "--left", L, "--right", R, "--width", "wide"],
@@ -450,6 +462,8 @@ describe("probe", () => {
     await rejects(["probe", U, R], "probe takes one URL");
     await rejects(["probe", U, "/b"], "probe takes one URL");
   });
+
+  test("refuses --only", () => rejects(["probe", U, "--only", "/a"], "probe does not take --only"));
 
   test("--loads is an integer of at least 2", async () => {
     await rejects(["probe", U, "--loads", "1"], "--loads expects an integer of at least 2, got 1");
