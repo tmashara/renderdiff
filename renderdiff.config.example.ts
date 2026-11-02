@@ -1,8 +1,8 @@
 // Copy to `renderdiff.config.ts` in the directory you run `renderdiff` from.
 //
-// Everything here is optional, and CLI flags always win over it. The type import and
-// `satisfies` are for editor types only: Node erases both, so this loads without
-// renderdiff installed in the project.
+// Everything here is optional; a CLI flag for the same setting wins over it (`--mask`
+// and `--hide` add to it instead). The type import and `satisfies` are for editor types
+// only: Node erases both, so this loads without renderdiff installed in the project.
 import type { RenderdiffConfig } from "renderdiff";
 
 export default {
@@ -45,6 +45,14 @@ export default {
     const accept = page.getByRole("button", { name: "Accept" });
     if (await accept.isVisible()) await accept.click();
   },
+
+  // Like `before`, but after the settle, right before masks and the shot: for state the
+  // settle's scroll pass would undo. Nothing settles after it, so await what it changes.
+  // For every route without its own `beforeShot` (which can run this one with
+  // `await topLevel?.()`), CLI routes included.
+  // beforeShot: async (page) => {
+  //   await page.click("[data-tab=intro]");
+  // },
 
   // Playwright storage state (cookies, localStorage) each side starts with, e.g. signed
   // in: `npx playwright codegen --save-storage=auth.json <url>`. One file, or

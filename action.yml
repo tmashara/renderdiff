@@ -13,7 +13,7 @@ inputs:
     description: The reference, e.g. https://example.com.
     required: true
   routes:
-    description: Routes separated by spaces or newlines, e.g. "/ /about /pricing::/plans". Optional when the config lists them.
+    description: Routes separated by spaces or newlines, e.g. "/ /about /pricing::/plans". Split on spaces, so a per-route selector ('/route @sel') doesn't work here; put it in the config. Optional when the config lists them.
     default: ""
   config:
     description: Path to a renderdiff config file. Default renderdiff.config.{ts,mts,js,mjs} in the workspace.

@@ -166,7 +166,7 @@ screenshots and text) out of git too. Details: [docs/scoping.md](https://github.
 
 Flags cover a one-off run. A `renderdiff.config.{ts,mts,js,mjs}` in the working directory
 covers a repo you diff repeatedly, and expresses what flags can't: **per-route masks** for content
-that legitimately drifts, extra selectors to hide, extra URLs to block, `before` hooks.
+that legitimately drifts, extra URLs to block, `before` and `beforeShot` hooks.
 
 ```ts
 export default {
@@ -181,7 +181,8 @@ export default {
 };
 ```
 
-**Precedence: CLI flag > config file > built-in default.** Every field is annotated in
+**Precedence: CLI flag > config file > built-in default; `--mask` and `--hide` add to the
+config's instead.** Every field is annotated in
 [`renderdiff.config.example.ts`](./renderdiff.config.example.ts). `export default { … }`
 needs no import; `import type { RenderdiffConfig } from "renderdiff"` is for editor types
 only.
