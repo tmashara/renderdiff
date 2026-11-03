@@ -192,6 +192,25 @@ describe("the render gate", () => {
   });
 });
 
+describe("page shot width", () => {
+  test("an off-canvas box hidden by overflow-x does not widen the shot", async () => {
+    const run = await capture(["/offcanvas"], { widths: [1440, 375] });
+    assert.equal(run.code, 0, context(run));
+    for (const width of [1440, 375]) {
+      assert.equal(cardFor(run, "/offcanvas", width).diffPixels, 0, context(run));
+      const meta = await sharp(run.file(`offcanvas.${width}.right.png`)).metadata();
+      assert.equal(meta.width, width, context(run));
+    }
+  });
+
+  test("an app shell whose body scrolls is shot below the fold", async () => {
+    const run = await capture(["/appshell"]);
+    assert.equal(run.code, 0, context(run));
+    const meta = await sharp(run.file("appshell.1440.left.png")).metadata();
+    assert.ok(meta.height! > 3000, `${meta.height}px tall${context(run)}`);
+  });
+});
+
 describe("determinism", () => {
   test("new Date() and Math.random() render identically on both sides, unmasked", async () => {
     const run = await capture(["/clock"], { widths: [1440, 375] });
