@@ -96,7 +96,7 @@ on stderr: `✗ 2 routes differ (10 shots).` (`below 97.00%` with `--threshold`)
 | `    crops …` | At most three crop PNGs per shot (bands first, tallest first, then largest regions), relative to `results.json`. |
 | `  @w  ERROR …` | Unmeasured. Grouped across widths sharing a message. See Errors. |
 | `varies /a @1440  Npx  sel` | A differing shot's right side, reloaded in a fresh context, differed from its first load there. Painted out on both sides like a mask, left out of the score (clean if nothing else differs), never accepted. Then `  --mask '…'` and `  masks: [{ …, reason: "varies per load" }]`: confirm it with a base-vs-base baseline before you use either. Off with `--no-recheck` and under `--cache-right`. |
-| `renderdiff: D of R routes differ (S of T shots), E errors, worst …` | `S` counts unaccepted shots with any differing pixel; `worst` leaves accepted shots out. With `--threshold`: `, K below 97.00%`. |
+| `renderdiff: D of R routes differ (S of T shots), E errors, worst …` | `S` counts unaccepted shots with any differing pixel; `worst` leaves accepted shots out. With unstable pixels: `, U unstable (max Npx)` after the errors. With `--threshold`: `, K below 97.00%`. |
 
 **Row tokens**, in order
 
@@ -356,7 +356,10 @@ applies to every route, and on a pair it matches either side's path. `--mask <se
 config's masks; `--hide <sel>` (CSS) adds to `hideSelectors`. Also: `threshold`, `outDir`, `concurrency`, `extraCss`, `before`,
 `beforeShot`, `storageState`. `hideSelectors`: match the element **exactly** (consent scripts stamp classes on
 `<html>`; a loose selector blanks the whole document and blank matches blank), and they hide
-rather than remove.
+rather than remove. `--computed` and `probe` skip hidden elements with their subtrees; hide a
+wrapper that comes and goes with the banner too. A hidden element still counts toward its
+siblings' `:nth-of-type`, so one that moves among siblings sharing its tag and class still
+re-keys them.
 
 ## `report`
 
@@ -402,7 +405,8 @@ commas: `JSON.parse` the whole file, not each line. Paths are relative to the ou
   (`x,y,w,h,pixels`, left-page px, `line` `{ y, h, side }`, `accepted` reason); `bands` (`side`,
   `y`, `h`, or null when unaligned); each with `elements` (`selector`, `side`, each side's box,
   `changed` `{ prop: [left, right] }`, `text`, `rightSelector`, `reparented`; absent when not
-  looked at, `[]` when nothing was named); `text` `{ added, removed }`; `failed` `{ left, right }`;
+  looked at, `[]` when nothing was named); `text` `{ added, removed }`; `failed` `{ left: [], right: [] }`, always both (count with
+  `.failed.left + .failed.right | length`);
   `fonts` `{ added, removed }` (web font faces one side loaded, absent when equal);
   `masked` (reasons of `data-renderdiff-mask` elements, absent when none); `images`; `crops`
   (`kind`, each side's box with `h` 0 at an insertion point, `layout`, `scale`, `clipped`);

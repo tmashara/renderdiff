@@ -74,6 +74,8 @@ export interface Summary {
     shots: number;
     total: number;
     errors: number;
+    /** Unaccepted shots with unstable pixels and the most any had; null when none. */
+    unstable: { shots: number; max: number } | null;
     /** Null when nothing was compared. */
     worst: { score: number; route: string; width: number } | null;
     /** Null unless a threshold was set. */
@@ -83,7 +85,7 @@ export interface Summary {
 }
 
 const VERDICT =
-  /^renderdiff: (\d+) of (\d+) routes differ \((\d+) of (\d+) shots\), (\d+) errors?(?:, worst ([\d.]+)% (.+?)@(\d+))?(?:, (\d+) below ([\d.]+)%)? — (.+)$/;
+  /^renderdiff: (\d+) of (\d+) routes differ \((\d+) of (\d+) shots\), (\d+) errors?(?:, (\d+) unstable \(max ([\d,]+)px\))?(?:, worst ([\d.]+)% (.+?)@(\d+))?(?:, (\d+) below ([\d.]+)%)? — (.+)$/;
 
 /** The compact summary printed when stdout is not a TTY. Throws when there is no verdict line. */
 export function parseSummary(stdout: string): Summary {
@@ -149,9 +151,10 @@ export function parseSummary(stdout: string): Summary {
       shots: Number(v[3]),
       total: Number(v[4]),
       errors: Number(v[5]),
-      worst: v[6] ? { score: Number(v[6]) / 100, route: v[7]!, width: Number(v[8]) } : null,
-      below: v[9] ? { count: Number(v[9]), threshold: Number(v[10]) / 100 } : null,
-      results: v[11]!,
+      unstable: v[6] ? { shots: Number(v[6]), max: Number(v[7]!.replaceAll(",", "")) } : null,
+      worst: v[8] ? { score: Number(v[8]) / 100, route: v[9]!, width: Number(v[10]) } : null,
+      below: v[11] ? { count: Number(v[11]), threshold: Number(v[12]) / 100 } : null,
+      results: v[13]!,
     },
   };
 }

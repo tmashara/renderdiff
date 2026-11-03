@@ -239,6 +239,7 @@ describe("the stability check", () => {
     assert.deepEqual(clean, [], context(run));
     assert.match(routes.get("/ticker")!.rows[0]!.text, /unstable 148,480px/);
     assert.equal(verdict.differ, 0, "no pixel differs");
+    assert.deepEqual(verdict.unstable, { shots: 1, max: 928 * 160 }, context(run));
   });
 
   test("a page that is mostly unstable is an error, not a score", async () => {
@@ -317,7 +318,7 @@ describe("lazy images", () => {
 
 describe("consent chrome", () => {
   test("a vendor banner present on one side only is hidden", async () => {
-    const run = await capture(["/consent"], { widths: [1440, 375] });
+    const run = await capture(["/consent"], { widths: [1440, 375], extra: ["--computed"] });
     assert.equal(run.code, 0, context(run));
     for (const width of [1440, 375]) {
       const c = cardFor(run, "/consent", width);
@@ -328,6 +329,10 @@ describe("consent chrome", () => {
       );
       // Hidden, not removed — and it was `position: fixed`, so hiding it reflowed nothing.
       assert.equal(c.heightDelta, 0, `hiding the banner reflowed the page${context(run)}`);
+      // Hidden on both sides, so not markup only the left has.
+      const { computed } = result(results(run.outDir), "/consent", width);
+      assert.equal(computed?.dom, 0, context(run));
+      assert.deepEqual(computed?.unmatched, { left: [], right: [] }, context(run));
     }
   });
 });

@@ -64,7 +64,7 @@ the per-shot output when piped, `--no-progress` the summary on a terminal.
 | `aria: identical on N of M route(s)` | With `--aria`: routes whose accessibility tree matches at every width, then each differing route's lines, `+` left only, `-` right only. See [below](#aria-snapshots---aria). |
 | `crops …` | Up to 3 PNGs per comparison, bands first, relative to `results.json`. Left is on top or on the left, and the change is boxed in red. |
 | `ERROR …` | Unmeasured, which is neither a pass nor a fail. Exits 3. |
-| `renderdiff: …` | The verdict line: routes and shots that differ (accepted ones aside), errors, the worst score, and with `--threshold` how many scored below it. |
+| `renderdiff: …` | The verdict line: routes and shots that differ (accepted ones aside), errors, `, U unstable (max Npx)` when any shot had unstable pixels, the worst score, and with `--threshold` how many scored below it. |
 | `accepted:` / `stale accepted:` | Routes whose every difference was accepted, and accepted entries the run no longer saw. See [accepted.md](accepted.md). |
 | `rerun:` | With `--rerun-failed`: how many shots were rerun and how many reused. |
 | `right:` | With `--cache-right`: whether the right side was replayed, and from when, or loaded live and recorded. |
@@ -167,9 +167,12 @@ DOM and iframes aren't searched.
 
 With `--computed`, after the shot renderdiff reads the computed style of every rendered
 element on both sides, and of `::before` and `::after` wherever they generate content.
-Masked subtrees and `script`/`style`-like tags
-are skipped; a `display: none` element is read, its subtree isn't. Script-driven
-animations are finished first.
+Masked and `hideSelectors` elements, their subtrees, and `script`/`style`-like tags
+are skipped; any other `display: none` element is read, its subtree isn't. So a hidden
+banner one side lacks doesn't count against `dom identical`; if it comes wrapped on some
+loads, hide the wrapper too. A hidden element still counts toward its siblings'
+`:nth-of-type`, so one that moves among siblings sharing its tag and class still re-keys
+them. Script-driven animations are finished first.
 
 It reads a fixed list of properties, not every one, so `0 findings` means none of these
 changed:

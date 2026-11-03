@@ -363,6 +363,7 @@ test("piped stdout is one compact summary: no clean routes, widths collapsed, a 
     shots: CONTROLS.length * WIDTHS.length,
     total: CONTROLS.length * WIDTHS.length,
     errors: 0,
+    unstable: null,
     worst: {
       score: Number((worst.score * 100).toFixed(2)) / 100,
       route: worst.url,
