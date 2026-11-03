@@ -35,7 +35,8 @@ source (product edits for a test).
 
 1. **Build.** Take the command from the real deploy (CI workflow, `vercel.json`
    `buildCommand`, `netlify.toml`, env like `DEPLOY_ENV`), not from `package.json` alone.
-   Build the base in a `git worktree` and record the command that worked and its output dir.
+   Build the base by the recipe in § Reference and routes (worktree outside the repo) and
+   record the command that worked and its output dir.
 2. **Serve.** `npx serve -l <port> -c <absolute path to <app>/serve.json> <dist>` (`-c` is
    read against `<dist>`), the `serve.json` mirroring the host's clean URLs, trailing slashes
    and redirects (§ Reference and routes). Curl a sample of routes (slashless, trailing
@@ -114,10 +115,10 @@ Load the `renderdiff` skill first and follow its loop, its Feedback included; th
 what is specific here. Written for renderdiff <version>. Settings: `<app>/renderdiff.config.mjs`.
 
 ## Build
-<per app: command from the deploy, output dir, worktree notes, secrets>
+<per app: command from the deploy, output dir, worktree outside the repo, env files to copy, secrets>
 
 ## Serve
-<command; table: app | change (left) | base (right) | second base; stop by port>
+<command; table: app | change (left) | base (right) | second base, fixed ports; stop by port>
 
 ## Routes
 <how routes.txt was made (sitemap + unlisted html − stubs, one page per template), to redo
@@ -132,7 +133,7 @@ sample and a full run>
 <leftover noise that isn't masked, and why; mask reasons live in the configs>
 
 ## Cleanup
-<stop servers by port; git worktree remove>
+<stop servers by port; `git worktree remove --force <wt>`, never `rm -rf` or `prune`>
 
 ## Publish
 <only if asked: where, how to shrink, privacy>

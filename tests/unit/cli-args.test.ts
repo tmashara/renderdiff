@@ -75,7 +75,7 @@ describe("help and version", () => {
       if (!options.includes(f))
         problems.push(`the README table lists ${f}, --help's Options don't`);
 
-    // yarn install in docs/case-study.md; wrangler and git in docs/output.md; gh in skills/renderdiff/SKILL.md
+    // yarn install in docs/case-study.md; wrangler and git in docs/output.md; gh in skills/renderdiff/SKILL.md; git worktree in skills/renderdiff/reference.md
     const foreign = new Set([
       "--immutable",
       "--production-branch",
@@ -83,6 +83,9 @@ describe("help and version", () => {
       "--branch",
       "--depth",
       "--state",
+      "--detach",
+      "--format",
+      "--force",
     ]);
     for (const f of ["README.md", ...md("docs"), ...md("skills")])
       for (const flag of flags(read(f)))

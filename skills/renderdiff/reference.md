@@ -11,6 +11,23 @@ results.json · Gotchas.
   `git worktree`, a production build of each on its own port, same content, data, fonts and
   CDN, so every difference is yours. Production as the reference mixes in deploy drift,
   one-sided embeds (job boards, ads) and CSP blocks: a second pass only, and say which you used.
+- **The base build**, from the repo root:
+
+  ```bash
+  wt="$(mktemp -d)/base"; git worktree add --detach "$wt" origin/main
+  git -C "$wt" log -1 --format='%h %s'   # the verdict names it: "base build of abc1234"
+  cp .env.local "$wt/"                   # untracked env files the build needs, if any
+  (cd "$wt" && npm ci && npm run build && npx serve -l 3002 dist) &
+  until curl -so /dev/null localhost:3002; do sleep 1; done
+  # … runs …
+  kill $(lsof -tiTCP:3002 -sTCP:LISTEN); git worktree remove --force "$wt"
+  ```
+
+  Outside the repo: a worktree inside it resolves the change's `node_modules`, and Tailwind
+  or tsc scan its sources into the change build, a quiet wrong build. One fixed port per base,
+  every run: `--rerun-failed` and `--cache-right` key on the right origin, port included.
+  Stop by port: `$!` and a `kill` of the subshell or `sh -c` leave the server running. Never
+  `rm -rf` the worktree or run `git worktree prune`: the user's own worktrees live there too.
 - **Production builds on both sides.** Dev overlays exist on one side only; Next's and
   Astro's are hidden by default, others go in `hideSelectors`.
 - **Static builds:** `npx serve -l 3002 dist` (or any static server). Match the real host's
