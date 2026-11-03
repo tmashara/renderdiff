@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layout parity</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for page-shot width: the right side parks a box off-canvas behind overflow-x. */
+body { overflow-x: hidden; }
+.cover { position: absolute; top: 0; left: 100%; width: 1440px; height: 200px; background: #c00; }
+</style>
+</head>
+<body>
+<div class="cover"></div>
+<div class="page">
+<h1>Off canvas</h1>
+<section class="notes">
+<h2>Notes</h2>
+<p>The right side parks a box just past the right edge and hides it with overflow-x on the body. Nobody can scroll to it, so the shot must stay as wide as the viewport, and both sides must match pixel for pixel.</p>
+</section>
+</div>
+</body>
+</html>

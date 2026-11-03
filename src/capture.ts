@@ -463,7 +463,7 @@ export async function capture(
     const before = await read();
     const png = tiled
       ? await captureTiled(page, area)
-      : await page.screenshot({ fullPage: true, clip, animations: "disabled" });
+      : await page.screenshot({ fullPage: true, clip: area, animations: "disabled" });
     return paintBoxes(png, [...before, ...(await read())]);
   };
 

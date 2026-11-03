@@ -90,7 +90,7 @@ on stderr: `✗ 2 routes differ (10 shots).` (`below 97.00%` with `--threshold`)
 | Token | Meaning |
 | --- | --- |
 | `97.41%` / `99.12%–99.87%` | Share of measured pixels that match, floored to 2 decimals (a differing shot never reads 100.00%). Triage, not a verdict. |
-| `h-24` / `w+8` | Height / width delta, left − right. The smaller shot is padded magenta; padding counts against the score on purpose. `w±` is usually horizontal overflow. |
+| `h-24` / `w+8` | Height / width delta, left − right. The smaller shot is padded magenta; padding counts against the score on purpose. |
 | `unaligned` | Heights differ but too few identical rows to align: very different pages, edits over 2,000 rows, or sub-threshold noise on every row. No bands; use the delta and regions. |
 | `band -24@y196` | 24 rows only the right has, at y=196 (`+`: only the left). `@y~196`: widths put it at different y; the first width's. Repeated identical rows can slide a band's y. |
 | `aligned 100.00%` | Score with the bands cut out; 100% = the bands are the whole difference. Only with bands. |

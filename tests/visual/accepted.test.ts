@@ -180,8 +180,10 @@ describe("accepted differences", () => {
 
 test("--accept says which differing shots it can't accept, and why", async () => {
   const dir = tempDir();
-  const hook = leftCss(dir, "body { min-width: 2000px }");
-  const run = await runCli(args(["/color"], [...hook, "--accept", "wider"]), { cwd: dir });
+  const hook = leftCss(dir, `${THIRD} { width: 240px }`);
+  const run = await runCli(args(["/color"], [...hook, "--selector", THIRD, "--accept", "wider"]), {
+    cwd: dir,
+  });
   assert.equal(run.code, 1, context(run));
   assert.match(run.stdout, /^accepted 0 difference\(s\), pruned 0 stale/m, context(run));
   assert.match(
