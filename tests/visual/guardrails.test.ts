@@ -1477,6 +1477,43 @@ export default { before: async (page, { side }) => {
     }
   });
 
+  test("a retry that times out leaves the first shot and its page compared", async () => {
+    const file = path.join(tempDir(), "hang.mjs");
+    fs.writeFileSync(
+      file,
+      `let n = 0;
+export default { before: async (page, { side }) => {
+  if (side !== "left") return;
+  if (n++) return new Promise(() => {});
+  await page.evaluate(() => new Promise((r) => {
+    const l = document.createElement("link");
+    l.rel = "stylesheet";
+    l.href = "/shared/missing.css";
+    l.onload = l.onerror = r;
+    document.head.append(l);
+  }));
+} };
+`,
+    );
+    const run = await runCli(
+      [
+        ...renderdiffArgs({
+          left: site.left,
+          right: site.right,
+          routes: ["/animated"],
+          widths: [1440],
+          config: file,
+        }),
+        "--computed",
+      ],
+      { env: { RENDERDIFF_SHOT_TIMEOUT: "2" }, timeoutMs: 60_000 },
+    );
+    assert.equal(run.code, 0, context(run));
+    const r = result(results(run.outDir), "/animated", 1440);
+    assert.deepEqual(r.failed.left, [`stylesheet ${site.left}/shared/missing.css`], context(run));
+    assert.equal(r.computed?.dom, 0, `computed read another document${context(run)}`);
+  });
+
   test("a failure on both sides is not retried", async () => {
     const hits = site.hits("/inline-block-vs-flex");
     const run = await capture(["/inline-block-vs-flex"], {

@@ -46,8 +46,10 @@ results.json · Gotchas.
   differing, with the right origin on both sides:
   `jq -r '[.results[] | select(.diffPixels > 0 and (.accepted | not)) | .url] | unique[]' <out>/results.json > differ.txt`,
   then `renderdiff <right> <right> --only differ.txt --out renderdiff-baseline` with a config
-  (its hooks kept), or `$(cat differ.txt)` as the routes without one. Whatever differs there
-  varies per load.
+  (its hooks kept). `--only` picks only config routes and is refused with `--sitemap`, so a
+  run whose routes came from the command line or `--sitemap` passes `$(cat differ.txt)` as
+  the routes instead. A moved pair is listed as `/a::/b`: keep its right path, `/b`. Whatever
+  differs there varies per load.
 - **States:** only the loaded state is shot. Hover, focus, open menus and dialogs need a
   `before` hook (§ Scoping); dead-CSS removal often breaks exactly those. `--computed` diffs
   links' and controls' hover and focus styles without shooting them.

@@ -220,8 +220,7 @@ const HELP = `
 
   --accept "<reason>" records this run's differences in renderdiff.accepted.json (next to
   the config, or in cwd); later runs report them as accepted, and anything new still shows.
-  --rerun-failed reruns only what the previous run in --out didn't find clean or accepted;
-  a shot with no differing pixels and at most 100 unstable ones is kept too.
+  --rerun-failed reruns only what the previous run in --out didn't find clean or accepted.
 
   renderdiff report reads results.json in <out-dir>, rewrites report.html, and writes
   evidence.html beside it: one self-contained page (crops embedded) with a parity banner and

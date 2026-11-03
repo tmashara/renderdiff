@@ -37,16 +37,17 @@ Pixels decide the score and the exit code in every mode.
    replace this step and step 2's masks. None, and the project will be run more than once:
    offer `/renderdiff init` ([init.md](init.md)) after this check.
 2. **Baseline**: base vs base. Before changing code, the untouched change side against the
-   reference. If the change is already made, run step 3 first (its recheck already reloads
-   each differing shot's right side), then base vs base on only the routes that still differ,
-   the right origin on both sides (§ Reference and routes). Whatever differs varies per load: mask it (a `varies` line prints the mask; `--mask-media` for
-   iframes, `--mask <sel>` or a config mask with a `reason`; video is already frozen; a
-   looping carousel: stop it with a `before` hook on both sides, or mask it), and rerun
-   until clean; `--only <route>` reruns some of a config's routes with their hooks, which
-   routes typed on the command line don't get. A difference with no `varies` line and
-   nothing unstable: `renderdiff probe <right><route> --width <w>` names what varies
-   between loads; mask that. Against production instead: open each difference, then
-   `--accept "differs before the change"`. § Masks, accepts and thresholds.
+   reference. If the change is already made, run step 3 first (its recheck already reloads each
+   differing shot's right side), then base vs base on only the routes that still differ, the
+   right origin on both sides (§ Reference and routes). Whatever differs varies per load: mask
+   it (a `varies` line prints the mask; `--mask-media` for iframes, `--mask <sel>` or a config
+   mask with a `reason`; video is already frozen; a looping carousel: stop it with a `before`
+   hook on both sides, or mask it), and rerun until clean; `--only <route>` reruns some of a
+   config's routes with their hooks, which routes typed on the command line don't get. A
+   difference with no `varies` line and nothing unstable:
+   `renderdiff probe <right><route> --width <w>` names what varies between loads; mask that. Against production instead: open
+   each difference, then `--accept "differs before the change"`. § Masks, accepts and
+   thresholds.
 3. **Change, run every route in scope (CSS only: the routes the changed rules reach) at
    default widths, read each row in this order**: `ERROR` →
    `failed` (a missing stylesheet or font explains the whole row: fix, rerun) → `fonts` → `text` →

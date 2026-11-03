@@ -366,21 +366,29 @@ export async function run({
       let frames: string[] | undefined;
       try {
         missed = 0;
+        const take = (side: "left" | "right", on = pages) =>
+          shoot(on, cfg[side] + route[side], route, side, width, cfg, now);
         // allSettled, not all: a page must not start the next job while still loading this one.
-        const settled = await Promise.allSettled([
-          shoot(pages, cfg.left + route.left, route, "left", width, cfg, now),
-          shoot(pages, cfg.right + route.right, route, "right", width, cfg, now),
-        ]);
+        const settled = await Promise.allSettled([take("left"), take("right")]);
         const failed = settled.find((r) => r.status === "rejected");
         if (failed) throw failed.reason;
-        const [left, right] = settled.map((s) => (s as PromiseFulfilledResult<Shot>).value);
-        const shots = { left: left!, right: right! };
+        const value = (s: PromiseSettledResult<Shot>) => (s as PromiseFulfilledResult<Shot>).value;
+        const shots = { left: value(settled[0]), right: value(settled[1]) };
         // One side alone failing an asset is likely load; once it recurs on a retry, it's the build.
         const [lone, ...both] = (["left", "right"] as const).filter((s) => shots[s].failed.length);
-        if (lone && !both.length && !shots[lone].failed.every((f) => lasting.has(f))) {
+        if (lone && !both.length && !shots[lone].failed.every((f) => lasting.has(`${lone} ${f}`))) {
           if (lone === "right") missed = 0;
-          shots[lone] = await shoot(pages, cfg[lone] + route[lone], route, lone, width, cfg, now);
-          for (const f of shots[lone].failed) lasting.add(f);
+          // A spare page: a retry that throws must leave this shot's document for locate and --computed.
+          const spare = { ...pages, [lone]: await pages[lone].context().newPage() };
+          await prepare(spare[lone], cfg, now);
+          const again = await take(lone, spare).catch(() => null);
+          const [keep, drop] = again ? [spare, pages] : [pages, spare];
+          await drop[lone].close();
+          pages[lone] = keep[lone];
+          if (again) {
+            shots[lone] = again;
+            for (const f of again.failed) lasting.add(`${lone} ${f}`);
+          }
         }
         const { left: leftShot, right: rightShot } = shots;
         // A blank page matches any other blank page, so refuse rather than score two of

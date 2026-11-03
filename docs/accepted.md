@@ -57,11 +57,11 @@ never accepted: the padding past the shorter page belongs to no band or region, 
 fingerprint covers it.
 
 `--rerun-failed` reads `results.json` in `--out`, keeps every shot that was clean or is
-accepted (against the accepted file as it is now), reruns the rest — differences, failed
-assets, more than 100 unstable pixels, errors — and merges them back into `results.json` and
-`report.html` in route and width order. A shot with no differing pixels and at most 100
-unstable ones (anti-aliased corners, which recur on every load) is kept too, and is still not
-clean. The out dir is kept rather than wiped; only a rerun shot's own old files are replaced.
+accepted (against the accepted file as it is now), reruns the rest — differences, unstable
+shots, errors — and merges them back into `results.json` and `report.html` in route and width
+order. A shot with no differing pixels and at most 100 unstable ones (anti-aliased corners,
+which recur on every load) is kept too, and is still not clean.
+The out dir is kept rather than wiped; only a rerun shot's own old files are replaced.
 A `rerun:` line says how many shots it reran on how many routes, and how many it reused.
 `meta` describes the rerun (its clock, browser and time); a reused shot was taken under the
 earlier run's. It must repeat the previous run: different origins, routes, widths, config
