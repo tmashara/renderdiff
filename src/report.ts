@@ -220,14 +220,25 @@ export function pixelFindings(results: RouteResult[]): PixelFinding[] {
     );
 }
 
-/** The console block: one line per repeated finding, then where it was seen. */
+/** The console block: one line per repeated finding, text lines seen on the same shots as one, then where. */
 export function fmtPixelFindings(results: RouteResult[]): string[] {
-  const findings = pixelFindings(results);
-  if (!findings.length) return [];
-  const out = [`findings: ${findings.length} repeated on 2+ routes`];
-  for (const f of findings.slice(0, SHOWN))
-    out.push(`  ${f.finding}  ×${f.at.length} routes  ${fmtAt(f.at)}`);
-  if (findings.length > SHOWN) out.push(`  (+${findings.length - SHOWN} more in results.json)`);
+  const groups = new Map<string, PixelFinding[]>();
+  for (const f of pixelFindings(results)) {
+    // Text lines on exactly the same shots share a cause, e.g. a nav folded into a menu button.
+    const key = /^[+-]"/.test(f.finding) ? `\0${JSON.stringify(f.at)}` : f.finding;
+    groups.set(key, [...(groups.get(key) ?? []), f]);
+  }
+  if (!groups.size) return [];
+  const lines = [...groups.values()].map((fs) => {
+    const t = fs.map((f) => f.finding);
+    const what =
+      t.length === 1
+        ? t[0]
+        : `text ${t.slice(0, 3).join(" ")}${t.length > 3 ? ` (+${t.length - 3} more)` : ""}`;
+    return `  ${what}  ×${fs[0]!.at.length} routes  ${fmtAt(fs[0]!.at)}`;
+  });
+  const out = [`findings: ${lines.length} repeated on 2+ routes`, ...lines.slice(0, SHOWN)];
+  if (lines.length > SHOWN) out.push(`  (+${lines.length - SHOWN} more in results.json)`);
   return out;
 }
 
