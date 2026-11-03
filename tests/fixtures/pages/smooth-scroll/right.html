@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Smooth scroll</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for smooth scrolling. Only the left scroller scrolls smoothly, so the pair
+   differs only if a scroll a hook starts is still moving at the shot. */
+#rows { width: var(--content); height: 320px; overflow: auto; }
+.row { height: 40px; border-bottom: 1px solid var(--line); }
+.tail { height: 2400px; }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Smooth scroll</h1>
+<div id="rows"></div>
+<p class="lede">A page with an inner scroller and a tall tail. A hook scrolls the scroller or the window; the shot must catch neither mid-way.</p>
+<section class="notes">
+<p>The rows are numbered, so a scroller stopped at another offset shows other numbers.</p>
+</section>
+<div class="tail"></div>
+</div>
+<script>
+const rows = document.getElementById("rows");
+for (let i = 1; i <= 100; i++) {
+  const row = document.createElement("div");
+  row.className = "row";
+  row.textContent = "Row " + i;
+  rows.append(row);
+}
+</script>
+</body>
+</html>

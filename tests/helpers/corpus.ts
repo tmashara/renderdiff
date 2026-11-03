@@ -67,6 +67,7 @@ export const GUARDRAILS = [
   "bistable",
   "offcanvas",
   "appshell",
+  "smooth-scroll",
 ] as const;
 
 export const ALL: string[] = [...EQUIVALENCE, ...CONTROLS, ...GUARDRAILS];
