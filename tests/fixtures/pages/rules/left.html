@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rule coverage</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for --computed's rule coverage. This side writes the breakpoint as a range and adds a rule for a .bubble no page has; the
+   colour and the url() hash differ only in notation, so they are no change. */
+.toc { margin: 0 0 32px; padding: 0; list-style: none; color: rgb(0 0 0); }
+.toc li { height: 24px; }
+@media (width >= 960px) { .toc li { padding-left: 8px; } }
+.ghost { background-image: url(/shared/img/ghost.3f9a8c1d.png); }
+.bubble { border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Rule coverage guard rail</h1>
+<p class="lede">The two sides write one breakpoint in different notation and render the same, so only rule coverage tells the rewritten rule apart, and whether any shot reached it.</p>
+
+<ul class="toc">
+  <li>Install</li>
+  <li>Configure</li>
+  <li>Deploy</li>
+</ul>
+
+<section class="notes">
+<h2>Notes</h2>
+<p>At 960 the breakpoint holds and its rule styles three items; at 959 it styles none. A rule for an element no page has matches nothing on any shot.</p>
+</section>
+</div>
+</body>
+</html>

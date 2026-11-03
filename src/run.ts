@@ -9,7 +9,14 @@ import { applyAccepted, readAccepted, unacceptable, updateAccepted } from "./acc
 import { CACHE_DIR, cacheFile, replayable, REPLAY_TTL, saveRecording, shotId } from "./cache.ts";
 import { cancelUnstable, capture, HookError, prepare, step, type Shot } from "./capture.ts";
 import { compare, crops, type Band, type Box, type Region } from "./compare.ts";
-import { diffAria, diffSnapshots, fmtAria, fmtComputed, pageError } from "./computed.ts";
+import {
+  diffAria,
+  diffSnapshots,
+  fmtAria,
+  fmtComputed,
+  pageError,
+  ruleCoverage,
+} from "./computed.ts";
 import { locate, snapshotStates, type ElementDiff } from "./locate.ts";
 import {
   alive,
@@ -293,6 +300,10 @@ export async function run({
   const queue = [...jobs];
   let done = 0;
   let down = "";
+  const unreadable = {
+    left: new Set(prev?.meta.unreadableSheets?.left),
+    right: new Set(prev?.meta.unreadableSheets?.right),
+  };
   const every = Math.ceil(jobs.length / 10);
   const tick = () => {
     ++done;
@@ -522,10 +533,23 @@ export async function run({
         const computed = cfg.computed
           ? await Promise.race([
               Promise.all([snap(pages.left, "left"), snap(pages.right, "right")]).then(
-                ([l, r]) => {
-                  const d = diffSnapshots(l.snap, r.snap, [pages.left.url(), pages.right.url()]);
+                async ([l, r]) => {
+                  const origins: [string, string] = [pages.left.url(), pages.right.url()];
+                  const d = diffSnapshots(l.snap, r.snap, origins);
                   const unchecked = Math.max(l.unchecked, r.unchecked);
-                  return { computed: unchecked ? { ...d, unchecked } : d };
+                  // Left out, like a result from before it, rather than failing the snapshot.
+                  const cov = await ruleCoverage([pages.left, pages.right], origins).catch(
+                    () => null,
+                  );
+                  cov?.unreadable[0].forEach((h) => unreadable.left.add(h));
+                  cov?.unreadable[1].forEach((h) => unreadable.right.add(h));
+                  return {
+                    computed: {
+                      ...d,
+                      ...(unchecked ? { unchecked } : {}),
+                      ...(cov ? { rules: cov.rules } : {}),
+                    },
+                  };
                 },
                 (e: Error) => ({ computed: null, computedError: e.message }),
               ),
@@ -729,6 +753,14 @@ export async function run({
     config,
     rightReplayedFrom: replays.sort()[0] ?? null,
     rerun: prev ? { rerun: jobs.length, reused: results.length - jobs.length } : null,
+    ...(cfg.computed
+      ? {
+          unreadableSheets: {
+            left: [...unreadable.left].sort(),
+            right: [...unreadable.right].sort(),
+          },
+        }
+      : {}),
   };
   const reportPath = await writeReport(results, meta, cfg.outDir, stale);
   const resultsPath = writeResults(results, meta, cfg.outDir, stale);
@@ -855,6 +887,20 @@ export async function merge(fullDir: string, partialDir: string, outDir: string)
     hideSelectors: union(full.meta.hideSelectors, partial.meta.hideSelectors),
     blockUrlPatterns: union(full.meta.blockUrlPatterns, partial.meta.blockUrlPatterns),
     rightReplayedFrom: replays.sort()[0] ?? null,
+    ...(full.meta.unreadableSheets || partial.meta.unreadableSheets
+      ? {
+          unreadableSheets: {
+            left: union(
+              full.meta.unreadableSheets?.left ?? [],
+              partial.meta.unreadableSheets?.left ?? [],
+            ).sort(),
+            right: union(
+              full.meta.unreadableSheets?.right ?? [],
+              partial.meta.unreadableSheets?.right ?? [],
+            ).sort(),
+          },
+        }
+      : {}),
   };
   const stale = [
     ...(full.summary.stale ?? []).filter((a) => !taken.has(`${a.route}@${a.width}`)),

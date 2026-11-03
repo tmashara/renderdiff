@@ -8,10 +8,12 @@ import {
   fmtAria,
   fmtComputed,
   groupFindings,
+  groupRules,
   SHOWN,
   type AriaDiff,
   type ComputedDiff,
   type Finding,
+  type RuleFinding,
 } from "./computed.ts";
 import type { Band, Box, Region, TextDiff } from "./compare.ts";
 import { CONTEXT_OPTIONS, name, type Sides } from "./config.ts";
@@ -144,6 +146,8 @@ export interface RunMeta {
   platform: string;
   /** With `--rerun-failed`: shots rerun and shots reused from the previous run; else null. */
   rerun: { rerun: number; reused: number } | null;
+  /** With `--computed`: stylesheets a side couldn't read (cross-origin), left out of rule coverage. */
+  unreadableSheets?: { left: string[]; right: string[] };
 }
 
 export interface Summary {
@@ -164,6 +168,8 @@ export interface Summary {
   findings: PixelFinding[];
   /** With `--computed`: each style change once, with the routes and widths it was seen at. */
   computed?: Finding[];
+  /** With `--computed`: each one-sided rule group once, with where it matched an element and where none. */
+  rules?: RuleFinding[];
 }
 
 /** An element change, text line or element-less band delta, as the summary prints it. */
@@ -275,7 +281,9 @@ export function writeResults(
       accepted: compared.filter((r) => r.accepted).length,
       stale,
       findings: pixelFindings(results),
-      ...(compared.some((r) => "computed" in r) ? { computed: groupFindings(results) } : {}),
+      ...(compared.some((r) => "computed" in r)
+        ? { computed: groupFindings(results), rules: groupRules(results) }
+        : {}),
     },
   };
   const rows = results.map((r) => `    ${JSON.stringify(r, round)}`).join(",\n");

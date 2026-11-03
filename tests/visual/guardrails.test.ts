@@ -337,6 +337,40 @@ describe("consent chrome", () => {
   });
 });
 
+test("--computed shows whether a rewritten breakpoint, and a rule nothing has, ever applied", async () => {
+  const run = await capture(["/rules"], { widths: [960, 959], extra: ["--computed"] });
+  assert.equal(run.code, 0, context(run));
+  const at = (widths: number[]) => (widths.length ? [{ url: "/rules", widths }] : []);
+  const group = (side: string, conditions: string[], matched: number[], unmatched: number[]) => ({
+    side,
+    sheet: "inline",
+    conditions,
+    rules: 1,
+    matched: at(matched),
+    unmatched: at(unmatched),
+  });
+  // The rgb() and url() hash rewrites mean the same, so they are no group.
+  assert.deepEqual(
+    results(run.outDir).summary.rules,
+    [
+      group("left", [], [], [960, 959]),
+      group("left", ["@media (width >= 960px)"], [960], [959]),
+      group("right", ["@media (min-width: 960px)"], [960], [959]),
+    ],
+    context(run),
+  );
+  assert.deepEqual(
+    result(results(run.outDir), "/rules", 960).computed?.rules?.map((g) => g.elements),
+    [3, 0, 3],
+  );
+  assert.deepEqual(parseSummary(run.stdout).rules, [
+    "rules: 3 changed groups, 1 never matched, 2 matched on some shots",
+    "  +inline (1 rule)  matched nothing: /rules@960,959",
+    "  +inline @media (width >= 960px) (1 rule)  matched /rules@960; nothing /rules@959",
+    "  -inline @media (min-width: 960px) (1 rule)  matched /rules@960; nothing /rules@959",
+  ]);
+});
+
 test("a page whose CSP refuses inline styles still gets renderdiff's CSS", async () => {
   const run = await capture(["/csp"]);
   assert.equal(run.code, 0, context(run));

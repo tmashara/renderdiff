@@ -198,6 +198,16 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
   `before` hook can open the state.
 - Fails per shot (reported, pixels stand) past 15s or 50,000 elements. Not walked: SVG
   internals, shadow DOM, iframes, masked and `display: none` subtrees.
+- `rules: N changed groups, X never matched, Y matched on some shots`: style rules only one
+  side has (`+` left, `-` right), grouped by stylesheet (`inline`: a page's `<style>`, per
+  route) and enclosing at-rules, then where any element they could style existed (their
+  `@media`/`@supports` holding). `matched nothing`: the run proved nothing about those rules;
+  add a route, width or hook that reaches them. `matched … ; nothing …` names the shots on each
+  side of a breakpoint. All-matched groups are only counted. Rules are compared as Chrome
+  serializes them, so `rgb()` notation is no change but `min-width:` → `width >=` is; `url()`
+  hashes and the origin are normalized. Leans to matched: `:hover`/`:focus` and pseudo-elements
+  are stripped, `@container` taken as holding. Cross-origin sheets aren't read
+  (`meta.unreadableSheets`). `no style rule differs`: once parsed, both sides' style rules are the same.
 
 ## `--aria`
 
@@ -411,18 +421,20 @@ commas: `JSON.parse` the whole file, not each line. Paths are relative to the ou
   `masked` (reasons of `data-renderdiff-mask` elements, absent when none); `images`; `crops`
   (`kind`, each side's box with `h` 0 at an insertion point, `layout`, `scale`, `clipped`);
   `accepted`; `rightReplayedFrom`; with `--computed`, `computed` (`dom`, 0 = identical;
-  `changes` `{ key, prop, values }`, first 500; `truncated`; `unmatched`) or null with
+  `changes` `{ key, prop, values }`, first 500; `truncated`; `unmatched`; `rules`
+  `{ side, sheet, conditions, rules, elements }`) or null with
   `computedError`; with `--aria`, `aria` (`added`, `removed`, first 200 each, both empty =
   identical; `truncated`) or null with `ariaError`.
 - **`summary`:** `compared`, `errors`, `mean` and `worst` (accepted shots aside),
   `belowThreshold`, `differing` (unaccepted shots with any differing pixel; without
   `--threshold`, any exits 1), `accepted`, `stale`, `findings` (each `dom` entry, text line
   or element-less band on 2+ routes once: `finding`, `selector?`, `at: [{ url, widths }]`),
-  and with `--computed` `computed` (each change once with `at: [{ url, widths }]`).
+  and with `--computed` `computed` (each change once with `at: [{ url, widths }]`) and `rules`
+  (each rule group once with `matched` and `unmatched` `[{ url, widths }]`).
 - **`meta`:** origins, widths, threshold, `clock`, block patterns, hidden selectors, mask
   reasons, `browser` (`chromium`, or `chrome` after a fallback), storage state file names,
   `config` hash, `rightReplayedFrom`, `freezeVideo`, `lottieFrame` (only when set), `platform`, `rerun` (`{ rerun, reused }` or
-  null).
+  null), with `--computed` `unreadableSheets` `{ left, right }`.
 
 ## Gotchas
 

@@ -38,5 +38,12 @@ export {
 
 export { type Band, type Box, type Region, type TextDiff } from "./compare.ts";
 export { type ElementDiff } from "./locate.ts";
-export { type AriaDiff, type ComputedDiff, type Finding, type StyleChange } from "./computed.ts";
+export {
+  type AriaDiff,
+  type ComputedDiff,
+  type Finding,
+  type RuleFinding,
+  type RuleGroup,
+  type StyleChange,
+} from "./computed.ts";
 export { type Accepted, type Fingerprint } from "./accept.ts";
