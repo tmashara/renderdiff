@@ -248,6 +248,30 @@ describe("--rerun-failed", () => {
     assert.doesNotMatch(run.stdout, /^varies /m, context(run));
   });
 
+  test("reuses a matching shot with a few unstable pixels, and reruns a larger unstable area", async () => {
+    // An 8x8 ticking box at 375 only: anti-aliasing-sized noise, which a rerun measures again.
+    const file = path.join(tempDir(), "tiny.mjs");
+    fs.writeFileSync(
+      file,
+      `export default { before: async (page, { width }) => { if (width === 375) await page.addStyleTag({ content: ".tick { width: 8px !important; height: 8px !important }" }); } };\n`,
+    );
+    const a = args(["/ticker"], ["--config", file], [1440, 375]);
+    const first = await runCli(a);
+    assert.equal(first.code, 0, context(first));
+    const was = results(first.outDir);
+    assert.deepEqual(
+      [result(was, "/ticker", 1440).unstablePixels, result(was, "/ticker", 375).unstablePixels],
+      [148_480, 64],
+      context(first),
+    );
+    const run = await runCli([...a, "--rerun-failed"], { outDir: first.outDir });
+    assert.equal(run.code, 0, context(run));
+    const s = parseSummary(run.stdout);
+    assert.deepEqual(s.rerun, { shots: 1, routes: 1, reused: 1, untouched: 0 }, context(run));
+    assert.deepEqual(result(results(run.outDir), "/ticker", 375), result(was, "/ticker", 375));
+    assert.deepEqual(s.clean, [], "a reused unstable shot is still not clean");
+  });
+
   test("a run that doesn't repeat the previous one is refused", async () => {
     const first = await runCli(args(["/color"]));
     assert.equal(first.code, 1, context(first));

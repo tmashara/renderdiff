@@ -1432,6 +1432,95 @@ describe("failed assets", () => {
     assert.match(row!.text, /^100\.00%/, context(run));
     assert.match(row!.failed ?? "", /font Gone/, context(run));
   });
+
+  /** A config whose hook links a stylesheet that 404s on `sides`, for their first `loads` loads. */
+  function missing(loads: number, sides = ["left"]) {
+    const file = path.join(tempDir(), "missing.mjs");
+    fs.writeFileSync(
+      file,
+      `const n = { left: 0, right: 0 };
+export default { before: async (page, { side }) => {
+  if (!${JSON.stringify(sides)}.includes(side) || n[side]++ >= ${loads}) return;
+  await page.evaluate(() => new Promise((r) => {
+    const l = document.createElement("link");
+    l.rel = "stylesheet";
+    l.href = "/shared/missing.css";
+    l.onload = l.onerror = r;
+    document.head.append(l);
+  }));
+} };
+`,
+    );
+    return file;
+  }
+
+  // Each on its own route: tests run concurrently, and they count that route's loads.
+  test("a stylesheet that failed on one side only is loaded again, and compares clean if it loads", async () => {
+    const hits = site.hits("/table-vs-grid");
+    const run = await capture(["/table-vs-grid"], { config: missing(1) });
+    assert.equal(site.hits("/table-vs-grid") - hits, 3, "the left side is loaded twice");
+    const r = result(results(run.outDir), "/table-vs-grid", 1440);
+    assert.deepEqual(r.failed, { left: [], right: [] }, context(run));
+    assert.deepEqual(parseSummary(run.stdout).clean, ["/table-vs-grid"], context(run));
+  });
+
+  test("a one-sided failure that persists is reported, and retried only until it recurs", async () => {
+    const widths = [1440, 1152, 896, 375];
+    const hits = site.hits("/abs-vs-flex");
+    const run = await capture(["/abs-vs-flex"], { widths, config: missing(Infinity) });
+    const loads = site.hits("/abs-vs-flex") - hits;
+    // Two workers: at most one retry each before the first recurrence is known.
+    assert.ok(loads > 2 * widths.length && loads <= 2 * widths.length + 2, `${loads} loads`);
+    for (const w of widths) {
+      const r = result(results(run.outDir), "/abs-vs-flex", w);
+      assert.deepEqual(r.failed.left, [`stylesheet ${site.left}/shared/missing.css`], context(run));
+    }
+  });
+
+  test("a retry that times out leaves the first shot and its page compared", async () => {
+    const file = path.join(tempDir(), "hang.mjs");
+    fs.writeFileSync(
+      file,
+      `let n = 0;
+export default { before: async (page, { side }) => {
+  if (side !== "left") return;
+  if (n++) return new Promise(() => {});
+  await page.evaluate(() => new Promise((r) => {
+    const l = document.createElement("link");
+    l.rel = "stylesheet";
+    l.href = "/shared/missing.css";
+    l.onload = l.onerror = r;
+    document.head.append(l);
+  }));
+} };
+`,
+    );
+    const run = await runCli(
+      [
+        ...renderdiffArgs({
+          left: site.left,
+          right: site.right,
+          routes: ["/animated"],
+          widths: [1440],
+          config: file,
+        }),
+        "--computed",
+      ],
+      { env: { RENDERDIFF_SHOT_TIMEOUT: "2" }, timeoutMs: 60_000 },
+    );
+    assert.equal(run.code, 0, context(run));
+    const r = result(results(run.outDir), "/animated", 1440);
+    assert.deepEqual(r.failed.left, [`stylesheet ${site.left}/shared/missing.css`], context(run));
+    assert.equal(r.computed?.dom, 0, `computed read another document${context(run)}`);
+  });
+
+  test("a failure on both sides is not retried", async () => {
+    const hits = site.hits("/inline-block-vs-flex");
+    const run = await capture(["/inline-block-vs-flex"], {
+      config: missing(Infinity, ["left", "right"]),
+    });
+    assert.equal(site.hits("/inline-block-vs-flex") - hits, 2, context(run));
+  });
 });
 
 describe("font faces", () => {

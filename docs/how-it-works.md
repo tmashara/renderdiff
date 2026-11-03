@@ -29,7 +29,9 @@ honestly. This is what renderdiff does to make sure of that.
   (server-sent events and beacons don't count), then re-injects the stylesheet to
   catch late-injected chrome. Stylesheets that failed or answered ≥ 400 (blocked URLs
   aside) and font faces that failed (blocked font files included) are recorded per side as
-  `failed`, and keep the route off the `clean:` line.
+  `failed`, and keep the route off the `clean:` line. When only one side failed, that side is
+  loaded again once, and reported only if it fails again; a failure that recurred isn't retried
+  on later shots.
 - **Shoots until stable** — repeats the screenshot until two in a row match (at most 3; 2
   for tiled pages). Pixels still changing between the last two shots of the same load are
   noise from that origin: they're painted magenta on both sides, reported per comparison

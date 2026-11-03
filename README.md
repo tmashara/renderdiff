@@ -220,7 +220,8 @@ renderdiff http://localhost:3000 https://example.com / /about --rerun-failed
 to the config, or in cwd); commit it. Later, a shot whose every difference matches an entry is
 listed on an `accepted:` line and doesn't count toward the exit code; anything new on the same
 page still shows. `--rerun-failed` reruns only what the last run in `--out` didn't find clean
-or accepted (with the same `--only`, if it had one). Against a slow reference, `--cache-right`
+or accepted (with the same `--only`, if it had one), keeping a shot with no differing pixels
+and at most 100 unstable ones. Against a slow reference, `--cache-right`
 replays the right side's recorded traffic for up to an hour; drop it for the final run.
 Matching rules, why to accept on the platform that checks, and the cache:
 [docs/accepted.md](https://github.com/tmashara/renderdiff/blob/main/docs/accepted.md).
