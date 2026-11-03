@@ -377,17 +377,23 @@ export async function run({
         // One side alone failing an asset is likely load; once it recurs on a retry, it's the build.
         const [lone, ...both] = (["left", "right"] as const).filter((s) => shots[s].failed.length);
         if (lone && !both.length && !shots[lone].failed.every((f) => lasting.has(`${lone} ${f}`))) {
+          const was = missed;
           if (lone === "right") missed = 0;
           // A spare page: a retry that throws must leave this shot's document for locate and --computed.
-          const spare = { ...pages, [lone]: await pages[lone].context().newPage() };
-          await prepare(spare[lone], cfg, now);
-          const again = await take(lone, spare).catch(() => null);
-          const [keep, drop] = again ? [spare, pages] : [pages, spare];
-          await drop[lone].close();
-          pages[lone] = keep[lone];
+          const spare = { ...pages };
+          const again = await (async () => {
+            spare[lone] = await pages[lone].context().newPage();
+            await prepare(spare[lone], cfg, now);
+            return take(lone, spare);
+          })().catch(() => null);
           if (again) {
+            await pages[lone].close();
+            pages[lone] = spare[lone];
             shots[lone] = again;
             for (const f of again.failed) lasting.add(`${lone} ${f}`);
+          } else {
+            missed = was;
+            if (spare[lone] !== pages[lone]) await spare[lone].close().catch(() => {});
           }
         }
         const { left: leftShot, right: rightShot } = shots;
