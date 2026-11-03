@@ -5,7 +5,9 @@
 <title>Layout parity</title>
 <link rel="stylesheet" href="/shared/base.css">
 <style>
-/* GUARD RAIL for page-shot width: the right side parks a box off-canvas behind overflow-x. */
+/* GUARD RAIL for page-shot width: the right side parks a box off-canvas behind overflow-x.
+   Both sides outgrow the viewport, so both take the same capture path. */
+.tall { height: 1200px; }
 </style>
 </head>
 <body>
@@ -15,6 +17,7 @@
 <h2>Notes</h2>
 <p>The right side parks a box just past the right edge and hides it with overflow-x on the body. Nobody can scroll to it, so the shot must stay as wide as the viewport, and both sides must match pixel for pixel.</p>
 </section>
+<div class="tall"></div>
 </div>
 </body>
 </html>

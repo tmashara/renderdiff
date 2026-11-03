@@ -68,10 +68,12 @@ honestly. This is what renderdiff does to make sure of that.
 - **Stitches tall pages.** A single screenshot past 16,384px can come out truncated or
   wrapped (Chrome repeats the top of the page; recent headless Chromium does not), so taller
   pages, and element shots taller than that, are captured as tiles through CDP and stitched
-  back together. Page shots on both paths are the viewport's width; anything past its right
-  edge is left out, as the user sees it. Masks are painted onto the final image from each
-  element's box and what its children paint outside it, clipped to its overflow ancestors and
-  read again at every shot, so they apply the same way on both paths. Past 57.6 million pixels (40,000px tall at
+  back together. A page that hides horizontal overflow (`overflow-x: hidden` or `clip` on the
+  viewport) is shot at the viewport's width, as the user sees it; one that really scrolls
+  sideways keeps its full width, so the overflow shows as a width change. Masks are painted
+  onto the final image from each element's box and what its children paint outside it,
+  clipped to its overflow ancestors and read again at every shot, so they apply the same way
+  on both paths. Past 57.6 million pixels (40,000px tall at
   1440px wide, about 150,000px at 375px) it errors — that's a broken layout, not a page.
 
 Every run's report ends with a "What was neutralized" section listing the actual block

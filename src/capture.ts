@@ -458,12 +458,25 @@ export async function capture(
     );
   }
   const tiled = area.height > MAX_CAPTURE_HEIGHT;
+  // The viewport takes html's overflow, or body's when html's is visible.
+  const hidesX = await page.evaluate(() =>
+    ["hidden", "clip"].includes(
+      [document.documentElement, document.body ?? document.documentElement]
+        .map((e) => getComputedStyle(e).overflowX)
+        .find((v) => v !== "visible") ?? "visible",
+    ),
+  );
   // Read on both sides of the shot, so a box that moves while it is taken stays covered.
   const shoot = async () => {
     const before = await read();
     const png = tiled
       ? await captureTiled(page, area)
-      : await page.screenshot({ fullPage: true, clip: area, animations: "disabled" });
+      : await page.screenshot({
+          fullPage: true,
+          // Playwright trims the clip's height to the document's.
+          clip: clip ?? (hidesX ? { x: 0, y: 0, width, height: 1e6 } : undefined),
+          animations: "disabled",
+        });
     return paintBoxes(png, [...before, ...(await read())]);
   };
 

@@ -66,6 +66,7 @@ export const GUARDRAILS = [
   "mask-geometry",
   "bistable",
   "offcanvas",
+  "appshell",
 ] as const;
 
 export const ALL: string[] = [...EQUIVALENCE, ...CONTROLS, ...GUARDRAILS];

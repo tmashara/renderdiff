@@ -195,12 +195,19 @@ describe("the render gate", () => {
 describe("page shot width", () => {
   test("an off-canvas box hidden by overflow-x does not widen the shot", async () => {
     const run = await capture(["/offcanvas"], { widths: [1440, 375] });
+    assert.equal(run.code, 0, context(run));
     for (const width of [1440, 375]) {
-      // Not the exit code or zero pixels: on Linux, capturing beyond a wider-than-viewport document re-resolves monospace.
-      assert.equal(cardFor(run, "/offcanvas", width).widthDelta, 0, context(run));
+      assert.equal(cardFor(run, "/offcanvas", width).diffPixels, 0, context(run));
       const meta = await sharp(run.file(`offcanvas.${width}.right.png`)).metadata();
       assert.equal(meta.width, width, context(run));
     }
+  });
+
+  test("an app shell whose body scrolls is shot below the fold", async () => {
+    const run = await capture(["/appshell"]);
+    assert.equal(run.code, 0, context(run));
+    const meta = await sharp(run.file("appshell.1440.left.png")).metadata();
+    assert.ok(meta.height! > 3000, `${meta.height}px tall${context(run)}`);
   });
 });
 
