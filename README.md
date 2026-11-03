@@ -116,7 +116,7 @@ renderdiff <left-origin> <right-origin> <route…> [options]
 | `--storage-state <file>` | Start both sides with this Playwright storage state (cookies, localStorage), e.g. signed in. Relative to cwd. Over the config's `storageState`. |
 | `--left-storage-state <file>`, `--right-storage-state <file>` | That side's storage state, over `--storage-state`. One side alone is fine. |
 | `--accept <reason>` | Record this run's differences as accepted, with a reason. See **Accepted differences and reruns**. |
-| `--rerun-failed` | Rerun only what the last run in `--out` didn't find clean or accepted, keeping the rest. |
+| `--rerun-failed` | Rerun only what the last run in `--out` didn't find clean or accepted, keeping the rest (and matching shots with at most 100 unstable px). |
 | `--only <route\|file>` | Run only the config's routes with this path (or pair), keeping their hooks and selectors; `'/a @sel'` narrows to that selector. Repeatable. A value naming an existing file (relative to cwd) is read as a route list, one per line, `#` lines skipped. Not with positional routes or `--sitemap`; a value that matches no config route is an error. |
 | `--cache-right` | Replay the right side's network traffic from the last `--cache-right` run in `--out`, when it's under an hour old and covers every shot; otherwise load it live and record it. Keeps `<out>/.cache/` when the out dir is wiped. See **Accepted differences and reruns**. |
 | `--no-recheck` | Don't reload a differing shot's right side to find content that varies per load. Off anyway under `--cache-right`. |
@@ -220,7 +220,8 @@ renderdiff http://localhost:3000 https://example.com / /about --rerun-failed
 to the config, or in cwd); commit it. Later, a shot whose every difference matches an entry is
 listed on an `accepted:` line and doesn't count toward the exit code; anything new on the same
 page still shows. `--rerun-failed` reruns only what the last run in `--out` didn't find clean
-or accepted (with the same `--only`, if it had one). Against a slow reference, `--cache-right`
+or accepted (with the same `--only`, if it had one), keeping a shot with no differing pixels
+and at most 100 unstable ones. Against a slow reference, `--cache-right`
 replays the right side's recorded traffic for up to an hour; drop it for the final run.
 Matching rules, why to accept on the platform that checks, and the cache:
 [docs/accepted.md](https://github.com/tmashara/renderdiff/blob/main/docs/accepted.md).

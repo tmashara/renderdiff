@@ -50,7 +50,7 @@ the per-shot output when piped, `--no-progress` the summary on a terminal.
 | `varies /a @1440  148,480px painted out  div.drift` | After the routes: the right side differed between two fresh loads there (a counter, a rotating banner). Those elements' whole boxes are painted out on both sides like a mask and left out of the score, so the count can exceed the pixels that changed; the shot can't be accepted. `(not located)`: no element was named, its region was painted. |
 | `  --mask 'div.drift'` | The flag that masks the `varies` elements, for the next run. Only selectors ending in an id, class or attribute are suggested: a bare `p:nth-of-type(14)` would hide real changes too. |
 | `  masks: [{ selector: … }]` | The same as config `masks` entries, with `reason: "varies per load"`. |
-| `failed left: font Inter 700` | A stylesheet or font face that side failed to load (blocked URLs aside). Fix that first: a fallback font changes every line of text. |
+| `failed left: font Inter 700` | A stylesheet or font face that side failed to load (blocked URLs aside); on one side only, it failed again on a reload. Fix that first: a fallback font changes every line of text. |
 | `fonts -"Inter 600" +"Roboto"` | `@font-face` or `FontFace` faces only one side requested (`-`: only the reference, `+`: only your change), as family, weight, style and stretch, `normal` left out. One still loading when read counts as requested. Web fonts only: a system font a side fell back to isn't listed. Usually the same on every route, so see `findings`. |
 | `text -"Pricing"` | A line of visible text only the reference has (`+`: only your change). Up to three, then `(+N more)`. |
 | `dom sel prop a→b` | Element on both sides whose computed `prop` differs, left value first. |
@@ -66,7 +66,7 @@ the per-shot output when piped, `--no-progress` the summary on a terminal.
 | `ERROR …` | Unmeasured, which is neither a pass nor a fail. Exits 3. |
 | `renderdiff: …` | The verdict line: routes and shots that differ (accepted ones aside), errors, the worst score, and with `--threshold` how many scored below it. |
 | `accepted:` / `stale accepted:` | Routes whose every difference was accepted, and accepted entries the run no longer saw. See [accepted.md](accepted.md). |
-| `rerun:` | With `--rerun-failed`: how many shots were rerun and how many reused. |
+| `rerun:` | With `--rerun-failed`: how many shots were rerun and how many reused (clean, accepted, or no differing pixels and at most 100 unstable). |
 | `right:` | With `--cache-right`: whether the right side was replayed, and from when, or loaded live and recorded. |
 
 ## Scores

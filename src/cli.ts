@@ -220,7 +220,8 @@ const HELP = `
 
   --accept "<reason>" records this run's differences in renderdiff.accepted.json (next to
   the config, or in cwd); later runs report them as accepted, and anything new still shows.
-  --rerun-failed reruns only what the previous run in --out didn't find clean or accepted.
+  --rerun-failed reruns only what the previous run in --out didn't find clean or accepted;
+  a shot with no differing pixels and at most 100 unstable ones is kept too.
 
   renderdiff report reads results.json in <out-dir>, rewrites report.html, and writes
   evidence.html beside it: one self-contained page (crops embedded) with a parity banner and
@@ -265,7 +266,8 @@ const HELP = `
                         That side's storage state, over --storage-state.
     --accept <reason>   Accept this run's differences, scoped by its routes and widths.
     --rerun-failed      Rerun what the last run in --out didn't find clean or accepted,
-                        keeping the rest. Same origins, routes and widths as that run.
+                        keeping the rest (and matching shots with at most 100 unstable
+                        px). Same origins, routes and widths as that run.
     --only <route|file> Run only the config's routes with this path (or pair), their
                         hooks and selectors kept; '/a @sel' narrows to that selector.
                         Repeatable. A value naming a file in cwd lists one per line,

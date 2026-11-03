@@ -55,6 +55,9 @@ const SHOT_TIMEOUT = (Math.max(0, Number(process.env.RENDERDIFF_SHOT_TIMEOUT)) |
 /** Past this share of a page unstable, too little was measured for a score to mean anything. */
 const MAX_UNSTABLE_SHARE = 0.25;
 
+/** Unstable px a rerun reuses a matching shot under: anti-aliased corners recur on every load. */
+const REUSE_UNSTABLE = 100;
+
 export const BLANK_HINT =
   "under 200 chars of text and no visible image, SVG, canvas, video, iframe or form control; " +
   "if the page is meant to be this sparse, add data-renderdiff-rendered to a visible element its own " +
@@ -273,7 +276,13 @@ export async function run({
       // A shot measured against a replay stands only for a run that would replay it too.
       const replay = had?.status === "compared" && had.rightReplayedFrom;
       const fresh = !replay || (cacheRight && Date.now() - Date.parse(replay) < REPLAY_TTL);
-      if (had && reusable(had) && fresh) results.push(had);
+      const noise =
+        had?.status === "compared" &&
+        had.diffPixels === 0 &&
+        had.unstablePixels <= REUSE_UNSTABLE &&
+        !had.varies &&
+        !broken(had);
+      if (had && (reusable(had) || noise) && fresh) results.push(had);
       else jobs.push({ route, width });
     }
   }
@@ -300,6 +309,7 @@ export async function run({
       jobs.map((j) => shotId(j.route, j.width)),
     );
   const recorded: string[] = [];
+  const lasting = new Set<string>();
   if (har && !replayedAt) fs.mkdirSync(path.dirname(har), { recursive: true });
   const part = (i: number) => `${har}.${i}.part`;
 
@@ -363,9 +373,16 @@ export async function run({
         ]);
         const failed = settled.find((r) => r.status === "rejected");
         if (failed) throw failed.reason;
-        const [leftShot, rightShot] = settled.map(
-          (r) => (r as PromiseFulfilledResult<Shot>).value,
-        ) as [Shot, Shot];
+        const [left, right] = settled.map((s) => (s as PromiseFulfilledResult<Shot>).value);
+        const shots = { left: left!, right: right! };
+        // One side alone failing an asset is likely load; once it recurs on a retry, it's the build.
+        const [lone, ...both] = (["left", "right"] as const).filter((s) => shots[s].failed.length);
+        if (lone && !both.length && !shots[lone].failed.every((f) => lasting.has(f))) {
+          if (lone === "right") missed = 0;
+          shots[lone] = await shoot(pages, cfg[lone] + route[lone], route, lone, width, cfg, now);
+          for (const f of shots[lone].failed) lasting.add(f);
+        }
+        const { left: leftShot, right: rightShot } = shots;
         // A blank page matches any other blank page, so refuse rather than score two of
         // them. One blank side is left to the diff, which shows it plainly.
         if (leftShot.blank && rightShot.blank) {
