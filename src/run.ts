@@ -1011,24 +1011,38 @@ export function fmtVaries(results: RouteResult[], routes: string[]): string[] {
       ),
     ),
   ];
+  // An element whose box differs between the two loads: masking what moved would hide the page.
+  const moved = (r: ComparedResult) =>
+    r.varies!.some((g) =>
+      g.elements?.some(
+        (e) =>
+          e.side === "both" &&
+          (["x", "y", "w", "h"] as const).some((k) => e.left![k] !== e.right![k]),
+      ),
+    );
   const out: string[] = [];
   const masks: string[] = [];
+  const kept: ComparedResult[] = [];
   for (const route of routes) {
     const rs = rows.filter((r) => name(r) === route);
     if (!rs.length) continue;
     const sels = selectors(rs);
     const px = rs.reduce((n, r) => n + r.variesPixels!, 0);
+    const shifted = rs.some(moved);
     out.push(
       `varies ${route} @${rs.map((r) => r.width).join(",")}  ` +
-        `${px.toLocaleString("en-US")}px painted out  ${sels.join(" ") || "(not located)"}`,
+        `${px.toLocaleString("en-US")}px painted out  ${sels.join(" ") || "(not located)"}` +
+        (shifted ? "  layout moved" : ""),
     );
+    if (shifted) continue;
+    kept.push(...rs);
     for (const s of sels.filter((s) => !BARE.test(s))) {
       masks.push(
         `{ selector: ${JSON.stringify(s)}, urlPath: ${JSON.stringify(rs[0]!.right)}, reason: "varies per load" }`,
       );
     }
   }
-  const sels = selectors(rows).filter((s) => !BARE.test(s));
+  const sels = selectors(kept).filter((s) => !BARE.test(s));
   if (sels.length) {
     out.push(`  --mask ${sels.map((s) => `'${s.replace(/'/g, `'\\''`)}'`).join(" --mask ")}`);
     out.push(`  masks: [${masks.join(", ")}]`);

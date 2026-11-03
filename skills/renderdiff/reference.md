@@ -112,7 +112,7 @@ on stderr: `✗ 2 routes differ (10 shots).` (`below 97.00%` with `--threshold`)
 | `unstable 1,204px` | Pixels that kept changing between shots of the same load on one origin (ticker, carousel, video with `--no-freeze-video`). Painted out on both sides, excluded from the score; the route is never clean. Large: a big area went unmeasured, look at the magenta in the full shots. |
 | `1 accepted` | That many of the shot's bands and regions are accepted; the rest are new. `dom` names only the new. |
 | `text +"x" -"y"` | Lines of visible text only on the left (`+`) / right (`-`), added first. Up to three, then `(+N more)`. Masked elements are left out. |
-| `findings: N repeated on 2+ routes` | After the routes: each `dom` entry, text line or element-less `band -24px` seen on 2+ routes once, `×N routes  /a@1440,375 …`, most widespread first, accepted aside; top 20, all in `summary.findings`. One cause: fix it once. The same selector can be a different element per route: check one crop. |
+| `findings: N repeated on 2+ routes` | After the routes: each `dom` entry, text line or element-less `band -24px` seen on 2+ routes once, `×N routes  /a@1440,375 …`, most widespread first, accepted aside; text lines on exactly the same shots share one line (`text -"Users" -"Docs" (+9 more)`), N counts printed lines; top 20, all in `summary.findings`, one per text line. One cause: fix it once. The same selector can be a different element per route: check one crop. |
 
 **`dom` entries** (left first, `;`-separated)
 

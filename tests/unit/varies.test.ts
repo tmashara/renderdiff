@@ -1,10 +1,12 @@
-/** The `varies` block suggests masks only for selectors that name an element by id, class or attribute. */
+/** The `varies` block suggests masks only for selectors that name an element by id, class or attribute, and only where no box moved between loads. */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ComparedResult } from "../../src/report.ts";
 import { fmtVaries } from "../../src/run.ts";
 
-const shot = (url: string, selectors: string[]) =>
+const box = { x: 0, y: 0, w: 1240, h: 24 };
+
+const shot = (url: string, selectors: string[], right = box) =>
   ({
     status: "compared",
     url,
@@ -13,7 +15,15 @@ const shot = (url: string, selectors: string[]) =>
     selector: null,
     width: 1440,
     variesPixels: 48263,
-    varies: [{ x: 0, y: 0, w: 1240, h: 1, elements: selectors.map((selector) => ({ selector })) }],
+    varies: [
+      {
+        x: 0,
+        y: 0,
+        w: 1240,
+        h: 1,
+        elements: selectors.map((selector) => ({ selector, side: "both", left: box, right })),
+      },
+    ],
   }) as unknown as ComparedResult;
 
 test("bare-tag selectors are listed but not suggested as masks", () => {
@@ -34,4 +44,17 @@ test("bare-tag selectors are listed but not suggested as masks", () => {
 
 test("no suggestion lines when every selector is bare", () => {
   assert.equal(fmtVaries([shot("/a", ["p:nth-of-type(14)", "div"])], ["/a"]).length, 1);
+});
+
+test("a box that moved between loads: listed as layout moved, no mask suggested", () => {
+  const out = fmtVaries(
+    [shot("/a", [".card"]), shot("/b", ["div.body", "aside.side"], { ...box, w: 1203 })],
+    ["/a", "/b"],
+  );
+  assert.deepEqual(out.slice(0, 2), [
+    "varies /a @1440  48,263px painted out  .card",
+    "varies /b @1440  48,263px painted out  div.body aside.side  layout moved",
+  ]);
+  assert.equal(out[2], "  --mask '.card'");
+  assert.doesNotMatch(out[3]!, /div\.body|aside/);
 });

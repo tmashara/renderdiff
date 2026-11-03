@@ -606,6 +606,14 @@ describe("masks", () => {
     assert.match(run.stdout, /urlPath: "\/drifting", reason: "varies per load" \}\]$/m);
   });
 
+  test("varying content whose layout moved between loads gets no mask suggestion", async () => {
+    const run = await capture(["/reflowing"]);
+    const r = result(results(run.outDir), "/reflowing", 1440);
+    assert.ok(r.variesPixels! > 0, context(run));
+    assert.match(run.stdout, /^varies \/reflowing @1440  [\d,]+px painted out  .*  layout moved$/m);
+    assert.doesNotMatch(run.stdout, /--mask '|masks: \[/, context(run));
+  });
+
   test("a real change beside varying content still differs, and can't be accepted", async () => {
     const dir = tempDir();
     const hook = path.join(dir, "hook.mjs");
