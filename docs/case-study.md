@@ -195,11 +195,11 @@ not verified: dark mode, hover and focus states, the open mobile menu, and the p
 
 ## Runtime
 
-| Step | Wall clock |
-| --- | --- |
-| `yarn install` + `next build`, per side | ~1 min |
-| Full run, 11 routes × 5 widths | 14–18 s |
-| `--rerun-failed` after a fix | 6–15 s |
+| Step                                    | Wall clock |
+| --------------------------------------- | ---------- |
+| `yarn install` + `next build`, per side | ~1 min     |
+| Full run, 11 routes × 5 widths          | 14–18 s    |
+| `--rerun-failed` after a fix            | 6–15 s     |
 
 The whole loop (three runs, two fixes, two accepts, a final full run) took well under an hour,
 most of it spent reading crops and working out the `space-x` arithmetic.

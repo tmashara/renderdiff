@@ -24,6 +24,7 @@ import {
   fmtElements,
   fmtFailed,
   fmtFonts,
+  fmtText,
   fmtLine,
   fmtRegion,
   pct,
@@ -231,11 +232,7 @@ export function fmtPixelFindings(results: RouteResult[]): string[] {
   if (!groups.size) return [];
   const lines = [...groups.values()].map((fs) => {
     const t = fs.map((f) => f.finding);
-    const what =
-      t.length === 1
-        ? t[0]
-        : `text ${t.slice(0, 3).join(" ")}${t.length > 3 ? ` (+${t.length - 3} more)` : ""}`;
-    return `  ${what}  ×${fs[0]!.at.length} routes  ${fmtAt(fs[0]!.at)}`;
+    return `  ${t.length === 1 ? t[0] : fmtText(t)}  ×${fs[0]!.at.length} routes  ${fmtAt(fs[0]!.at)}`;
   });
   const out = [`findings: ${lines.length} repeated on 2+ routes`, ...lines.slice(0, SHOWN)];
   if (lines.length > SHOWN) out.push(`  (+${lines.length - SHOWN} more in results.json)`);

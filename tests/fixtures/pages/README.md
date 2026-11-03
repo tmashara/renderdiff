@@ -2,9 +2,9 @@
 
 Each directory here is one route. The fixture server (`tests/helpers/server.ts`) serves
 `left.html` to the left origin and `right.html` to the right origin at the same path, so a
-directory *is* a comparison. Two routes generate their markup instead
-(`page.ts` exporting `left()` / `right()`), because 18,000px of HTML is not worth writing by
-hand.
+directory *is* a comparison. Some routes generate their markup instead (`page.ts` exporting
+`left()` / `right()`): `tall` because 18,000px of HTML is not worth writing by hand, the rest
+because a static file can't change per load.
 
 Three groups:
 

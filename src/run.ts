@@ -33,6 +33,7 @@ import {
   fmtBand,
   fmtElements,
   fmtFailed,
+  fmtText,
   fmtFonts,
   fmtLine,
   fmtRegion,
@@ -1011,13 +1012,14 @@ export function fmtVaries(results: RouteResult[], routes: string[]): string[] {
       ),
     ),
   ];
-  // An element whose box differs between the two loads: masking what moved would hide the page.
+  // Pushed, not changed itself: a counter resizes its own box, a reflow moves its neighbours'.
   const moved = (r: ComparedResult) =>
     r.varies!.some((g) =>
       g.elements?.some(
         (e) =>
           e.side === "both" &&
-          (["x", "y", "w", "h"] as const).some((k) => e.left![k] !== e.right![k]),
+          !e.changed?.text &&
+          (e.left!.x !== e.right!.x || e.left!.y !== e.right!.y),
       ),
     );
   const out: string[] = [];
@@ -1112,9 +1114,6 @@ function elementsOf(r: {
     .filter((e, i) => all.findIndex((o) => o.selector === e.selector) === i)
     .slice(0, DOM_ELEMENTS);
 }
-
-/** At most this many text-diff lines per compact row. */
-const TEXT_LINES = 3;
 
 /**
  * The non-TTY summary, sized for an agent's context: clean routes on one line, then each
@@ -1259,10 +1258,7 @@ function row(g: ComparedResult[]): string {
     Math.max(...regions) ? `${span(regions, String)} reg` : "",
     unstable ? `unstable ${unstable.toLocaleString("en-US")}px` : "",
     Math.max(...accepted) ? `${span(accepted, String)} accepted` : "",
-    text.length
-      ? `text ${text.slice(0, TEXT_LINES).join(" ")}` +
-        (text.length > TEXT_LINES ? ` (+${text.length - TEXT_LINES} more)` : "")
-      : "",
+    text.length ? fmtText(text) : "",
   ]
     .filter(Boolean)
     .join("  ");

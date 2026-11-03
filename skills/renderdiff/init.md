@@ -84,7 +84,9 @@ const states = {
   },
 };
 const routes = readFileSync(new URL("./routes.txt", import.meta.url), "utf8")
-  .split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"))
+  .split("\n")
+  .map((l) => l.trim())
+  .filter((l) => l && !l.startsWith("#"))
   .map((r) => {
     const state = new URL(r, "http://x").searchParams.get("state");
     if (state && !states[state]) throw new Error(`routes.txt: no hook for state=${state}`);
@@ -114,27 +116,34 @@ Load the `renderdiff` skill first and follow its loop, its Feedback included; th
 what is specific here. Written for renderdiff <version>. Settings: `<app>/renderdiff.config.mjs`.
 
 ## Build
+
 <per app: command from the deploy, output dir, worktree notes, secrets>
 
 ## Serve
+
 <command; table: app | change (left) | base (right) | second base; stop by port>
 
 ## Routes
+
 <how routes.txt was made (sitemap + unlisted html − stubs, one page per template), to redo
 when the site changes>
 
 ## Run
+
 <per app: the command from <app>/, in the background, `--out` a fresh dir outside this
 folder per run; base vs base against the second base port; shots and minutes for the
 sample and a full run>
 
 ## Ignore
+
 <leftover noise that isn't masked, and why; mask reasons live in the configs>
 
 ## Cleanup
+
 <stop servers by port; git worktree remove>
 
 ## Publish
+
 <only if asked: where, how to shrink, privacy>
 ```
 

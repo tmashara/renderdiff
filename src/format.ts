@@ -14,6 +14,9 @@ export const fmtFailed = (f: { left: string[]; right: string[] } | undefined) =>
 /** `+"Inter 600" -"Roboto"`: + for faces only the left loaded, - for faces only the right did. */
 export const fmtFonts = (f: TextDiff) =>
   [...f.added.map((t) => `+"${t}"`), ...f.removed.map((t) => `-"${t}"`)].join(" ");
+/** `text +"a" -"b" -"c" (+2 more)`: the first `n` text-diff lines and how many more. */
+export const fmtText = (lines: string[], n = 3) =>
+  `text ${lines.slice(0, n).join(" ")}${lines.length > n ? ` (+${lines.length - n} more)` : ""}`;
 export const fmtRegion = (r: { x: number; y: number; w: number; h: number }) =>
   `${r.w}×${r.h} at (${r.x},${r.y})`;
 /** Signed like the height delta: + when left has the extra rows, − when right does. */

@@ -6,7 +6,7 @@ import { fmtVaries } from "../../src/run.ts";
 
 const box = { x: 0, y: 0, w: 1240, h: 24 };
 
-const shot = (url: string, selectors: string[], right = box) =>
+const shot = (url: string, selectors: string[], right = box, changed = {}) =>
   ({
     status: "compared",
     url,
@@ -21,7 +21,13 @@ const shot = (url: string, selectors: string[], right = box) =>
         y: 0,
         w: 1240,
         h: 1,
-        elements: selectors.map((selector) => ({ selector, side: "both", left: box, right })),
+        elements: selectors.map((selector) => ({
+          selector,
+          side: "both",
+          left: box,
+          right,
+          changed,
+        })),
       },
     ],
   }) as unknown as ComparedResult;
@@ -48,7 +54,7 @@ test("no suggestion lines when every selector is bare", () => {
 
 test("a box that moved between loads: listed as layout moved, no mask suggested", () => {
   const out = fmtVaries(
-    [shot("/a", [".card"]), shot("/b", ["div.body", "aside.side"], { ...box, w: 1203 })],
+    [shot("/a", [".card"]), shot("/b", ["div.body", "aside.side"], { ...box, x: 37, w: 1203 })],
     ["/a", "/b"],
   );
   assert.deepEqual(out.slice(0, 2), [
@@ -57,4 +63,17 @@ test("a box that moved between loads: listed as layout moved, no mask suggested"
   ]);
   assert.equal(out[2], "  --mask '.card'");
   assert.doesNotMatch(out[3]!, /div\.body|aside/);
+});
+
+test("a box that resized with its own text is still suggested", () => {
+  const out = fmtVaries(
+    [
+      shot("/a", [".count"], { ...box, w: 1203 }, { text: ["9.9k", "10.0k"] }),
+      shot("/b", [".hero"], { ...box, w: 1203, h: 40 }),
+    ],
+    ["/a", "/b"],
+  );
+  assert.equal(out[0], "varies /a @1440  48,263px painted out  .count");
+  assert.equal(out[1], "varies /b @1440  48,263px painted out  .hero");
+  assert.equal(out[2], "  --mask '.count' --mask '.hero'");
 });

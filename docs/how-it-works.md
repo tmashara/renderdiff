@@ -6,7 +6,7 @@ honestly. This is what renderdiff does to make sure of that.
 - **Refuses to start** unless both origins answer a HEAD request. Two error pages diffed
   against each other score ~100%, which is the likeliest way a tool like this lies to you.
 - **Refuses a shot** it can't trust: an HTTP status of 400 or above on either side is an
-  error naming the status. A route where *both* sides look blank — under 200 characters of
+  error naming the status. A route where _both_ sides look blank — under 200 characters of
   text and no visible images, SVG, canvas, video, iframes or form controls — errors instead
   of quietly scoring as a match. If only one side is blank, the diff shows it. A page that is
   sparse on purpose can carry `data-renderdiff-rendered` on an element its own content renders.
@@ -40,8 +40,8 @@ honestly. This is what renderdiff does to make sure of that.
   pixels. A route more than 25% unstable errors as `page did not settle` after one retry.
 - **Rechecks a differing shot** — reloads the right side once in a fresh context. The
   elements that differ between the two loads are `varies`: painted out on both sides like a
-  mask, excluded from the score, and listed with the mask that would cover them, unless a
-  box moved between the loads (`layout moved`). Off with
+  mask, excluded from the score, and listed with the mask that would cover them, unless an
+  element was pushed elsewhere between the loads (`layout moved`). Off with
   `--no-recheck`, and under `--cache-right`, whose replay serves the same bytes each load.
 - **Counts a pixel as changed** when pixelmatch's YIQ colour distance is over threshold
   0.05 (a delta of about 88), with anti-aliased pixels left out. Its default of 0.1 passed

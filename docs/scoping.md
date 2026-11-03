@@ -78,7 +78,12 @@ export default {
         await page.locator("nav.menu[data-open]").waitFor({ timeout: 5_000 });
       },
     },
-    { left: "/docs", beforeShot: async (page) => { await page.click("[data-tab=intro]"); } },
+    {
+      left: "/docs",
+      beforeShot: async (page) => {
+        await page.click("[data-tab=intro]");
+      },
+    },
   ],
   // For every route without its own `before` (which replaces it; that one can still run it
   // with `await topLevel?.()`), CLI routes included; a top-level `beforeShot` works the same way.
