@@ -33,7 +33,13 @@ async function load(
     const shot = await shoot(pages, url, route, "left", width, cfg, now);
     if (shot.blank) throw new Error(`page did not render (${shot.blank}): ${BLANK_HINT}`);
     const page = pages.left;
-    const snap: Snapshot = await snapshot(page, masksFor(cfg, page, route), COMPUTED_TIMEOUT, null);
+    const snap: Snapshot = await snapshot(
+      page,
+      masksFor(cfg, page, route),
+      COMPUTED_TIMEOUT,
+      null,
+      cfg.hideSelectors,
+    );
     const at = await page.evaluate(
       (keys) =>
         Object.fromEntries(

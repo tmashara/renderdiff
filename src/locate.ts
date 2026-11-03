@@ -126,6 +126,8 @@ interface ProbeArgs {
   boxes: (Box | null)[];
   find: Find[];
   masked: Node[];
+  /** `hideSelectors`: skipped like masked elements, so neither side keys them. */
+  hide?: string[];
   props: string[];
   perSpot: number;
   /** Snapshot every element's `props` instead of picking, giving up after this many ms. */
@@ -146,6 +148,7 @@ function probe({
   boxes,
   find,
   masked,
+  hide,
   props,
   perSpot,
   walk,
@@ -298,6 +301,11 @@ function probe({
   const hidden = new Set<Element>();
   for (const m of masked as Element[])
     [m, ...Array.from(m.querySelectorAll("*"))].forEach((e) => hidden.add(e));
+  for (const s of hide ?? []) {
+    try {
+      document.querySelectorAll(s).forEach((e) => hidden.add(e));
+    } catch {}
+  }
 
   if (walk) {
     // STILL_CSS stops CSS animations; this settles ones started from script.
@@ -528,12 +536,19 @@ const moved = (a: Box, b: Box) => a.x !== b.x || a.y !== b.y || a.w !== b.w || a
 const handles = async (ls: Locator[]) =>
   (await Promise.all(ls.map((l) => l.elementHandles()))).flat();
 
-const walker = async (page: Page, masks: Locator[], budget: number, root: Locator | null) => {
+const walker = async (
+  page: Page,
+  masks: Locator[],
+  budget: number,
+  root: Locator | null,
+  hide: string[],
+) => {
   const args = {
     root: root && (await root.elementHandle()),
     boxes: [],
     find: [],
     masked: await handles(masks),
+    hide,
     props: SNAP_PROPS,
     perSpot: 0,
     walk: budget,
@@ -544,7 +559,8 @@ const walker = async (page: Page, masks: Locator[], budget: number, root: Locato
 
 /**
  * Every rendered element's computed `SNAP_PROPS`, and its `::before`/`::after` when
- * generated, keyed by a selector path; masked and `display: none` subtrees are skipped.
+ * generated, keyed by a selector path; masked and `display: none` subtrees are skipped, and
+ * `hide` (`hideSelectors`) elements with theirs.
  * Finishes the page's animations, so it runs after `locate`.
  */
 export async function snapshot(
@@ -552,8 +568,9 @@ export async function snapshot(
   masks: Locator[],
   budget: number,
   root: Locator | null,
+  hide: string[] = [],
 ): Promise<Snapshot> {
-  return (await (await walker(page, masks, budget, root))()).snap!;
+  return (await (await walker(page, masks, budget, root, hide))()).snap!;
 }
 
 /**
@@ -566,9 +583,10 @@ export async function snapshotStates(
   masks: Locator[],
   budget: number,
   root: Locator | null,
+  hide: string[] = [],
 ): Promise<{ snap: Snapshot; unchecked: number }> {
   const t0 = Date.now();
-  const run = await walker(page, masks, budget, root);
+  const run = await walker(page, masks, budget, root, hide);
   const client = await page.context().newCDPSession(page);
   try {
     const { snap, states, unchecked } = await run({ collect: MAX_STATES });

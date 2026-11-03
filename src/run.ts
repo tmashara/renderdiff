@@ -515,6 +515,7 @@ export async function run({
             masksFor(cfg, page, route),
             COMPUTED_TIMEOUT,
             route.selector ? page.locator(route.selector[side]) : null,
+            cfg.hideSelectors,
           ).catch((e: unknown) => {
             throw new Error(pageError(e));
           });
@@ -1147,9 +1148,13 @@ export function compact(
   const shots = compared.filter((r) => r.diffPixels > 0).length;
   const errors = results.length - all.length;
   const worst = compared.length ? stats(compared).worst : null;
+  const unstable = compared.filter((r) => r.unstablePixels).map((r) => r.unstablePixels);
   out.push(
     `renderdiff: ${differ} of ${routes.length} routes differ (${shots} of ${results.length} shots), ` +
       `${errors} error${errors === 1 ? "" : "s"}` +
+      (unstable.length
+        ? `, ${unstable.length} unstable (max ${Math.max(...unstable).toLocaleString("en-US")}px)`
+        : "") +
       (worst ? `, worst ${pct(worst.score)} ${name(worst)}@${worst.width}` : "") +
       (threshold === null
         ? ""
