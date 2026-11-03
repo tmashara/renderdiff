@@ -967,6 +967,40 @@ describe("before hooks", () => {
     assert.equal(r.hook, true);
   });
 
+  test("a smooth scroller a before hook scrolls has stopped by the shot", async () => {
+    const run = await hooked(
+      '{ before: async (page) => { await page.evaluate(() => { document.getElementById("rows").scrollTop = 2000; }); } }',
+      ["/smooth-scroll"],
+    );
+    assert.equal(run.code, 0, context(run));
+    const r = result(results(run.outDir), "/smooth-scroll", 1440);
+    assert.equal(r.diffPixels, 0, context(run));
+    assert.equal(r.unstablePixels, 0, context(run));
+  });
+
+  test("a smooth window scroll a beforeShot starts is instant", async () => {
+    // The hook writes where the window got to, so a scroll still moving shows as text.
+    const run = await hooked(
+      '{ beforeShot: async (page, { side }) => { await page.evaluate(async (behavior) => { window.scrollTo({ top: 2000, behavior }); await new Promise((r) => setTimeout(r, 50)); document.querySelector("h1").textContent = "At " + Math.round(scrollY); }, side === "left" ? "smooth" : "instant"); } }',
+      ["/smooth-scroll"],
+    );
+    assert.equal(run.code, 0, context(run));
+    const r = result(results(run.outDir), "/smooth-scroll", 1440);
+    assert.equal(r.diffPixels, 0, context(run));
+    assert.equal(r.unstablePixels, 0, context(run));
+  });
+
+  test("a smooth scrollIntoView a beforeShot starts is instant", async () => {
+    const run = await hooked(
+      '{ beforeShot: async (page, { side }) => { await page.evaluate(async (behavior) => { document.querySelector(".tail").scrollIntoView({ behavior }); await new Promise((r) => setTimeout(r, 50)); document.querySelector("h1").textContent = "At " + Math.round(scrollY); }, side === "left" ? "smooth" : "instant"); } }',
+      ["/smooth-scroll"],
+    );
+    assert.equal(run.code, 0, context(run));
+    const r = result(results(run.outDir), "/smooth-scroll", 1440);
+    assert.equal(r.diffPixels, 0, context(run));
+    assert.equal(r.unstablePixels, 0, context(run));
+  });
+
   test("a route's beforeShot runs after the scroll pass on both sides, over the top-level one, and on the recheck", async () => {
     const run = await hooked(
       '{ beforeShot: async () => { throw new Error("top-level ran"); }, routes: [{ left: "/scroll-spy", beforeShot: async (page) => { await page.click("#soon"); } }] }',

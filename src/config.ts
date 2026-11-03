@@ -214,8 +214,7 @@ export const DEFAULT_HIDE_SELECTORS = [
 
 /** Kills motion so two captures taken seconds apart agree. Always applied. */
 const STILL_CSS = `
-*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}
-html{scroll-behavior:auto!important}
+*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important;scroll-behavior:auto!important}
 `;
 
 export const alive = async (origin: string) => {

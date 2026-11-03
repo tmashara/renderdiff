@@ -241,6 +241,24 @@ export async function prepare(page: Page, cfg: ResolvedConfig, now: number): Pro
       t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
+    // Before any hook, unlike neutralizeCss, so a scroll a `before` hook starts is instant too.
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync("*,*::before,*::after{scroll-behavior:auto!important}");
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+    type Scroll = (this: unknown, o?: ScrollToOptions, ...r: unknown[]) => void;
+    // window itself, not Window.prototype: a global's methods live on the global.
+    for (const [target, names] of [
+      [window, ["scroll", "scrollTo", "scrollBy"]],
+      [Element.prototype, ["scroll", "scrollTo", "scrollBy", "scrollIntoView"]],
+    ] as const) {
+      const t = target as unknown as Record<string, Scroll>;
+      for (const m of names) {
+        const f = t[m]!;
+        t[m] = function (o, ...r) {
+          return f.call(this, o?.behavior === "smooth" ? { ...o, behavior: "instant" } : o, ...r);
+        };
+      }
+    }
   });
 }
 
