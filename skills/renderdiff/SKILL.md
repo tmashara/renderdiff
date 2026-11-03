@@ -17,12 +17,12 @@ the § named at each step. Setting up a project (`/renderdiff init`): [init.md](
 
 ## Pick the mode
 
-| Change                                                              | Run                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Change | Run |
+| --- | --- |
 | CSS only, markup untouched (refactor, dead-CSS removal, token swap) | pixels + `--computed`. First diff the two builds (§ Reference and routes): if only asset hashes differ, or every changed rule means the same, no shots are needed; otherwise shoot the routes the changed rules reach. Expect `dom identical` on every route: then each `computed:` finding is a real style change, even on a clean route. A changed rule that matched nothing (`rules:`) means the run proved nothing about it: add a route or hook that reaches it. `dom differs`: often a wrapper's class changed, re-keying its subtree (§ `--computed`). Hover menus and open menus aren't shot without a `before` hook that ends waiting for the open state, and dead-CSS removal breaks exactly those. |
-| Markup changes (framework, template or component migration)         | pixels, plus `--aria`: `aria: identical` means a screen reader gets the same page. `--computed` findings would only be hints.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Dependency or build upgrade                                         | pixels, plus `--computed` if the markup should be identical.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| One component                                                       | pixels with `--selector <sel>` or `'/route @sel'`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Markup changes (framework, template or component migration) | pixels, plus `--aria`: `aria: identical` means a screen reader gets the same page. `--computed` findings would only be hints. |
+| Dependency or build upgrade | pixels, plus `--computed` if the markup should be identical. |
+| One component | pixels with `--selector <sel>` or `'/route @sel'`. |
 
 Pixels decide the score and the exit code in every mode.
 
@@ -52,22 +52,21 @@ Pixels decide the score and the exit code in every mode.
    default widths, read each row in this order**: `ERROR` →
    `failed` (a missing stylesheet or font explains the whole row: fix, rerun) → `fonts` → `text` →
    `h`/`w`, `band`, `aligned`, `line` → `dom` (`sel prop l→r` is a computed value: find the
-   _rule_) → `findings:` (one cause on many routes: fix it once) → `computed:` → `Read` the
+   *rule*) → `findings:` (one cause on many routes: fix it once) → `computed:` → `Read` the
    `crops` for what `dom` doesn't explain (multi-width row: widest and narrowest). Every
    token: § Output.
    Hundreds of shots take many minutes: run it in the background and watch stderr's
    `renderdiff: n/N shots` lines (`--progress` for a line per shot), not the PNG count.
 4. **Decide every band, region, line and text line:**
 
-   | It is                                                           | Do                                                                           |
-   | --------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-   | Caused by your change, not intended                             | Fix it.                                                                      |
-   | In the baseline too, or intended, and you opened it             | `--accept "<why>"` on the OS that checks (Mac entries go stale on Linux CI). |
-   | Varying per load (base vs base shows it)                        | Mask it, with a `reason`.                                                    |
-   | `unstable`, a width change, or `unaligned` with a height change | Can't be accepted (§ Masks, accepts and thresholds): fix or report.          |
+   | It is | Do |
+   | --- | --- |
+   | Caused by your change, not intended | Fix it. |
+   | In the baseline too, or intended, and you opened it | `--accept "<why>"` on the OS that checks (Mac entries go stale on Linux CI). |
+   | Varying per load (base vs base shows it) | Mask it, with a `reason`. |
+   | `unstable`, a width change, or `unaligned` with a height change | Can't be accepted (§ Masks, accepts and thresholds): fix or report. |
 
    Before you mask, accept, set `--threshold`, drop a route or skip a width: § Rationalizations.
-
 5. **Iterate** with `--rerun-failed` (same arguments) and optionally `--cache-right`
    (§ Iterating). **Finish** with a fresh full run: the same routes, default widths, neither flag.
    All clean? Confirm both sides actually rendered.

@@ -18,21 +18,21 @@ exits non-zero.
 
 ## Inputs
 
-| Input           |                                                                                                                                                                                  |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `left`          | Your change: a preview URL or `http://localhost:3000`. Required.                                                                                                                 |
-| `right`         | The reference, usually production. Required.                                                                                                                                     |
-| `routes`        | Separated by spaces or newlines; pairs (`/pricing::/plans`) work; per-route selectors go in the config, since the input splits on spaces. Optional when the config lists routes. |
-| `config`        | Config file path. Default: `renderdiff.config.{ts,mts,js,mjs}` in the workspace.                                                                                                 |
-| `widths`        | Spaces or commas. Default renderdiff's five.                                                                                                                                     |
-| `threshold`     | Fail only below this score. Without it, any difference fails the job (exit 1); `"0"` never fails on one.                                                                         |
-| `concurrency`   | Parallel workers, which is also the most page loads production sees at once. Default 2 on a hosted runner.                                                                       |
-| `storage-state` | Contents of a Playwright storage-state JSON, from a secret. Written to a 0600 file in the runner's temp dir and deleted when renderdiff exits.                                   |
-| `accept`        | Record this run's differences as accepted, with this reason. See below.                                                                                                          |
-| `wait-timeout`  | Whole seconds to wait for `left` to answer (any status under 500). Default 300. Past it, `exit-code` is 2.                                                                       |
-| `out`           | Output directory, over the config's `outDir`. Default `renderdiff-out`.                                                                                                          |
-| `artifact-name` | Default `renderdiff`.                                                                                                                                                            |
-| `comment`       | `"true"` posts the result as one PR comment and edits it on every later run. One comment per `artifact-name`, so two runs keep their own.                                        |
+| Input | |
+| --- | --- |
+| `left` | Your change: a preview URL or `http://localhost:3000`. Required. |
+| `right` | The reference, usually production. Required. |
+| `routes` | Separated by spaces or newlines; pairs (`/pricing::/plans`) work; per-route selectors go in the config, since the input splits on spaces. Optional when the config lists routes. |
+| `config` | Config file path. Default: `renderdiff.config.{ts,mts,js,mjs}` in the workspace. |
+| `widths` | Spaces or commas. Default renderdiff's five. |
+| `threshold` | Fail only below this score. Without it, any difference fails the job (exit 1); `"0"` never fails on one. |
+| `concurrency` | Parallel workers, which is also the most page loads production sees at once. Default 2 on a hosted runner. |
+| `storage-state` | Contents of a Playwright storage-state JSON, from a secret. Written to a 0600 file in the runner's temp dir and deleted when renderdiff exits. |
+| `accept` | Record this run's differences as accepted, with this reason. See below. |
+| `wait-timeout` | Whole seconds to wait for `left` to answer (any status under 500). Default 300. Past it, `exit-code` is 2. |
+| `out` | Output directory, over the config's `outDir`. Default `renderdiff-out`. |
+| `artifact-name` | Default `renderdiff`. |
+| `comment` | `"true"` posts the result as one PR comment and edits it on every later run. One comment per `artifact-name`, so two runs keep their own. |
 
 To run the action twice in one job, give each run its own `out` and `artifact-name`; in a
 matrix, put the matrix value in `artifact-name`. The action sets up Node 24, which later

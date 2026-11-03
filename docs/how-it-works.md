@@ -6,7 +6,7 @@ honestly. This is what renderdiff does to make sure of that.
 - **Refuses to start** unless both origins answer a HEAD request. Two error pages diffed
   against each other score ~100%, which is the likeliest way a tool like this lies to you.
 - **Refuses a shot** it can't trust: an HTTP status of 400 or above on either side is an
-  error naming the status. A route where _both_ sides look blank — under 200 characters of
+  error naming the status. A route where *both* sides look blank — under 200 characters of
   text and no visible images, SVG, canvas, video, iframes or form controls — errors instead
   of quietly scoring as a match. If only one side is blank, the diff shows it. A page that is
   sparse on purpose can carry `data-renderdiff-rendered` on an element its own content renders.

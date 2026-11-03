@@ -36,39 +36,39 @@ the per-shot output when piped, `--no-progress` the summary on a terminal.
 
 ## Tokens
 
-| Token                                               | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `97.41%`                                            | Share of measured pixels that match. A range (`99.12%–99.87%`) when one row covers several widths. A triage signal, not a verdict.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `@1440,1152`                                        | The widths a row covers. They agree on height and width delta, bands, aligned score and text; score and region count are ranges.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `h-24` / `w+8`                                      | Height / width delta, left − right. The smaller image is padded with magenta, and the padding counts against the score on purpose.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `band -24@y196`                                     | 24 rows only the reference has, at y=196 (`+`: only your change has them). `@y~196`: the row's widths put it at different y; the first width's is shown.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `aligned 100.00%`                                   | The score with the bands cut out. 100% means the band is the whole difference.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `unaligned`                                         | Heights differ but too few rows match to find bands. Use the height delta and regions.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `line -1px@y812`                                    | A 1–2px line across the page only the right draws (`+`: only the left; no sign: both, differently). A lost border or divider; not counted in `reg`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `3 reg`                                             | Regions: connected patches of differing pixels. A missing link barely moves the score, but it is still a region.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `unstable 1,204px`                                  | Pixels that kept changing between shots of the same load (a ticker, a carousel). Excluded from the score, so the route is never clean.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `varies /a @1440  148,480px painted out  div.drift` | After the routes: the right side differed between two fresh loads there (a counter, a rotating banner). Those elements' whole boxes are painted out on both sides like a mask and left out of the score, so the count can exceed the pixels that changed; the shot can't be accepted. `(not located)`: no element was named, its region was painted. `layout moved`: a named element sits somewhere else on the two loads with the same text, pushed by the layout rather than changed itself, so no mask is suggested.                                                                                                                                                                     |
-| `  --mask 'div.drift'`                              | The flag that masks the `varies` elements, for the next run. Only selectors ending in an id, class or attribute are suggested: a bare `p:nth-of-type(14)` would hide real changes too. None for a route marked `layout moved`.                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `  masks: [{ selector: … }]`                        | The same as config `masks` entries, with `reason: "varies per load"`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `failed left: font Inter 700`                       | A stylesheet or font face that side failed to load (blocked URLs aside). Fix that first: a fallback font changes every line of text.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `fonts -"Inter 600" +"Roboto"`                      | `@font-face` or `FontFace` faces only one side requested (`-`: only the reference, `+`: only your change), as family, weight, style and stretch, `normal` left out. One still loading when read counts as requested. Web fonts only: a system font a side fell back to isn't listed. Usually the same on every route, so see `findings`.                                                                                                                                                                                                                                                                                                                                                    |
-| `text -"Pricing"`                                   | A line of visible text only the reference has (`+`: only your change). Up to three, then `(+N more)`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `dom sel prop a→b`                                  | Element on both sides whose computed `prop` differs, left value first.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `dom +sel` / `-sel`                                 | Element only on the left / only on the right. `+sel::before` / `-sel::after`: a pseudo-element only that side generates.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `dom sel x+8`                                       | It moved without its own style changing; the neighbour or parent listed after it is the cause.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `dom sel`                                           | On both sides and unchanged in style or position, so its own pixels changed (an image or canvas).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| `(re-parented)`                                     | After a `dom` entry: paired across a structure change, so its properties may not be the cause.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `1 accepted`                                        | That many of the shot's changes are accepted; the rest are new.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `findings: N repeated on 2+ routes`                 | After the routes: the same `dom` entry, text line, `fonts` face or element-less band delta (`band -24px`) on two or more routes, once per line with `×N routes` and where (`/a@1440,375`, then `+N routes`), most widespread first, accepted ones aside. Text lines seen on exactly the same routes and widths share one line, `text -"Users" -"Billing" -"Docs" (+9 more)` (a nav folded into a menu button), and N counts lines as printed. Top 20; `summary.findings` in results.json has every finding, one per text line. One cause behind many rows: fix it once. A selector names an element per page, so the same path may be a different element on another route: check one crop. |
-| `computed: N findings`                              | With `--computed`: each `key prop left→right` once, with the routes and widths it was seen at; `dom identical`: the markup matches apart from asset hashes and generated class names, so look at CSS or script. See [below](#computed-styles---computed).                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `rules: N changed groups`                           | With `--computed`: style rules only one side has, by stylesheet and `@media`, and whether any shot had an element they could style. `matched nothing`: the run proved nothing about those rules. See [below](#rule-coverage).                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `aria: identical on N of M route(s)`                | With `--aria`: routes whose accessibility tree matches at every width, then each differing route's lines, `+` left only, `-` right only. See [below](#aria-snapshots---aria).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `crops …`                                           | Up to 3 PNGs per comparison, bands first, relative to `results.json`. Left is on top or on the left, and the change is boxed in red.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `ERROR …`                                           | Unmeasured, which is neither a pass nor a fail. Exits 3.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `renderdiff: …`                                     | The verdict line: routes and shots that differ (accepted ones aside), errors, `, U unstable (max Npx)` when any shot had unstable pixels, the worst score, and with `--threshold` how many scored below it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `accepted:` / `stale accepted:`                     | Routes whose every difference was accepted, and accepted entries the run no longer saw. See [accepted.md](accepted.md).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| `rerun:`                                            | With `--rerun-failed`: how many shots were rerun and how many reused.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `right:`                                            | With `--cache-right`: whether the right side was replayed, and from when, or loaded live and recorded.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Token | Meaning |
+| --- | --- |
+| `97.41%` | Share of measured pixels that match. A range (`99.12%–99.87%`) when one row covers several widths. A triage signal, not a verdict. |
+| `@1440,1152` | The widths a row covers. They agree on height and width delta, bands, aligned score and text; score and region count are ranges. |
+| `h-24` / `w+8` | Height / width delta, left − right. The smaller image is padded with magenta, and the padding counts against the score on purpose. |
+| `band -24@y196` | 24 rows only the reference has, at y=196 (`+`: only your change has them). `@y~196`: the row's widths put it at different y; the first width's is shown. |
+| `aligned 100.00%` | The score with the bands cut out. 100% means the band is the whole difference. |
+| `unaligned` | Heights differ but too few rows match to find bands. Use the height delta and regions. |
+| `line -1px@y812` | A 1–2px line across the page only the right draws (`+`: only the left; no sign: both, differently). A lost border or divider; not counted in `reg`. |
+| `3 reg` | Regions: connected patches of differing pixels. A missing link barely moves the score, but it is still a region. |
+| `unstable 1,204px` | Pixels that kept changing between shots of the same load (a ticker, a carousel). Excluded from the score, so the route is never clean. |
+| `varies /a @1440  148,480px painted out  div.drift` | After the routes: the right side differed between two fresh loads there (a counter, a rotating banner). Those elements' whole boxes are painted out on both sides like a mask and left out of the score, so the count can exceed the pixels that changed; the shot can't be accepted. `(not located)`: no element was named, its region was painted. `layout moved`: a named element sits somewhere else on the two loads with the same text, pushed by the layout rather than changed itself, so no mask is suggested. |
+| `  --mask 'div.drift'` | The flag that masks the `varies` elements, for the next run. Only selectors ending in an id, class or attribute are suggested: a bare `p:nth-of-type(14)` would hide real changes too. None for a route marked `layout moved`. |
+| `  masks: [{ selector: … }]` | The same as config `masks` entries, with `reason: "varies per load"`. |
+| `failed left: font Inter 700` | A stylesheet or font face that side failed to load (blocked URLs aside). Fix that first: a fallback font changes every line of text. |
+| `fonts -"Inter 600" +"Roboto"` | `@font-face` or `FontFace` faces only one side requested (`-`: only the reference, `+`: only your change), as family, weight, style and stretch, `normal` left out. One still loading when read counts as requested. Web fonts only: a system font a side fell back to isn't listed. Usually the same on every route, so see `findings`. |
+| `text -"Pricing"` | A line of visible text only the reference has (`+`: only your change). Up to three, then `(+N more)`. |
+| `dom sel prop a→b` | Element on both sides whose computed `prop` differs, left value first. |
+| `dom +sel` / `-sel` | Element only on the left / only on the right. `+sel::before` / `-sel::after`: a pseudo-element only that side generates. |
+| `dom sel x+8` | It moved without its own style changing; the neighbour or parent listed after it is the cause. |
+| `dom sel` | On both sides and unchanged in style or position, so its own pixels changed (an image or canvas). |
+| `(re-parented)` | After a `dom` entry: paired across a structure change, so its properties may not be the cause. |
+| `1 accepted` | That many of the shot's changes are accepted; the rest are new. |
+| `findings: N repeated on 2+ routes` | After the routes: the same `dom` entry, text line, `fonts` face or element-less band delta (`band -24px`) on two or more routes, once per line with `×N routes` and where (`/a@1440,375`, then `+N routes`), most widespread first, accepted ones aside. Text lines seen on exactly the same routes and widths share one line, `text -"Users" -"Billing" -"Docs" (+9 more)` (a nav folded into a menu button), and N counts lines as printed. Top 20; `summary.findings` in results.json has every finding, one per text line. One cause behind many rows: fix it once. A selector names an element per page, so the same path may be a different element on another route: check one crop. |
+| `computed: N findings` | With `--computed`: each `key prop left→right` once, with the routes and widths it was seen at; `dom identical`: the markup matches apart from asset hashes and generated class names, so look at CSS or script. See [below](#computed-styles---computed). |
+| `rules: N changed groups` | With `--computed`: style rules only one side has, by stylesheet and `@media`, and whether any shot had an element they could style. `matched nothing`: the run proved nothing about those rules. See [below](#rule-coverage). |
+| `aria: identical on N of M route(s)` | With `--aria`: routes whose accessibility tree matches at every width, then each differing route's lines, `+` left only, `-` right only. See [below](#aria-snapshots---aria). |
+| `crops …` | Up to 3 PNGs per comparison, bands first, relative to `results.json`. Left is on top or on the left, and the change is boxed in red. |
+| `ERROR …` | Unmeasured, which is neither a pass nor a fail. Exits 3. |
+| `renderdiff: …` | The verdict line: routes and shots that differ (accepted ones aside), errors, `, U unstable (max Npx)` when any shot had unstable pixels, the worst score, and with `--threshold` how many scored below it. |
+| `accepted:` / `stale accepted:` | Routes whose every difference was accepted, and accepted entries the run no longer saw. See [accepted.md](accepted.md). |
+| `rerun:` | With `--rerun-failed`: how many shots were rerun and how many reused. |
+| `right:` | With `--cache-right`: whether the right side was replayed, and from when, or loaded live and recorded. |
 
 ## Scores
 
@@ -87,18 +87,18 @@ because an unmeasured route is not a verified one.
 
 ## The same thing in each output
 
-|               | `--progress`                            | Summary                       | `results.json`                                     |
-| ------------- | --------------------------------------- | ----------------------------- | -------------------------------------------------- |
-| Height delta  | `(height -24px)`                        | `h-24`                        | `heightDelta: -24`                                 |
-| Width delta   | (not shown)                             | `w+8`                         | `widthDelta: 8`                                    |
-| Band          | `band -24px at y=196 (right)`           | `band -24@y196`               | `bands: [{ side: "right", y: 196, h: 24 }]`        |
-| Can't align   | `rows too different to align`           | `unaligned`                   | `bands: null`                                      |
-| Text          | `text: 0 added, 1 removed`              | `text -"Pricing"`             | `text: { added: [], removed: ["Pricing"] }`        |
-| Regions       | `3 regions, largest 64×32 at (256,192)` | `3 reg`                       | `regions: [...]`                                   |
-| Line          | `line -1px@y812`                        | `line -1px@y812`              | `regions[i].line: { y: 812, h: 1, side: "right" }` |
-| Unstable      | `(unstable 1,204px)`                    | `unstable 1,204px`            | `unstablePixels: 1204`                             |
-| Failed assets | `failed left: font Inter 700`           | `failed left: font Inter 700` | `failed: { left: ["font Inter 700"], right: [] }`  |
-| Font faces    | `fonts -"Inter 600"`                    | `fonts -"Inter 600"`          | `fonts: { added: [], removed: ["Inter 600"] }`     |
+| | `--progress` | Summary | `results.json` |
+| --- | --- | --- | --- |
+| Height delta | `(height -24px)` | `h-24` | `heightDelta: -24` |
+| Width delta | (not shown) | `w+8` | `widthDelta: 8` |
+| Band | `band -24px at y=196 (right)` | `band -24@y196` | `bands: [{ side: "right", y: 196, h: 24 }]` |
+| Can't align | `rows too different to align` | `unaligned` | `bands: null` |
+| Text | `text: 0 added, 1 removed` | `text -"Pricing"` | `text: { added: [], removed: ["Pricing"] }` |
+| Regions | `3 regions, largest 64×32 at (256,192)` | `3 reg` | `regions: [...]` |
+| Line | `line -1px@y812` | `line -1px@y812` | `regions[i].line: { y: 812, h: 1, side: "right" }` |
+| Unstable | `(unstable 1,204px)` | `unstable 1,204px` | `unstablePixels: 1204` |
+| Failed assets | `failed left: font Inter 700` | `failed left: font Inter 700` | `failed: { left: ["font Inter 700"], right: [] }` |
+| Font faces | `fonts -"Inter 600"` | `fonts -"Inter 600"` | `fonts: { added: [], removed: ["Inter 600"] }` |
 
 Under each score, `--progress` output and the report card say where to look:
 
@@ -109,8 +109,8 @@ Under each score, `--progress` output and the report card say where to look:
         text: 0 added, 1 removed
 ```
 
-Regions say _where_ pixels differ, `dom` says _which element and property_ caused it, and
-crops are _pictures_ of the first three changes. Read in that order: text, `dom`, then crops
+Regions say *where* pixels differ, `dom` says *which element and property* caused it, and
+crops are *pictures* of the first three changes. Read in that order: text, `dom`, then crops
 for anything `dom` doesn't explain.
 
 ## Regions
@@ -338,7 +338,7 @@ sides differed at capture time, even when its pixels were painted out as unstabl
 
 ## Unstable pixels
 
-Pixels that changed between two shots of the _same_ page load, so they're noise from that
+Pixels that changed between two shots of the *same* page load, so they're noise from that
 origin (a ticker, a carousel). They're painted magenta on both sides and excluded from the
 score, and a route with any is never on the `clean:` line. More than 25% unstable is an
 error, `page did not settle`, after one retry, with the two frames saved as
@@ -448,123 +448,68 @@ file, not each line), scores rounded down to four decimals (so a shot that diffe
 ```jsonc
 {
   "meta": {
-    "tool": "renderdiff",
-    "version": "0.14.1",
-    "generatedAt": "…",
-    "left": "http://localhost:3000",
-    "right": "https://example.com",
-    "widths": [1440, 375],
-    "threshold": null,
-    "clock": "…", // the instant both sides' clocks start at
-    "blockUrlPatterns": ["…"],
-    "hideSelectors": ["…"],
-    "masks": [{ "urlPath": "/pricing", "reason": "live star count" }], // no urlPath: every route
-    "browser": { "name": "chromium", "version": "…" }, // "chrome" when it fell back
-    "storageState": { "left": "auth.json", "right": null }, // file names only
-    "config": "…", // hash of what decides a shot; --rerun-failed needs it unchanged
-    "rightReplayedFrom": null, // --cache-right: when the replayed recording was made
-    "freezeVideo": true,
-    "platform": "darwin", // process.platform: pixels and accepts are OS-specific
-    "rerun": null, // --rerun-failed: { "rerun": 3, "reused": 12 }
-    "unreadableSheets": { "left": [], "right": [] }, // --computed: stylesheets left out of rule coverage
+    "tool": "renderdiff", "version": "0.14.1", "generatedAt": "…",
+    "left": "http://localhost:3000", "right": "https://example.com",
+    "widths": [1440, 375], "threshold": null,
+    "clock": "…",                // the instant both sides' clocks start at
+    "blockUrlPatterns": ["…"], "hideSelectors": ["…"],
+    "masks": [{ "urlPath": "/pricing", "reason": "live star count" }],   // no urlPath: every route
+    "browser": { "name": "chromium", "version": "…" },   // "chrome" when it fell back
+    "storageState": { "left": "auth.json", "right": null },   // file names only
+    "config": "…",              // hash of what decides a shot; --rerun-failed needs it unchanged
+    "rightReplayedFrom": null,  // --cache-right: when the replayed recording was made
+    "freezeVideo": true, "platform": "darwin",   // process.platform: pixels and accepts are OS-specific
+    "rerun": null,              // --rerun-failed: { "rerun": 3, "reused": 12 }
+    "unreadableSheets": { "left": [], "right": [] }   // --computed: stylesheets left out of rule coverage
   },
   "results": [
     {
-      "url": "/about",
-      "left": "/about",
-      "right": "/about", // a pair: "/a::/b", "/a", "/b"
-      "from": "…", // renderdiff merge: generatedAt of the run this shot came from; absent otherwise
-      "selector": null,
-      "hook": false, // hook: a before or beforeShot hook ran
-      "width": 1440,
-      "status": "compared",
-      "score": 0.9714, // share of measured pixels that match
-      "alignedScore": 1, // score over the aligned rows; null unless there are bands
-      "diffPixels": 33120,
-      "totalPixels": 1158000,
-      "unstablePixels": 0,
-      "varies": [],
-      "variesPixels": 0, // absent unless a second right load differed: its regions, with elements, and the px painted out
-      "heightDelta": -24,
-      "widthDelta": 0, // left − right
-      "regions": [], // left-page px; with bands, from the realigned rows
-      "bands": [
-        {
-          "side": "right",
-          "y": 196,
-          "h": 24, // null: too different to align
-          "elements": [
-            {
-              // regions have them too; absent: not looked at
-              "selector": "nav > a[href=\"/pricing\"]",
-              "side": "right", // or "left", "both"
-              "left": null,
-              "right": { "x": 256, "y": 192, "w": 928, "h": 24 },
-              "changed": {}, // "margin-left": ["24px", "16px"], left first; "text" too
-              "text": "Pricing", // "rightSelector" when the right one differs
-            },
-          ],
-        },
-      ],
-      "text": { "added": [], "removed": ["Pricing"] }, // added: left only; removed: right only
-      "accepted": false, // every band and region matched renderdiff.accepted.json
-      "failed": { "left": [], "right": [] }, // stylesheets and font faces that didn't load: "font Inter 700", "stylesheet https://…"
-      "fonts": { "added": [], "removed": ["Inter 600"] }, // web font faces one side loaded; absent when equal
-      "masked": ["rotating quote (data-renderdiff-mask)"], // absent unless a side marked elements data-renderdiff-mask
-      "computed": {
-        "dom": 1,
-        "changes": [],
-        "truncated": 0,
-        "unmatched": { "left": [], "right": ["body > nav > a[href=\"/pricing\"]"] },
-        "rules": [
-          {
-            "side": "left",
-            "sheet": "docs.css",
-            "conditions": ["@media (width >= 60em)"],
-            "rules": 5,
-            "elements": 67,
-          },
-        ],
-      }, // --computed only; null: snapshot failed, "computedError" says why; rules: one-sided rule groups, elements they could style here
-      "aria": { "added": ["- text: Buy now"], "removed": ["- button \"Buy now\""], "truncated": 0 }, // --aria only; both empty: identical; null: snapshot failed, "ariaError" says why
-      "images": {
-        "left": "about.1440.left.png",
-        "right": "about.1440.right.png",
-        "diff": "about.1440.diff.png",
-      },
-      "crops": [
-        {
-          "path": "about.1440.c1.png",
-          "kind": "band", // or "region"
-          "left": { "x": 256, "y": 196, "w": 68, "h": 0 }, // h 0: where the rows would go
-          "right": { "x": 256, "y": 196, "w": 68, "h": 24 },
-          "layout": "stacked",
-          "scale": 1,
-          "clipped": false, // left on top, or on the left ("side")
-        },
-      ],
+      "url": "/about", "left": "/about", "right": "/about",   // a pair: "/a::/b", "/a", "/b"
+      "from": "…",               // renderdiff merge: generatedAt of the run this shot came from; absent otherwise
+      "selector": null, "hook": false,                         // hook: a before or beforeShot hook ran
+      "width": 1440, "status": "compared",
+      "score": 0.9714,           // share of measured pixels that match
+      "alignedScore": 1,         // score over the aligned rows; null unless there are bands
+      "diffPixels": 33120, "totalPixels": 1158000, "unstablePixels": 0,
+      "varies": [], "variesPixels": 0,   // absent unless a second right load differed: its regions, with elements, and the px painted out
+      "heightDelta": -24, "widthDelta": 0,          // left − right
+      "regions": [],             // left-page px; with bands, from the realigned rows
+      "bands": [{ "side": "right", "y": 196, "h": 24,      // null: too different to align
+        "elements": [{                                     // regions have them too; absent: not looked at
+          "selector": "nav > a[href=\"/pricing\"]", "side": "right",   // or "left", "both"
+          "left": null, "right": { "x": 256, "y": 192, "w": 928, "h": 24 },
+          "changed": {},         // "margin-left": ["24px", "16px"], left first; "text" too
+          "text": "Pricing"      // "rightSelector" when the right one differs
+        }]
+      }],
+      "text": { "added": [], "removed": ["Pricing"] },   // added: left only; removed: right only
+      "accepted": false,         // every band and region matched renderdiff.accepted.json
+      "failed": { "left": [], "right": [] },   // stylesheets and font faces that didn't load: "font Inter 700", "stylesheet https://…"
+      "fonts": { "added": [], "removed": ["Inter 600"] },   // web font faces one side loaded; absent when equal
+      "masked": ["rotating quote (data-renderdiff-mask)"],   // absent unless a side marked elements data-renderdiff-mask
+      "computed": { "dom": 1, "changes": [], "truncated": 0, "unmatched": { "left": [], "right": ["body > nav > a[href=\"/pricing\"]"] },
+        "rules": [{ "side": "left", "sheet": "docs.css", "conditions": ["@media (width >= 60em)"], "rules": 5, "elements": 67 }] },   // --computed only; null: snapshot failed, "computedError" says why; rules: one-sided rule groups, elements they could style here
+      "aria": { "added": ["- text: Buy now"], "removed": ["- button \"Buy now\""], "truncated": 0 },   // --aria only; both empty: identical; null: snapshot failed, "ariaError" says why
+      "images": { "left": "about.1440.left.png", "right": "about.1440.right.png", "diff": "about.1440.diff.png" },
+      "crops": [{
+        "path": "about.1440.c1.png", "kind": "band",          // or "region"
+        "left": { "x": 256, "y": 196, "w": 68, "h": 0 },      // h 0: where the rows would go
+        "right": { "x": 256, "y": 196, "w": 68, "h": 24 },
+        "layout": "stacked", "scale": 1, "clipped": false     // left on top, or on the left ("side")
+      }]
     },
-    {
-      "url": "/blank",
-      "left": "/blank",
-      "right": "/blank",
-      "width": 1440,
-      "status": "error",
-      "error": "page did not render …",
-    },
+    { "url": "/blank", "left": "/blank", "right": "/blank", "width": 1440, "status": "error", "error": "page did not render …" }
   ],
   "summary": {
-    "compared": 1,
-    "errors": 1,
-    "mean": 0.9714,
+    "compared": 1, "errors": 1, "mean": 0.9714,
     "worst": { "url": "/about", "width": 1440, "score": 0.9714 },
-    "belowThreshold": 0, // accepted shots aside
-    "differing": 1, // shots with any differing pixel, accepted ones aside
-    "accepted": 0, // shots whose every difference was accepted
-    "stale": [], // accepted entries the run measured but didn't see
-    "findings": [], // { finding, selector?, at: [{ url, widths }] }, seen on 2+ routes
-    "computed": [], // --computed: { key, prop, values: [left, right], at: [{ url, widths }] }
-    "rules": [], // --computed: { side, sheet, conditions, rules, matched: [{ url, widths }], unmatched: [{ url, widths }] }
-  },
+    "belowThreshold": 0,          // accepted shots aside
+    "differing": 1,               // shots with any differing pixel, accepted ones aside
+    "accepted": 0,                // shots whose every difference was accepted
+    "stale": [],                  // accepted entries the run measured but didn't see
+    "findings": [],               // { finding, selector?, at: [{ url, widths }] }, seen on 2+ routes
+    "computed": [],               // --computed: { key, prop, values: [left, right], at: [{ url, widths }] }
+    "rules": []                   // --computed: { side, sheet, conditions, rules, matched: [{ url, widths }], unmatched: [{ url, widths }] }
+  }
 }
 ```
