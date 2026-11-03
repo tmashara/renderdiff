@@ -29,14 +29,25 @@ results.json · Gotchas.
 - **CSS-only change:** diff the two build outputs first: every CSS file, plus the HTML and JS
   (minified CSS: `tr '}' '\n'` gives one rule per line; pair hashed file names by their stem;
   ignore `.map` files and `sourceMappingURL`). If they match apart from asset hashes, no route
-  needs shots; say so in the report. If HTML or JS differ too, the change isn't CSS-only. For
+  needs shots; say so in the report. The same if every changed rule means the same:
+  declarations only reordered (unless a shorthand and its longhand swap, `margin` and
+  `margin-top`), or values only re-notated (`rgb(0 0 0 / 50%)` for `rgba(0,0,0,.5)`, hex case
+  and short form, `0` for `0px`, `::before` for `:before`, `(width >= 60em)` for
+  `(min-width: 60em)`); name the rules you checked. If HTML or JS differ too, the change isn't
+  CSS-only, unless only inlined CSS differs: Astro, Svelte, Vue and similar builds copy
+  `<style>` blocks and `style=""` into every page, so diff those as CSS. For
   each changed or removed rule, list every page where its selectors could match: grep the
   built HTML for its classes and ids. Element-only, `:root`/`html`/`body` and custom-property
   rules reach every route. Classes that exist only after JS runs (`.is-open`,
   client-rendered components) aren't in the HTML: shoot those states with a `before` hook,
   or list them under Not verified.
-- **Baseline when the change is already made:** serve the base build twice, on two ports, and
-  diff it against itself; whatever differs varies per load.
+- **Baseline when the change is already made:** run the change first; its recheck reloads the
+  right side of each differing shot (`varies`). Then base vs base on the routes still
+  differing, with the right origin on both sides:
+  `jq -r '[.results[] | select(.diffPixels > 0 and (.accepted | not)) | .url] | unique[]' <out>/results.json > differ.txt`,
+  then `renderdiff <right> <right> --only differ.txt --out renderdiff-baseline` with a config
+  (its hooks kept), or `$(cat differ.txt)` as the routes without one. Whatever differs there
+  varies per load.
 - **States:** only the loaded state is shot. Hover, focus, open menus and dialogs need a
   `before` hook (§ Scoping); dead-CSS removal often breaks exactly those. `--computed` diffs
   links' and controls' hover and focus styles without shooting them.
@@ -77,7 +88,7 @@ on stderr: `✗ 2 routes differ (10 shots).` (`below 97.00%` with `--threshold`)
 | `accepted: /a` | Every difference on every width matches `renderdiff.accepted.json`. Known, not re-verified: say so. |
 | `/a  clean @… accepted @…` | A route with something to read; the widths that are clean or accepted. |
 | `  @1440,896  <row>` | Widths agreeing on height and width delta, bands (side and height), aligned score and text; score and region count become ranges, `unstable` the largest. |
-| `    failed left: …` | Stylesheets (`stylesheet <url>`) and font faces (`font Inter 700`) that side didn't load (404, CORS, a CDN refusing localhost). Fix first: a fallback font reflows every line. |
+| `    failed left: …` | Stylesheets (`stylesheet <url>`) and font faces (`font Inter 700`) that side didn't load (404, CORS, a CDN refusing localhost); one side only: it failed again on a reload. Fix first: a fallback font reflows every line. |
 | `    fonts -"Inter 600" +"X"` | Web font faces (`@font-face`, `FontFace`) only one side requested: `-` the reference, `+` your change. System fallbacks aren't listed. Not a reason a shot isn't clean; pixels decide. |
 | `    dom …` | Up to three elements behind the changes, two properties each. `dom @1440 …`: from the first width of the row. |
 | `    crops …` | At most three crop PNGs per shot (bands first, tallest first, then largest regions), relative to `results.json`. |
@@ -269,7 +280,7 @@ aria: identical on 2 of 3 route(s), differs /pricing
 ## Iterating
 
 - **`--rerun-failed`** keeps the out dir and reruns only what wasn't clean or accepted
-  (differences, unstable shots, failed assets, errors), merging back into results.json. Same
+  (differences, over 100 unstable px, failed assets, errors), merging back into results.json. Same
   origins, routes, widths, config (masks, hooks, hidden selectors, CSS, storage state,
   `--computed`) and version as the run it continues, or it exits 2.
 - **Hand-picked reruns with a changed config** (a new mask for a few routes): run them into a
