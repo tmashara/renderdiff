@@ -245,14 +245,19 @@ export async function prepare(page: Page, cfg: ResolvedConfig, now: number): Pro
     const sheet = new CSSStyleSheet();
     sheet.replaceSync("*,*::before,*::after{scroll-behavior:auto!important}");
     document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
-    // On window itself: a global's methods aren't on Window.prototype. Elements already scroll instantly.
-    for (const m of ["scroll", "scrollTo", "scrollBy"] as const) {
-      const f = window[m] as (this: Window, ...a: unknown[]) => void;
-      window[m] = function (this: Window, ...a: unknown[]) {
-        const o = a[0] as ScrollToOptions | undefined;
-        if (o?.behavior === "smooth") a[0] = { ...o, behavior: "instant" };
-        return f.apply(this, a);
-      } as Window[typeof m];
+    type Scroll = (this: unknown, o?: ScrollToOptions, ...r: unknown[]) => void;
+    // window itself, not Window.prototype: a global's methods live on the global.
+    for (const [target, names] of [
+      [window, ["scroll", "scrollTo", "scrollBy"]],
+      [Element.prototype, ["scroll", "scrollTo", "scrollBy", "scrollIntoView"]],
+    ] as const) {
+      const t = target as unknown as Record<string, Scroll>;
+      for (const m of names) {
+        const f = t[m]!;
+        t[m] = function (o, ...r) {
+          return f.call(this, o?.behavior === "smooth" ? { ...o, behavior: "instant" } : o, ...r);
+        };
+      }
     }
   });
 }

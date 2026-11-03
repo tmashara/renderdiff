@@ -990,6 +990,17 @@ describe("before hooks", () => {
     assert.equal(r.unstablePixels, 0, context(run));
   });
 
+  test("a smooth scrollIntoView a beforeShot starts is instant", async () => {
+    const run = await hooked(
+      '{ beforeShot: async (page, { side }) => { await page.evaluate(async (behavior) => { document.querySelector(".tail").scrollIntoView({ behavior }); await new Promise((r) => setTimeout(r, 50)); document.querySelector("h1").textContent = "At " + Math.round(scrollY); }, side === "left" ? "smooth" : "instant"); } }',
+      ["/smooth-scroll"],
+    );
+    assert.equal(run.code, 0, context(run));
+    const r = result(results(run.outDir), "/smooth-scroll", 1440);
+    assert.equal(r.diffPixels, 0, context(run));
+    assert.equal(r.unstablePixels, 0, context(run));
+  });
+
   test("a route's beforeShot runs after the scroll pass on both sides, over the top-level one, and on the recheck", async () => {
     const run = await hooked(
       '{ beforeShot: async () => { throw new Error("top-level ran"); }, routes: [{ left: "/scroll-spy", beforeShot: async (page) => { await page.click("#soon"); } }] }',

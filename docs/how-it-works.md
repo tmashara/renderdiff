@@ -21,7 +21,7 @@ honestly. This is what renderdiff does to make sure of that.
   `prefers-reduced-motion` are fixed, and videos are kept from playing and, once their metadata loads, rewound to frame 0 (one that never loads shows its poster) with video.js captions and control bars hidden (`--no-freeze-video` opts out); with `lottieFrame`, every `lottie-player` is stopped on that frame once it loads (waited for up to 2s). A clock that shows
   seconds can still tick between the two sides and may need a mask.
 - **Kills animation, transitions, caret blink and smooth scrolling** (CSS `scroll-behavior` and
-  `behavior: "smooth"` on window scrolls, from before any hook), and hides common consent banners and
+  `behavior: "smooth"` in script scrolls, from before any hook), and hides common consent banners and
   dev toolbars. Animated images (GIF, WebP, APNG) and SVG animations show their first frame;
   it is a Blink setting, so cross-origin and CSS background images freeze too.
 - **Settles the page** — makes native lazy images eager, scrolls every viewport-height
