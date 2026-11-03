@@ -95,7 +95,7 @@ on stderr: `✗ 2 routes differ (10 shots).` (`below 97.00%` with `--threshold`)
 | `    dom …` | Up to three elements behind the changes, two properties each. `dom @1440 …`: from the first width of the row. |
 | `    crops …` | At most three crop PNGs per shot (bands first, tallest first, then largest regions), relative to `results.json`. |
 | `  @w  ERROR …` | Unmeasured. Grouped across widths sharing a message. See Errors. |
-| `varies /a @1440  Npx  sel` | A differing shot's right side, reloaded in a fresh context, differed from its first load there. Painted out on both sides like a mask, left out of the score (clean if nothing else differs), never accepted. Then `  --mask '…'` and `  masks: [{ …, reason: "varies per load" }]`: confirm it with a base-vs-base baseline before you use either. Off with `--no-recheck` and under `--cache-right`. |
+| `varies /a @1440  Npx  sel` | A differing shot's right side, reloaded in a fresh context, differed from its first load there. Painted out on both sides like a mask, left out of the score (clean if nothing else differs), never accepted. Then `  --mask '…'` and `  masks: [{ …, reason: "varies per load" }]`: confirm it with a base-vs-base baseline before you use either. Ends in `layout moved` (a named element was pushed elsewhere, same text): no suggestion, the page itself shifts per load. Off with `--no-recheck` and under `--cache-right`. |
 | `renderdiff: D of R routes differ (S of T shots), E errors, worst …` | `S` counts unaccepted shots with any differing pixel; `worst` leaves accepted shots out. With unstable pixels: `, U unstable (max Npx)` after the errors. With `--threshold`: `, K below 97.00%`. |
 
 **Row tokens**, in order
@@ -112,7 +112,7 @@ on stderr: `✗ 2 routes differ (10 shots).` (`below 97.00%` with `--threshold`)
 | `unstable 1,204px` | Pixels that kept changing between shots of the same load on one origin (ticker, carousel, video with `--no-freeze-video`). Painted out on both sides, excluded from the score; the route is never clean. Large: a big area went unmeasured, look at the magenta in the full shots. |
 | `1 accepted` | That many of the shot's bands and regions are accepted; the rest are new. `dom` names only the new. |
 | `text +"x" -"y"` | Lines of visible text only on the left (`+`) / right (`-`), added first. Up to three, then `(+N more)`. Masked elements are left out. |
-| `findings: N repeated on 2+ routes` | After the routes: each `dom` entry, text line or element-less `band -24px` seen on 2+ routes once, `×N routes  /a@1440,375 …`, most widespread first, accepted aside; top 20, all in `summary.findings`. One cause: fix it once. The same selector can be a different element per route: check one crop. |
+| `findings: N repeated on 2+ routes` | After the routes: each `dom` entry, text line or element-less `band -24px` seen on 2+ routes once, `×N routes  /a@1440,375 …`, most widespread first, accepted aside; text lines on exactly the same shots share one line (`text -"Users" -"Docs" (+9 more)`), N counts printed lines; top 20, all in `summary.findings`, one per text line. One cause: fix it once. The same selector can be a different element per route: check one crop. |
 
 **`dom` entries** (left first, `;`-separated)
 

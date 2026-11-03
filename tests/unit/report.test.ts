@@ -8,6 +8,7 @@ import path from "node:path";
 import { after, before, describe, test } from "node:test";
 import sharp from "sharp";
 import {
+  fmtPixelFindings,
   pixelFindings,
   verdict,
   writeEvidence,
@@ -246,6 +247,23 @@ describe("pixelFindings", () => {
 
   test("on clean routes it is not", () => {
     assert.deepEqual(pixelFindings([shot("/a", { fonts }), shot("/b", { fonts })]), []);
+  });
+  test("text lines seen on exactly the same shots print as one line; results keep each", () => {
+    const nav = ["Users", "Billing", "Admin", "Docs", "Teams"];
+    const text = (removed: string[]) => ({ text: { added: [], removed } });
+    const results = [
+      shot("/a", { diffPixels: 1, fonts, ...text(nav) }),
+      shot("/b", { diffPixels: 1, fonts, ...text([...nav, "Sale"]) }),
+      shot("/b", { diffPixels: 1, width: 375, ...text(["Sale"]) }),
+      shot("/c", { diffPixels: 1, ...text(["Sale"]) }),
+    ];
+    assert.equal(pixelFindings(results).length, 7);
+    assert.deepEqual(fmtPixelFindings(results), [
+      "findings: 3 repeated on 2+ routes",
+      '  -"Sale"  ×2 routes  /b@1440,375 /c@1440',
+      '  text -"Admin" -"Billing" -"Docs" (+2 more)  ×2 routes  /a@1440 /b@1440',
+      '  fonts -"Inter 600"  ×2 routes  /a@1440 /b@1440',
+    ]);
   });
 });
 

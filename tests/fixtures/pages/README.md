@@ -2,9 +2,9 @@
 
 Each directory here is one route. The fixture server (`tests/helpers/server.ts`) serves
 `left.html` to the left origin and `right.html` to the right origin at the same path, so a
-directory *is* a comparison. Two routes generate their markup instead
-(`page.ts` exporting `left()` / `right()`), because 18,000px of HTML is not worth writing by
-hand.
+directory *is* a comparison. Some routes generate their markup instead (`page.ts` exporting
+`left()` / `right()`): `tall` because 18,000px of HTML is not worth writing by hand, the rest
+because a static file can't change per load.
 
 Three groups:
 
@@ -20,7 +20,7 @@ Three groups:
   elements each change names (`margin`, `color`, `nav`), and a lost `::before` line and a
   re-parented pairing (`divider`).
 - **Guard rails** — `blank`, `tall`, `animated`, `lazy`, `lazy-deep`, `lazy-js`, `lazy-grow`, `consent`,
-  `drifting`, `tracker`, `clock`, `ticker`, `unsettled`, `unsettled-once`, `sprite`, `short`, `tall-region`, `reorder`, `stripe`, `frameset`, `menu`, `scroll-spy`, `signed-in`, `fixed`, `inserted`, `labelled`, `broken-asset`, `fonts`, `media`, `long`, `video`, `video-seek`, `lottie`, `hang`, `origin`, `cooperate`, `mask-geometry`, `bistable`, `offcanvas`, `appshell`, `smooth-scroll`, `rules`.
+  `drifting`, `tracker`, `clock`, `ticker`, `unsettled`, `unsettled-once`, `sprite`, `short`, `tall-region`, `reorder`, `stripe`, `frameset`, `menu`, `scroll-spy`, `signed-in`, `fixed`, `inserted`, `labelled`, `broken-asset`, `fonts`, `media`, `long`, `video`, `video-seek`, `lottie`, `hang`, `origin`, `cooperate`, `mask-geometry`, `bistable`, `offcanvas`, `appshell`, `smooth-scroll`, `rules`, `reflowing`.
   One per defence in `src/capture.ts` / `src/config.ts`.
 
 ## Authoring rules

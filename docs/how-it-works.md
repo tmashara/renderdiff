@@ -40,7 +40,8 @@ honestly. This is what renderdiff does to make sure of that.
   pixels. A route more than 25% unstable errors as `page did not settle` after one retry.
 - **Rechecks a differing shot** — reloads the right side once in a fresh context. The
   elements that differ between the two loads are `varies`: painted out on both sides like a
-  mask, excluded from the score, and listed with the mask that would cover them. Off with
+  mask, excluded from the score, and listed with the mask that would cover them, unless an
+  element was pushed elsewhere between the loads (`layout moved`). Off with
   `--no-recheck`, and under `--cache-right`, whose replay serves the same bytes each load.
 - **Counts a pixel as changed** when pixelmatch's YIQ colour distance is over threshold
   0.05 (a delta of about 88), with anti-aliased pixels left out. Its default of 0.1 passed

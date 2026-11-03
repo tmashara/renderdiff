@@ -33,6 +33,7 @@ import {
   fmtBand,
   fmtElements,
   fmtFailed,
+  fmtText,
   fmtFonts,
   fmtLine,
   fmtRegion,
@@ -1011,24 +1012,39 @@ export function fmtVaries(results: RouteResult[], routes: string[]): string[] {
       ),
     ),
   ];
+  // Pushed, not changed itself: a counter resizes its own box, a reflow moves its neighbours'.
+  const moved = (r: ComparedResult) =>
+    r.varies!.some((g) =>
+      g.elements?.some(
+        (e) =>
+          e.side === "both" &&
+          !e.changed?.text &&
+          (e.left!.x !== e.right!.x || e.left!.y !== e.right!.y),
+      ),
+    );
   const out: string[] = [];
   const masks: string[] = [];
+  const kept: ComparedResult[] = [];
   for (const route of routes) {
     const rs = rows.filter((r) => name(r) === route);
     if (!rs.length) continue;
     const sels = selectors(rs);
     const px = rs.reduce((n, r) => n + r.variesPixels!, 0);
+    const shifted = rs.some(moved);
     out.push(
       `varies ${route} @${rs.map((r) => r.width).join(",")}  ` +
-        `${px.toLocaleString("en-US")}px painted out  ${sels.join(" ") || "(not located)"}`,
+        `${px.toLocaleString("en-US")}px painted out  ${sels.join(" ") || "(not located)"}` +
+        (shifted ? "  layout moved" : ""),
     );
+    if (shifted) continue;
+    kept.push(...rs);
     for (const s of sels.filter((s) => !BARE.test(s))) {
       masks.push(
         `{ selector: ${JSON.stringify(s)}, urlPath: ${JSON.stringify(rs[0]!.right)}, reason: "varies per load" }`,
       );
     }
   }
-  const sels = selectors(rows).filter((s) => !BARE.test(s));
+  const sels = selectors(kept).filter((s) => !BARE.test(s));
   if (sels.length) {
     out.push(`  --mask ${sels.map((s) => `'${s.replace(/'/g, `'\\''`)}'`).join(" --mask ")}`);
     out.push(`  masks: [${masks.join(", ")}]`);
@@ -1098,9 +1114,6 @@ function elementsOf(r: {
     .filter((e, i) => all.findIndex((o) => o.selector === e.selector) === i)
     .slice(0, DOM_ELEMENTS);
 }
-
-/** At most this many text-diff lines per compact row. */
-const TEXT_LINES = 3;
 
 /**
  * The non-TTY summary, sized for an agent's context: clean routes on one line, then each
@@ -1245,10 +1258,7 @@ function row(g: ComparedResult[]): string {
     Math.max(...regions) ? `${span(regions, String)} reg` : "",
     unstable ? `unstable ${unstable.toLocaleString("en-US")}px` : "",
     Math.max(...accepted) ? `${span(accepted, String)} accepted` : "",
-    text.length
-      ? `text ${text.slice(0, TEXT_LINES).join(" ")}` +
-        (text.length > TEXT_LINES ? ` (+${text.length - TEXT_LINES} more)` : "")
-      : "",
+    text.length ? fmtText(text) : "",
   ]
     .filter(Boolean)
     .join("  ");
