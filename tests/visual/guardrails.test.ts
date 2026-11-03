@@ -343,32 +343,43 @@ test("--computed shows whether a rewritten breakpoint, and a rule nothing has, e
   const at = (widths: number[]) => (widths.length ? [{ url: "/rules", widths }] : []);
   const group = (side: string, conditions: string[], matched: number[], unmatched: number[]) => ({
     side,
-    sheet: "inline",
+    sheet: "inline#",
     conditions,
-    rules: 1,
+    rules: conditions[0] === "@media screen" ? 2 : 1,
     matched: at(matched),
     unmatched: at(unmatched),
   });
-  // The rgb() and url() hash rewrites mean the same, so they are no group.
+  // Each side's <style> differs, so each gets its own text hash.
+  const hash = /inline#[0-9a-f]{6}/g;
+  const rules = results(run.outDir).summary.rules!;
+  assert.ok(
+    rules.every((g) => /^inline#[0-9a-f]{6}$/.test(g.sheet)),
+    context(run),
+  );
+  // The rgb() and url() hash rewrites mean the same, so they are no group; state-only rules match.
   assert.deepEqual(
-    results(run.outDir).summary.rules,
+    rules.map((g) => ({ ...g, sheet: g.sheet.replace(hash, "inline#") })),
     [
       group("left", [], [], [960, 959]),
       group("left", ["@media (width >= 960px)"], [960], [959]),
       group("right", ["@media (min-width: 960px)"], [960], [959]),
+      group("left", ["@media screen"], [960, 959], []),
     ],
     context(run),
   );
   assert.deepEqual(
-    result(results(run.outDir), "/rules", 960).computed?.rules?.map((g) => g.elements),
-    [3, 0, 3],
+    result(results(run.outDir), "/rules", 960).computed?.rules?.map((g) => g.elements > 0),
+    [true, false, true, true],
   );
-  assert.deepEqual(parseSummary(run.stdout).rules, [
-    "rules: 3 changed groups, 1 never matched, 2 matched on some shots",
-    "  +inline (1 rule)  matched nothing: /rules@960,959",
-    "  +inline @media (width >= 960px) (1 rule)  matched /rules@960; nothing /rules@959",
-    "  -inline @media (min-width: 960px) (1 rule)  matched /rules@960; nothing /rules@959",
-  ]);
+  assert.deepEqual(
+    parseSummary(run.stdout).rules.map((l) => l.replace(hash, "inline#")),
+    [
+      "rules: 4 changed groups, 1 never matched, 2 matched on some shots",
+      "  +inline# (1 rule)  matched nothing: /rules@960,959",
+      "  +inline# @media (width >= 960px) (1 rule)  matched /rules@960; nothing /rules@959",
+      "  -inline# @media (min-width: 960px) (1 rule)  matched /rules@960; nothing /rules@959",
+    ],
+  );
 });
 
 test("a page whose CSP refuses inline styles still gets renderdiff's CSS", async () => {

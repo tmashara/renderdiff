@@ -199,15 +199,11 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
 - Fails per shot (reported, pixels stand) past 15s or 50,000 elements. Not walked: SVG
   internals, shadow DOM, iframes, masked and `display: none` subtrees.
 - `rules: N changed groups, X never matched, Y matched on some shots`: style rules only one
-  side has (`+` left, `-` right), grouped by stylesheet (`inline`: a page's `<style>`, per
-  route) and enclosing at-rules, then where any element they could style existed (their
-  `@media`/`@supports` holding). `matched nothing`: the run proved nothing about those rules;
-  add a route, width or hook that reaches them. `matched … ; nothing …` names the shots on each
-  side of a breakpoint. All-matched groups are only counted. Rules are compared as Chrome
-  serializes them, so `rgb()` notation is no change but `min-width:` → `width >=` is; `url()`
-  hashes and the origin are normalized. Leans to matched: `:hover`/`:focus` and pseudo-elements
-  are stripped, `@container` taken as holding. Cross-origin sheets aren't read
-  (`meta.unreadableSheets`). `no style rule differs`: once parsed, both sides' style rules are the same.
+  side has (`+` left, `-` right), by stylesheet and `@media`. `matched nothing`: no shot had an
+  element they could style, so the run proved nothing about them; add a route, width or hook
+  that reaches them. Rules compare as Chrome parses them: `rgb()` notation is no change,
+  `min-width:` → `width >=` is. Details and limits: docs/output.md § Rule coverage in the
+  renderdiff repo.
 
 ## `--aria`
 

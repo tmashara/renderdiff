@@ -282,8 +282,8 @@ rules: 3 changed groups, 1 never matched, 2 matched on some shots
   `url()` and the left origin are read as on the other side. A rule moved to another file is
   no change. Only style rules count: not `@font-face`, `@keyframes` or `@property`.
 - `+` rules only the left (your change) has, `-` only the right. A group is a stylesheet's file
-  name (asset hash as `#`, or `inline` for a page's `<style>`, kept per route) and its
-  enclosing at-rules.
+  name (asset hash as `#`; a `<style>` is `inline#` and a hash of its text, so one block
+  inlined into every page is one group) and its enclosing at-rules.
 - A group matches on a shot when, on its side, every enclosing `@media` and `@supports` holds
   and a selector matches an element. Listed are groups that matched nothing anywhere, then
   those that matched on some shots only (the breakpoint above, at 960 and not 959). Groups
@@ -291,9 +291,11 @@ rules: 3 changed groups, 1 never matched, 2 matched on some shots
   `rules: no style rule differs between the sides`: once parsed, both sides' style rules are
   the same.
 - Matching leans toward `matched`: `:hover`, `:focus`, `:active`, `:visited` and
-  pseudo-elements are stripped from selectors, and `@container` is taken as holding. A
-  group's match can be any one of its rules: a never-matched rule among matched ones isn't
-  singled out.
+  pseudo-elements match any element (so `::selection {}` matches), and `@container` is taken
+  as holding. Other states lean the other way: `:checked`, `:target`, `[open]`, a class
+  script adds, and a `<link media=print>` sheet count as unmatched unless the shot is in that
+  state. A group's match can be any one of its rules: a never-matched rule among matched ones
+  isn't singled out.
 - Stylesheets a side can't read (cross-origin, such as Google Fonts) are left out of both,
   listed once in `meta.unreadableSheets`. One that failed to load shows as `failed`; its
   rules then show as one side's. renderdiff's own CSS (hidden selectors, stilled animations,

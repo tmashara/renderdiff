@@ -5,13 +5,15 @@
 <title>Rule coverage</title>
 <link rel="stylesheet" href="/shared/base.css">
 <style>
-/* GUARD RAIL for --computed's rule coverage. This side writes the breakpoint as a range and adds a rule for a .bubble no page has; the
+/* GUARD RAIL for --computed's rule coverage. This side writes the breakpoint as a range and adds a rule for a .bubble no page has and two
+   state-only rules, which any element could take; the
    colour and the url() hash differ only in notation, so they are no change. */
 .toc { margin: 0 0 32px; padding: 0; list-style: none; color: rgb(0 0 0); }
 .toc li { height: 24px; }
 @media (width >= 960px) { .toc li { padding-left: 8px; } }
 .ghost { background-image: url(/shared/img/ghost.3f9a8c1d.png); }
 .bubble { border-radius: 4px; }
+@media screen { ::selection { color: rgb(255 255 255); } :focus-visible { outline-offset: 2px; } }
 </style>
 </head>
 <body>

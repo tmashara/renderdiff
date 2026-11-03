@@ -56,6 +56,8 @@ import {
 const LOCATE_TIMEOUT = 5_000;
 /** A full-page walk reads every element's style; past this, report the snapshot as failed. */
 export const COMPUTED_TIMEOUT = 15_000;
+/** Rule coverage after it: past this, the shot keeps its `computed` without `rules`. */
+const RULES_TIMEOUT = 5_000;
 /** Bounds one capture: a renderer that dies or never returns from an evaluate would hang the run. */
 const SHOT_TIMEOUT = (Math.max(0, Number(process.env.RENDERDIFF_SHOT_TIMEOUT)) || 120) * 1000;
 
@@ -533,23 +535,10 @@ export async function run({
         const computed = cfg.computed
           ? await Promise.race([
               Promise.all([snap(pages.left, "left"), snap(pages.right, "right")]).then(
-                async ([l, r]) => {
-                  const origins: [string, string] = [pages.left.url(), pages.right.url()];
-                  const d = diffSnapshots(l.snap, r.snap, origins);
+                ([l, r]) => {
+                  const d = diffSnapshots(l.snap, r.snap, [pages.left.url(), pages.right.url()]);
                   const unchecked = Math.max(l.unchecked, r.unchecked);
-                  // Left out, like a result from before it, rather than failing the snapshot.
-                  const cov = await ruleCoverage([pages.left, pages.right], origins).catch(
-                    () => null,
-                  );
-                  cov?.unreadable[0].forEach((h) => unreadable.left.add(h));
-                  cov?.unreadable[1].forEach((h) => unreadable.right.add(h));
-                  return {
-                    computed: {
-                      ...d,
-                      ...(unchecked ? { unchecked } : {}),
-                      ...(cov ? { rules: cov.rules } : {}),
-                    },
-                  };
+                  return { computed: unchecked ? { ...d, unchecked } : d };
                 },
                 (e: Error) => ({ computed: null, computedError: e.message }),
               ),
@@ -559,6 +548,20 @@ export async function run({
               })),
             ])
           : null;
+        // Outside the snapshot's race, so a slow read loses only `rules`.
+        const cov = computed?.computed
+          ? await Promise.race([
+              ruleCoverage([pages.left, pages.right], [pages.left.url(), pages.right.url()]).catch(
+                () => null,
+              ),
+              sleep(RULES_TIMEOUT, null, { ref: false }),
+            ])
+          : null;
+        if (cov) {
+          computed!.computed!.rules = cov.rules;
+          cov.unreadable[0].forEach((h) => unreadable.left.add(h));
+          cov.unreadable[1].forEach((h) => unreadable.right.add(h));
+        }
         // Masked content is noise here too; every next job reloads the page, so no restore.
         const tree = async (page: Page, side: "left" | "right") => {
           for (const m of masksFor(cfg, page, route))
@@ -880,6 +883,8 @@ export async function merge(fullDir: string, partialDir: string, outDir: string)
   const replays = results.flatMap((r) =>
     r.status === "compared" && r.rightReplayedFrom ? [r.rightReplayedFrom] : [],
   );
+  const sides = (s: "left" | "right") =>
+    union(full.meta.unreadableSheets?.[s] ?? [], partial.meta.unreadableSheets?.[s] ?? []).sort();
   const meta = {
     ...full.meta,
     widths: union(full.meta.widths, partial.meta.widths),
@@ -888,18 +893,7 @@ export async function merge(fullDir: string, partialDir: string, outDir: string)
     blockUrlPatterns: union(full.meta.blockUrlPatterns, partial.meta.blockUrlPatterns),
     rightReplayedFrom: replays.sort()[0] ?? null,
     ...(full.meta.unreadableSheets || partial.meta.unreadableSheets
-      ? {
-          unreadableSheets: {
-            left: union(
-              full.meta.unreadableSheets?.left ?? [],
-              partial.meta.unreadableSheets?.left ?? [],
-            ).sort(),
-            right: union(
-              full.meta.unreadableSheets?.right ?? [],
-              partial.meta.unreadableSheets?.right ?? [],
-            ).sort(),
-          },
-        }
+      ? { unreadableSheets: { left: sides("left"), right: sides("right") } }
       : {}),
   };
   const stale = [
