@@ -1148,7 +1148,7 @@ export function compact(
   const shots = compared.filter((r) => r.diffPixels > 0).length;
   const errors = results.length - all.length;
   const worst = compared.length ? stats(compared).worst : null;
-  const unstable = compared.filter((r) => r.unstablePixels).map((r) => r.unstablePixels);
+  const unstable = compared.map((r) => r.unstablePixels).filter(Boolean);
   out.push(
     `renderdiff: ${differ} of ${routes.length} routes differ (${shots} of ${results.length} shots), ` +
       `${errors} error${errors === 1 ? "" : "s"}` +

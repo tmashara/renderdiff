@@ -357,7 +357,9 @@ config's masks; `--hide <sel>` (CSS) adds to `hideSelectors`. Also: `threshold`,
 `beforeShot`, `storageState`. `hideSelectors`: match the element **exactly** (consent scripts stamp classes on
 `<html>`; a loose selector blanks the whole document and blank matches blank), and they hide
 rather than remove. `--computed` and `probe` skip hidden elements with their subtrees; hide a
-wrapper that comes and goes with the banner too.
+wrapper that comes and goes with the banner too. A hidden element still counts toward its
+siblings' `:nth-of-type`, so one that moves among siblings sharing its tag and class still
+re-keys them.
 
 ## `report`
 
