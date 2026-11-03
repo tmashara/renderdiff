@@ -68,6 +68,7 @@ export const GUARDRAILS = [
   "offcanvas",
   "appshell",
   "smooth-scroll",
+  "rules",
 ] as const;
 
 export const ALL: string[] = [...EQUIVALENCE, ...CONTROLS, ...GUARDRAILS];

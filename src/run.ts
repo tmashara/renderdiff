@@ -9,7 +9,14 @@ import { applyAccepted, readAccepted, unacceptable, updateAccepted } from "./acc
 import { CACHE_DIR, cacheFile, replayable, REPLAY_TTL, saveRecording, shotId } from "./cache.ts";
 import { cancelUnstable, capture, HookError, prepare, step, type Shot } from "./capture.ts";
 import { compare, crops, type Band, type Box, type Region } from "./compare.ts";
-import { diffAria, diffSnapshots, fmtAria, fmtComputed, pageError } from "./computed.ts";
+import {
+  diffAria,
+  diffSnapshots,
+  fmtAria,
+  fmtComputed,
+  pageError,
+  ruleCoverage,
+} from "./computed.ts";
 import { locate, snapshotStates, type ElementDiff } from "./locate.ts";
 import {
   alive,
@@ -49,6 +56,8 @@ import {
 const LOCATE_TIMEOUT = 5_000;
 /** A full-page walk reads every element's style; past this, report the snapshot as failed. */
 export const COMPUTED_TIMEOUT = 15_000;
+/** Rule coverage after it: past this, the shot keeps its `computed` without `rules`. */
+const RULES_TIMEOUT = 5_000;
 /** Bounds one capture: a renderer that dies or never returns from an evaluate would hang the run. */
 const SHOT_TIMEOUT = (Math.max(0, Number(process.env.RENDERDIFF_SHOT_TIMEOUT)) || 120) * 1000;
 
@@ -293,6 +302,10 @@ export async function run({
   const queue = [...jobs];
   let done = 0;
   let down = "";
+  const unreadable = {
+    left: new Set(prev?.meta.unreadableSheets?.left),
+    right: new Set(prev?.meta.unreadableSheets?.right),
+  };
   const every = Math.ceil(jobs.length / 10);
   const tick = () => {
     ++done;
@@ -535,6 +548,20 @@ export async function run({
               })),
             ])
           : null;
+        // Outside the snapshot's race, so a slow read loses only `rules`.
+        const cov = computed?.computed
+          ? await Promise.race([
+              ruleCoverage([pages.left, pages.right], [pages.left.url(), pages.right.url()]).catch(
+                () => null,
+              ),
+              sleep(RULES_TIMEOUT, null, { ref: false }),
+            ])
+          : null;
+        if (cov) {
+          computed!.computed!.rules = cov.rules;
+          cov.unreadable[0].forEach((h) => unreadable.left.add(h));
+          cov.unreadable[1].forEach((h) => unreadable.right.add(h));
+        }
         // Masked content is noise here too; every next job reloads the page, so no restore.
         const tree = async (page: Page, side: "left" | "right") => {
           for (const m of masksFor(cfg, page, route))
@@ -729,6 +756,14 @@ export async function run({
     config,
     rightReplayedFrom: replays.sort()[0] ?? null,
     rerun: prev ? { rerun: jobs.length, reused: results.length - jobs.length } : null,
+    ...(cfg.computed
+      ? {
+          unreadableSheets: {
+            left: [...unreadable.left].sort(),
+            right: [...unreadable.right].sort(),
+          },
+        }
+      : {}),
   };
   const reportPath = await writeReport(results, meta, cfg.outDir, stale);
   const resultsPath = writeResults(results, meta, cfg.outDir, stale);
@@ -848,6 +883,8 @@ export async function merge(fullDir: string, partialDir: string, outDir: string)
   const replays = results.flatMap((r) =>
     r.status === "compared" && r.rightReplayedFrom ? [r.rightReplayedFrom] : [],
   );
+  const sides = (s: "left" | "right") =>
+    union(full.meta.unreadableSheets?.[s] ?? [], partial.meta.unreadableSheets?.[s] ?? []).sort();
   const meta = {
     ...full.meta,
     widths: union(full.meta.widths, partial.meta.widths),
@@ -855,6 +892,9 @@ export async function merge(fullDir: string, partialDir: string, outDir: string)
     hideSelectors: union(full.meta.hideSelectors, partial.meta.hideSelectors),
     blockUrlPatterns: union(full.meta.blockUrlPatterns, partial.meta.blockUrlPatterns),
     rightReplayedFrom: replays.sort()[0] ?? null,
+    ...(full.meta.unreadableSheets || partial.meta.unreadableSheets
+      ? { unreadableSheets: { left: sides("left"), right: sides("right") } }
+      : {}),
   };
   const stale = [
     ...(full.summary.stale ?? []).filter((a) => !taken.has(`${a.route}@${a.width}`)),

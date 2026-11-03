@@ -61,6 +61,7 @@ the per-shot output when piped, `--no-progress` the summary on a terminal.
 | `1 accepted` | That many of the shot's changes are accepted; the rest are new. |
 | `findings: N repeated on 2+ routes` | After the routes: the same `dom` entry, text line, `fonts` face or element-less band delta (`band -24px`) on two or more routes, once per line with `×N routes` and where (`/a@1440,375`, then `+N routes`), most widespread first, accepted ones aside. Top 20; `summary.findings` in results.json has them all. One cause behind many rows: fix it once. A selector names an element per page, so the same path may be a different element on another route: check one crop. |
 | `computed: N findings` | With `--computed`: each `key prop left→right` once, with the routes and widths it was seen at; `dom identical`: the markup matches apart from asset hashes and generated class names, so look at CSS or script. See [below](#computed-styles---computed). |
+| `rules: N changed groups` | With `--computed`: style rules only one side has, by stylesheet and `@media`, and whether any shot had an element they could style. `matched nothing`: the run proved nothing about those rules. See [below](#rule-coverage). |
 | `aria: identical on N of M route(s)` | With `--aria`: routes whose accessibility tree matches at every width, then each differing route's lines, `+` left only, `-` right only. See [below](#aria-snapshots---aria). |
 | `crops …` | Up to 3 PNGs per comparison, bands first, relative to `results.json`. Left is on top or on the left, and the change is boxed in red. |
 | `ERROR …` | Unmeasured, which is neither a pass nor a fail. Exits 3. |
@@ -263,6 +264,43 @@ Links and controls (`a[href]`, `button`, `input`, `select`, `textarea`, `summary
   (`ul:has(a:hover) a:not(:hover)`) isn't seen, nor `:hover` on an ancestor (`li:hover`
   menus), `:active`, `:focus-within` or script hover handlers.
 
+### Rule coverage
+
+A clean run doesn't show that a changed rule ever applied. So `--computed` also reads every
+style rule in each side's stylesheets and lists the groups of rules only one side has:
+
+```
+rules: 3 changed groups, 1 never matched, 2 matched on some shots
+  +chat.css (1 rule)  matched nothing: /help@1440,375
+  +docs.css @media (width >= 60em) (5 rules)  matched /a@960,1440 /b@960; nothing /a@959,375
+  -docs.css @media (min-width: 60em) (5 rules)  matched /a@960,1440 /b@960; nothing /a@959,375
+```
+
+- A rule is its enclosing at-rules, selector (nesting resolved) and declarations, as Chrome
+  serializes them. So pure notation changes Chrome normalizes (`rgb(0 0 0)` and
+  `rgb(0, 0, 0)`) are no change, while `min-width:` against `width >=` is. Asset hashes in
+  `url()` and the left origin are read as on the other side. A rule moved to another file is
+  no change. Only style rules count: not `@font-face`, `@keyframes` or `@property`.
+- `+` rules only the left (your change) has, `-` only the right. A group is a stylesheet's file
+  name (asset hash as `#`; a `<style>` is `inline#` and a hash of its text, so one block
+  inlined into every page is one group) and its enclosing at-rules.
+- A group matches on a shot when, on its side, every enclosing `@media` and `@supports` holds
+  and a selector matches an element. Listed are groups that matched nothing anywhere, then
+  those that matched on some shots only (the breakpoint above, at 960 and not 959). Groups
+  matching on every shot are only counted (`, all matched`). 20 lines shown.
+  `rules: no style rule differs between the sides`: once parsed, both sides' style rules are
+  the same.
+- Matching leans toward `matched`: `:hover`, `:focus`, `:active`, `:visited` and
+  pseudo-elements match any element (so `::selection {}` matches), and `@container` is taken
+  as holding. Other states lean the other way: `:checked`, `:target`, `[open]`, a class
+  script adds, and a `<link media=print>` sheet count as unmatched unless the shot is in that
+  state. A group's match can be any one of its rules: a never-matched rule among matched ones
+  isn't singled out.
+- Stylesheets a side can't read (cross-origin, such as Google Fonts) are left out of both,
+  listed once in `meta.unreadableSheets`. One that failed to load shows as `failed`; its
+  rules then show as one side's. renderdiff's own CSS (hidden selectors, stilled animations,
+  `extraCss`) isn't read.
+
 ## ARIA snapshots (`--aria`)
 
 With `--aria`, after the shot (and `--computed`) renderdiff takes Playwright's ARIA snapshot
@@ -421,7 +459,8 @@ file, not each line), scores rounded down to four decimals (so a shot that diffe
     "config": "…",              // hash of what decides a shot; --rerun-failed needs it unchanged
     "rightReplayedFrom": null,  // --cache-right: when the replayed recording was made
     "freezeVideo": true, "platform": "darwin",   // process.platform: pixels and accepts are OS-specific
-    "rerun": null               // --rerun-failed: { "rerun": 3, "reused": 12 }
+    "rerun": null,              // --rerun-failed: { "rerun": 3, "reused": 12 }
+    "unreadableSheets": { "left": [], "right": [] }   // --computed: stylesheets left out of rule coverage
   },
   "results": [
     {
@@ -448,7 +487,8 @@ file, not each line), scores rounded down to four decimals (so a shot that diffe
       "failed": { "left": [], "right": [] },   // stylesheets and font faces that didn't load: "font Inter 700", "stylesheet https://…"
       "fonts": { "added": [], "removed": ["Inter 600"] },   // web font faces one side loaded; absent when equal
       "masked": ["rotating quote (data-renderdiff-mask)"],   // absent unless a side marked elements data-renderdiff-mask
-      "computed": { "dom": 1, "changes": [], "truncated": 0, "unmatched": { "left": [], "right": ["body > nav > a[href=\"/pricing\"]"] } },   // --computed only; null: snapshot failed, "computedError" says why
+      "computed": { "dom": 1, "changes": [], "truncated": 0, "unmatched": { "left": [], "right": ["body > nav > a[href=\"/pricing\"]"] },
+        "rules": [{ "side": "left", "sheet": "docs.css", "conditions": ["@media (width >= 60em)"], "rules": 5, "elements": 67 }] },   // --computed only; null: snapshot failed, "computedError" says why; rules: one-sided rule groups, elements they could style here
       "aria": { "added": ["- text: Buy now"], "removed": ["- button \"Buy now\""], "truncated": 0 },   // --aria only; both empty: identical; null: snapshot failed, "ariaError" says why
       "images": { "left": "about.1440.left.png", "right": "about.1440.right.png", "diff": "about.1440.diff.png" },
       "crops": [{
@@ -468,7 +508,8 @@ file, not each line), scores rounded down to four decimals (so a shot that diffe
     "accepted": 0,                // shots whose every difference was accepted
     "stale": [],                  // accepted entries the run measured but didn't see
     "findings": [],               // { finding, selector?, at: [{ url, widths }] }, seen on 2+ routes
-    "computed": []                // --computed: { key, prop, values: [left, right], at: [{ url, widths }] }
+    "computed": [],               // --computed: { key, prop, values: [left, right], at: [{ url, widths }] }
+    "rules": []                   // --computed: { side, sheet, conditions, rules, matched: [{ url, widths }], unmatched: [{ url, widths }] }
   }
 }
 ```

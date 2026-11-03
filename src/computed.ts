@@ -1,3 +1,4 @@
+import type { Page } from "playwright";
 import { textDiff } from "./compare.ts";
 import { name } from "./config.ts";
 import { MAX_STATES, SNAP_PROPS } from "./locate.ts";
@@ -30,6 +31,25 @@ export interface ComputedDiff {
   unmatched: { left: string[]; right: string[] };
   /** Links and controls past `MAX_STATES` on a side, not forced into `:hover`/`:focus-visible`. */
   unchecked?: number;
+  /** Style rules only that side has, grouped by stylesheet and enclosing at-rules; absent when not read. */
+  rules?: RuleGroup[];
+}
+
+export interface RuleGroup {
+  side: "left" | "right";
+  /** The stylesheet's file name, asset hash read as `#`, or `inline#` and a hash of a `<style>`'s text. */
+  sheet: string;
+  /** Enclosing at-rules, outermost first: `@media (width >= 60em)`. */
+  conditions: string[];
+  rules: number;
+  /** Elements on that side any of them could style here: every enclosing `@media`/`@supports` holds and the selector matches. */
+  elements: number;
+}
+
+/** One group across the run: where it matched an element and where it matched none. */
+export interface RuleFinding extends Omit<RuleGroup, "elements"> {
+  matched: Finding["at"];
+  unmatched: Finding["at"];
 }
 
 /** One change, with every route and width it was seen at. */
@@ -222,6 +242,158 @@ export function diffSnapshots(
   };
 }
 
+/** A style rule as the page reads it: sheet, enclosing at-rules, selector, declarations, whether its at-rules hold. */
+type RuleRow = [string, string[], string, string, boolean];
+
+/**
+ * Runs in the page. Every style rule in `document.styleSheets` (renderdiff's own CSS is
+ * adopted, so not among them), nesting resolved; an inline sheet is named by a hash of its text.
+ */
+function sheetRules() {
+  const rows: RuleRow[] = [];
+  const unreadable: string[] = [];
+  const walk = (
+    list: CSSRuleList,
+    sheet: string,
+    conds: string[],
+    holds: boolean,
+    parent: string | null,
+  ) => {
+    for (const r of Array.from(list)) {
+      if (r instanceof CSSImportRule) {
+        if (r.styleSheet) read(r.styleSheet, conds, holds);
+      } else if (r instanceof CSSStyleRule || r.constructor.name === "CSSNestedDeclarations") {
+        const own = r instanceof CSSStyleRule ? r.selectorText : "&";
+        const sel =
+          parent === null
+            ? own
+            : own.includes("&")
+              ? own.replaceAll("&", `:is(${parent})`)
+              : `:is(${parent}) ${own}`;
+        rows.push([sheet, conds, sel, (r as CSSStyleRule).style.cssText, holds]);
+        if (r instanceof CSSStyleRule) walk(r.cssRules, sheet, conds, holds, sel);
+      } else if (r instanceof CSSGroupingRule) {
+        const [at, ok] =
+          r instanceof CSSMediaRule
+            ? [`@media ${r.conditionText}`, matchMedia(r.conditionText).matches]
+            : r instanceof CSSSupportsRule
+              ? [`@supports ${r.conditionText}`, CSS.supports(r.conditionText)]
+              : [r.cssText.slice(0, r.cssText.indexOf("{")).trim(), true];
+        walk(r.cssRules, sheet, [...conds, at], holds && ok, parent);
+      }
+    }
+  };
+  const read = (s: CSSStyleSheet, conds: string[], holds: boolean) => {
+    if (s.disabled) return;
+    let list: CSSRuleList;
+    try {
+      list = s.cssRules;
+    } catch {
+      unreadable.push(s.href!);
+      return;
+    }
+    let h = 0x811c9dc5;
+    if (!s.href)
+      for (const c of s.ownerNode?.textContent ?? "")
+        h = Math.imul(h ^ c.charCodeAt(0), 0x01000193);
+    const m = s.media.mediaText;
+    walk(
+      list,
+      s.href
+        ? new URL(s.href).pathname.split("/").pop() || s.href
+        : `inline#${(h >>> 0).toString(16).padStart(8, "0").slice(0, 6)}`,
+      m ? [...conds, `@media ${m}`] : conds,
+      holds && (!m || matchMedia(m).matches),
+      null,
+    );
+  };
+  for (const s of Array.from(document.styleSheets)) read(s, [], true);
+  return { rows, unreadable };
+}
+
+/** Runs in the page: per group, how many elements any of its selectors matches. */
+function matching(groups: string[][]) {
+  // ponytail: a state or pseudo-element read as any element, and @container as holding, lean to "matched"
+  const STRIP =
+    /::?(?:before|after|first-line|first-letter|placeholder|marker|selection|backdrop|file-selector-button|-[\w-]+)|:(?:hover|focus|focus-visible|focus-within|active|visited)(?![\w-])/g;
+  const find = (sel: string) => {
+    for (const s of [sel.replace(STRIP, ":where(*)"), sel]) {
+      try {
+        return document.querySelectorAll(s);
+      } catch {}
+    }
+    return [];
+  };
+  return groups.map((sels) => {
+    const els = new Set<Element>();
+    for (const sel of sels) find(sel).forEach((e) => els.add(e));
+    return els.size;
+  });
+}
+
+/** A row compared across sides: the left origin read as the right's, asset hashes in `url()` as `#`. */
+const ruleKey = ([, conds, sel, css]: RuleRow, origins?: [string, string]) => {
+  const k = `${conds.join(" ")}\0${sel}\0${css}`;
+  return (origins ? rebaseText(k, ...origins) : k).replace(
+    /url\("([^"]*)"\)/g,
+    (_, u: string) => `url("${normalizeUrl(u)}")`,
+  );
+};
+
+/** Indices of `a`'s keys with no copy left in `b`. */
+function oneSided(a: string[], b: string[]): number[] {
+  const rest = new Map<string, number>();
+  for (const k of b) rest.set(k, (rest.get(k) ?? 0) + 1);
+  return a.flatMap((k, i) => {
+    const n = rest.get(k) ?? 0;
+    rest.set(k, n - 1);
+    return n > 0 ? [] : [i];
+  });
+}
+
+/** `--computed`'s rule coverage: the style rules only one side has, and what each side's could style. */
+export async function ruleCoverage(
+  pages: [Page, Page],
+  origins: [string, string],
+): Promise<{ rules: RuleGroup[]; unreadable: [string[], string[]] }> {
+  const read = await Promise.all(pages.map((p) => p.evaluate(sheetRules)));
+  const keys = [
+    read[0]!.rows.map((r) => ruleKey(r, origins)),
+    read[1]!.rows.map((r) => ruleKey(r)),
+  ];
+  const rules = await Promise.all(
+    [oneSided(keys[0]!, keys[1]!), oneSided(keys[1]!, keys[0]!)].map(async (kept, i) => {
+      const groups = new Map<string, RuleGroup & { sels: string[] }>();
+      for (const [sheet, conditions, sel, , holds] of kept.map((k) => read[i]!.rows[k]!)) {
+        const id = JSON.stringify([sheet, conditions]);
+        const g = groups.get(id) ?? {
+          side: i ? ("right" as const) : ("left" as const),
+          sheet: normalizeUrl(sheet),
+          conditions,
+          rules: 0,
+          elements: 0,
+          sels: [],
+        };
+        groups.set(id, g);
+        g.rules++;
+        if (holds) g.sels.push(sel);
+      }
+      const gs = [...groups.values()];
+      const counts = gs.length
+        ? await pages[i]!.evaluate(
+            matching,
+            gs.map((g) => g.sels),
+          )
+        : [];
+      return gs.map(({ sels, ...g }, j) => ({ ...g, elements: counts[j]! }));
+    }),
+  );
+  return {
+    rules: rules.flat(),
+    unreadable: [read[0]!.unreadable.map(normalizeUrl), read[1]!.unreadable.map(normalizeUrl)],
+  };
+}
+
 const computedOf = (rs: RouteResult[]) =>
   rs.filter((r): r is ComparedResult => r.status === "compared" && !!r.computed);
 
@@ -245,6 +417,48 @@ export function groupFindings(results: RouteResult[]): Finding[] {
   }
   const shots = (f: Finding) => f.at.reduce((n, a) => n + a.widths.length, 0);
   return [...out.values()].sort((a, b) => shots(b) - shots(a) || a.key.localeCompare(b.key));
+}
+
+/** Each one-sided rule group once, never matched first, then matched on some shots only. */
+export function groupRules(results: RouteResult[]): RuleFinding[] {
+  const out = new Map<string, RuleFinding>();
+  for (const r of computedOf(results)) {
+    for (const { elements, ...g } of r.computed!.rules ?? []) {
+      const id = JSON.stringify([g.side, g.sheet, g.conditions]);
+      const f = out.get(id) ?? { ...g, matched: [], unmatched: [] };
+      f.rules = Math.max(f.rules, g.rules);
+      out.set(id, f);
+      addAt(elements ? f.matched : f.unmatched, r);
+    }
+  }
+  const rank = (f: RuleFinding) => (!f.matched.length ? 0 : f.unmatched.length ? 1 : 2);
+  return [...out.values()].sort((a, b) => rank(a) - rank(b));
+}
+
+const fmtGroup = (f: RuleFinding) =>
+  `${f.side === "left" ? "+" : "-"}${[f.sheet, ...f.conditions].join(" ")} (${f.rules} rule${f.rules === 1 ? "" : "s"})`;
+
+/** The `rules:` block: groups that matched nothing, or matched on some shots only, with where. */
+function fmtRules(rows: ComparedResult[]): string[] {
+  if (!rows.some((r) => r.computed?.rules)) return [];
+  const all = groupRules(rows);
+  if (!all.length) return ["rules: no style rule differs between the sides"];
+  const never = all.filter((f) => !f.matched.length);
+  const some = all.filter((f) => f.matched.length && f.unmatched.length);
+  const out = [
+    `rules: ${all.length} changed group${all.length === 1 ? "" : "s"}` +
+      (never.length || some.length
+        ? `, ${never.length} never matched, ${some.length} matched on some shots`
+        : ", all matched"),
+    ...never.map((f) => `  ${fmtGroup(f)}  matched nothing: ${fmtAt(f.unmatched)}`),
+    ...some.map(
+      (f) => `  ${fmtGroup(f)}  matched ${fmtAt(f.matched)}; nothing ${fmtAt(f.unmatched)}`,
+    ),
+  ];
+  const shown = out.slice(0, SHOWN + 1);
+  if (out.length > shown.length)
+    shown.push(`  (+${out.length - shown.length} more in results.json)`);
+  return shown;
 }
 
 /** Findings shown in the console summary; results.json has them all. */
@@ -311,7 +525,7 @@ export function fmtComputed(results: RouteResult[], routes: string[]): string[] 
   out.push(...unmatched.slice(0, UNMATCHED_SHOWN));
   if (unmatched.length > UNMATCHED_SHOWN)
     out.push(`  (+${unmatched.length - UNMATCHED_SHOWN} more routes with unmatched elements)`);
-  return out;
+  return [...out, ...fmtRules(rows)];
 }
 
 // ponytail: raw indented lines, so a wrapper role added or removed re-indents everything below it; key lines by role path if that gets noisy

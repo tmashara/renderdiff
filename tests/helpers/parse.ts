@@ -49,6 +49,8 @@ export interface Summary {
   accepted: string[];
   /** `route@width` of each stale accepted difference, from the `stale accepted:` line. */
   stale: string[];
+  /** With `--computed`: the `rules:` line and the group lines under it; empty without one. */
+  rules: string[];
   /** The `rerun:` line of a `--rerun-failed` run, else null. */
   rerun: { shots: number; routes: number; reused: number; untouched: number } | null;
   /** Each differing route: widths that were clean or accepted, then one row per collapsed width group. */
@@ -138,6 +140,7 @@ export function parseSummary(stdout: string): Summary {
     clean: listed("clean"),
     accepted: listed("accepted"),
     stale,
+    rules: /^rules: .*(?:\n  .*)*/m.exec(stdout)?.[0].split("\n") ?? [],
     rerun: rerun && {
       shots: Number(rerun[1]),
       routes: Number(rerun[2]),
