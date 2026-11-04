@@ -209,7 +209,7 @@ function previous(file: string, now: Record<string, unknown>): Results | string 
   for (const [key, value] of Object.entries(now)) {
     if (key === "config" && value !== was[key]) {
       return (
-        `the config (masks, hooks, hidden selectors, blocked URLs, CSS, storage state, --computed, --aria) ` +
+        `the config (masks, hooks, hidden selectors, blocked URLs, CSS, storage state, --computed, --aria, --browser) ` +
         `differs from the one that wrote ${file}; run without --rerun-failed to start over, ` +
         `or run the routes you changed into a new --out and renderdiff merge it with this one`
       );
@@ -634,6 +634,9 @@ export async function run({
 
         if (!rightShot.failed.length) recorded.push(shotId(route, width));
         const marked = [...new Set([...leftShot.marked, ...rightShot.marked])];
+        const stopped = (["left", "right"] as const).filter(
+          (s) => ({ left: leftShot, right: rightShot })[s].stopped,
+        );
         const fonts = {
           added: leftShot.fonts.filter((f) => !rightShot.fonts.includes(f)),
           removed: rightShot.fonts.filter((f) => !leftShot.fonts.includes(f)),
@@ -650,6 +653,7 @@ export async function run({
           accepted: false,
           failed: { left: leftShot.failed, right: rightShot.failed },
           ...(marked.length ? { masked: marked } : {}),
+          ...(stopped.length ? { stopped } : {}),
           ...(fonts.added.length || fonts.removed.length ? { fonts } : {}),
           ...computed,
           ...aria,
@@ -661,6 +665,7 @@ export async function run({
         const details = [
           sel,
           assets ? `failed ${assets}` : "",
+          stopped.length ? `stopped loading on ${stopped.join(" and ")}` : "",
           unstableBox ? `unstable within ${fmtRegion(unstableBox)}` : "",
           regions.length
             ? `${regions.length} region${regions.length > 1 ? "s" : ""}, largest ${fmtRegion(regions[0]!)}`
@@ -1082,7 +1087,7 @@ export async function launch(browser?: "webkit") {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       throw new Error(
-        `could not launch WebKit:\n  ${msg}\n\n  Install the browser with:  npx playwright install webkit`,
+        `could not launch WebKit:\n  ${msg}\n\n  Install the browser with:  npx playwright install webkit  (--with-deps on Linux)`,
       );
     }
   }

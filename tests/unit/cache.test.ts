@@ -100,6 +100,24 @@ describe("replayable", () => {
 });
 
 describe("keys", () => {
+  test("a webkit run is its own config, out dir and recording; Chromium's config is unchanged", () => {
+    const sides = { left: "http://l.test", right: "http://r.test" };
+    const wk = resolveConfig({}, { ...sides, browser: "webkit" });
+    assert.equal(wk.browser, "webkit");
+    assert.equal(path.basename(wk.outDir), "renderdiff-out-webkit");
+    assert.equal(
+      path.basename(resolveConfig({ browser: "webkit" }, sides).outDir),
+      "renderdiff-out-webkit",
+    );
+    const ch = resolveConfig({ browser: "chromium" }, sides);
+    assert.equal("browser" in ch, false);
+    assert.equal(path.basename(ch.outDir), "renderdiff-out");
+    assert.notEqual(
+      cacheFile(cfg({ browser: "webkit" }), { name: "webkit", version: "1" }),
+      cacheFile(cfg(), browser),
+    );
+  });
+
   test("a hook, the right path or the width is a different shot", () => {
     const hooked = parseRoutes(["/a"], undefined, async () => {})[0]!;
     const paired = parseRoutes(["/b::/a"])[0]!;

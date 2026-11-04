@@ -74,6 +74,8 @@ export interface ComparedResult extends BaseResult {
   text: TextDiff;
   /** Reasons of `data-renderdiff-mask` elements either side carried. Absent when none did. */
   masked?: string[];
+  /** WebKit: sides whose load was stopped so the shot could be taken; their pending requests failed. */
+  stopped?: ("left" | "right")[];
   /** Paths relative to the out dir. `diff` is absent only for a zero-diff shot in `renderdiff pack` output. */
   images: { left: string; right: string; diff?: string };
   /** At most three, worst first: one-sided or text changes, then property changes, then shifts. */

@@ -99,6 +99,10 @@ export default {
   // they keep playing.
   // lottieFrame: 60,
 
+  // Shoot both sides in WebKit instead of Chromium, for CSS only Safari reads differently.
+  // --browser overrides it; in the GitHub Action the browser input decides and this is ignored.
+  // browser: "webkit",
+
   // Mask every iframe on every route (embeds that differ per load). Same as --mask-media.
   maskMedia: false,
 

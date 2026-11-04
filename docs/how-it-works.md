@@ -24,9 +24,16 @@ honestly. This is what renderdiff does to make sure of that.
   `behavior: "smooth"` in script scrolls, from before any hook), and hides common consent banners and
   dev toolbars. Animated images (GIF, WebP, APNG) and SVG animations show their first frame;
   it is a Blink setting, so cross-origin and CSS background images freeze too. WebKit
-  (`--browser webkit`) has no such setting: there an animated image keeps playing, so its
-  pixels are caught as unstable, painted out of the score and can't be accepted. Mask one
-  that flips between the two sides.
+  (`--browser webkit`) has no such setting: there an animated image keeps playing, which is
+  usually caught as unstable (painted out of the score, never accepted). One with slow
+  frames can hold still for both shots and land on a different frame per side: mask it if
+  it flips.
+- **On WebKit, stops a load that never ends**, as a last resort. WebKit's `fonts.ready`,
+  which its screenshot waits on, holds until the load event, so a frame that never loads
+  would hang the shot. When a shot takes over 5s, renderdiff calls `window.stop()` and
+  shoots again. That fails the page's open requests (a pending `fetch` rejects, images
+  break), which can show as a difference, so the shot records it: `stopped loading on right`
+  in the row, `stopped` in results.json.
 - **Settles the page** — makes native lazy images eager, scrolls every viewport-height
   slice a frame at a time, to the bottom even as the page grows, so script lazy loaders fire, waits for every image to decode,
   `document.fonts.ready` (at most 5s) and up to 3s for the network to go 250ms with nothing in flight

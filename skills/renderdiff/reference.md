@@ -473,7 +473,8 @@ commas: `JSON.parse` the whole file, not each line. Paths are relative to the ou
   and the run says so; otherwise it prints the `npx playwright install chromium` hint.
   `--browser webkit` shoots both sides in WebKit (`npx playwright install webkit`) into
   `renderdiff-out-webkit`, accepting into `renderdiff.accepted.webkit.json`: for CSS only
-  Safari reads differently. There animated GIFs aren't frozen (unstable, unmeasured), and
+  Safari reads differently. There animated GIFs aren't frozen (usually caught as unstable;
+  mask one if it flips), a load still open after 5s is stopped (`stopped loading on <side>`), and
   `--computed` forces no `:hover`/`:focus-visible`. `merge` refuses to mix engines.
 - **Pinned on both sides:** clock (one instant per run, floored to the minute), seeded
   `Math.random`, UTC, en-US, light scheme, reduced motion; animations and transitions stilled,

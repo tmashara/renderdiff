@@ -34,7 +34,7 @@ inputs:
     description: Contents of a Playwright storage-state JSON for both sides, from a secret. Written to a 0600 temp file, deleted after the run.
     default: ""
   accept:
-    description: Record this run's differences as accepted, with this reason. Commit the renderdiff.accepted.json from the artifact.
+    description: Record this run's differences as accepted, with this reason. Commit the renderdiff.accepted.json (renderdiff.accepted.webkit.json with browser webkit) from the artifact.
     default: ""
   wait-timeout:
     description: Whole seconds to wait for left to answer (any status under 500) before running. Past it, exit-code is 2.

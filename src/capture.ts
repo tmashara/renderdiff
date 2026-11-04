@@ -1,5 +1,12 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import type { CDPSession, Locator, Page, Request, Response } from "playwright";
+import {
+  errors,
+  type CDPSession,
+  type Locator,
+  type Page,
+  type Request,
+  type Response,
+} from "playwright";
 import sharp from "sharp";
 import { label, MASK_COLOR, masksFor, type ResolvedConfig, type Route } from "./config.ts";
 
@@ -26,6 +33,8 @@ export interface Shot {
   fonts: string[];
   /** Reasons of the page's `data-renderdiff-mask` elements, e.g. `rotating quote (data-renderdiff-mask)`. */
   marked: string[];
+  /** WebKit only: the shot timed out on a load still open (fonts.ready waits on it), so it was stopped. */
+  stopped?: true;
 }
 
 /**
@@ -366,6 +375,7 @@ export async function capture(
   await page.clock.setSystemTime(now);
   // Here, not on framenavigated, which a pushState during hydration fires too.
   network.get(page)!.failed.clear();
+  stopped.delete(page);
   doc.delete(page);
   const res = await page
     .goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 })
@@ -538,8 +548,6 @@ export async function capture(
         `at ${url} — likely a broken layout, not a real page`,
     );
   }
-  // WebKit holds fonts.ready, which its screenshot waits on, until the load event, which a stalled frame never fires.
-  if (webkit(page)) await page.evaluate(() => document.readyState === "complete" || window.stop());
   const tiled = area.height > MAX_CAPTURE_HEIGHT;
   // Read on both sides of the shot, so a box that moves while it is taken stays covered.
   const shoot = async () => {
@@ -572,6 +580,7 @@ export async function capture(
         failed,
         fonts: loadedFonts,
         marked,
+        ...(stopped.has(page) ? { stopped: true as const } : {}),
       };
     prev = png;
   }
@@ -724,11 +733,19 @@ async function captureTiled(page: Page, box: Box): Promise<Buffer> {
 
 const sessions = new WeakMap<Page, Promise<CDPSession>>();
 
-export const webkit = (page: Page) => page.context().browser()?.browserType().name() === "webkit";
+export const isWebKit = (page: Page) => page.context().browser()?.browserType().name() === "webkit";
+const stopped = new WeakSet<Page>();
 
 /** A PNG of `clip`, in page px, on the page's one CDP session; WebKit has none, and renders it all offscreen. */
 async function grab(page: Page, clip: Box, beyond: boolean): Promise<Buffer> {
-  if (webkit(page)) return page.screenshot({ fullPage: true, clip });
+  if (isWebKit(page))
+    return page.screenshot({ fullPage: true, clip, timeout: 5_000 }).catch(async (e) => {
+      if (!(e instanceof errors.TimeoutError) || stopped.has(page)) throw e;
+      // WebKit's fonts.ready, which its screenshot waits on, holds until the load event; a stalled frame never fires it.
+      await page.evaluate(() => window.stop());
+      stopped.add(page);
+      return page.screenshot({ fullPage: true, clip });
+    });
   let s = sessions.get(page);
   if (!s) sessions.set(page, (s = page.context().newCDPSession(page)));
   const { data } = await (

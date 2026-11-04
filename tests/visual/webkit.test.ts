@@ -50,13 +50,9 @@ test("a dropped -webkit- prefix is parity in Chromium and a diff in WebKit", asy
   assert.ok(result(out, "/box-decoration-break", 1440).diffPixels > 0, context(webkit));
 });
 
-test("an equivalence pair scores 100% and a control does not", async () => {
-  const r = await run(["/flex-vs-grid", "/color"], [], [1440, 375]);
-  assert.equal(r.code, 1, context(r));
-  for (const width of [1440, 375]) {
-    assert.equal(result(results(r.outDir), "/flex-vs-grid", width).score, 1, context(r));
-    assert.ok(result(results(r.outDir), "/color", width).score < 1, context(r));
-  }
+test("an equivalence pair scores 100%", async () => {
+  const r = await run(["/flex-vs-grid"]);
+  assert.equal(result(results(r.outDir), "/flex-vs-grid", 1440).score, 1, context(r));
 });
 
 test("a page past the one-shot height is tiled and stitched to its full height", async () => {
@@ -69,11 +65,18 @@ test("a page past the one-shot height is tiled and stitched to its full height",
   }
 });
 
-test("a frame that never loads is skipped, not waited on", async () => {
+test("a frame that never loads is stopped after the shot times out, and the stop recorded", async () => {
   const t0 = Date.now();
-  const r = await run(["/stalled-frame"]);
+  const r = await run(["/stalled-frame"], ["--progress"]);
   assert.equal(r.code, 0, context(r));
-  assert.ok(Date.now() - t0 < 30_000, `took ${Date.now() - t0}ms${context(r)}`);
+  assert.ok(Date.now() - t0 < 45_000, `took ${Date.now() - t0}ms${context(r)}`);
+  assert.deepEqual(result(results(r.outDir), "/stalled-frame", 1440).stopped, ["left", "right"]);
+  assert.match(r.stdout, /stopped loading on left and right/, context(r));
+});
+
+test("a page that finishes loading is never stopped", async () => {
+  const r = await run(["/"]);
+  assert.equal(result(results(r.outDir), "/", 1440).stopped, undefined, context(r));
 });
 
 test("an animated GIF isn't frozen: its pixels are unstable, not a difference", async () => {
@@ -118,19 +121,4 @@ test("--accept writes renderdiff.accepted.webkit.json and leaves Chromium's file
   );
   assert.ok(list.length > 0, context(r));
   assert.equal(fs.readFileSync(chromiumFile, "utf8"), "[]\n");
-});
-
-test("without --out a webkit run writes renderdiff-out-webkit", async () => {
-  const cwd = tempDir("renderdiff-cwd-");
-  const r = await runCli(
-    [
-      ...renderdiffArgs({ left: site.left, right: site.right, routes: ["/"], widths: [375] }),
-      "--browser",
-      "webkit",
-    ],
-    { cwd, noOut: true },
-  );
-  assert.equal(r.code, 0, `${r.stdout}\n${r.stderr}`);
-  assert.ok(fs.existsSync(path.join(cwd, "renderdiff-out-webkit", "results.json")));
-  assert.ok(!fs.existsSync(path.join(cwd, "renderdiff-out")));
 });

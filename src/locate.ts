@@ -1,5 +1,5 @@
 import type { Locator, Page } from "playwright";
-import { webkit, type Shot } from "./capture.ts";
+import { isWebKit, type Shot } from "./capture.ts";
 import type { Box, Spot } from "./compare.ts";
 import type { Snapshot } from "./computed.ts";
 
@@ -596,7 +596,7 @@ export async function snapshotStates(
   const t0 = Date.now();
   const run = await walker(page, masks, budget, root, hide);
   // Forcing a state needs CDP, which only Chromium has.
-  if (webkit(page)) return { snap: (await run()).snap!, unchecked: 0 };
+  if (isWebKit(page)) return { snap: (await run()).snap!, unchecked: 0 };
   const client = await page.context().newCDPSession(page);
   try {
     const { snap, states, unchecked } = await run({ collect: MAX_STATES });

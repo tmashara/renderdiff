@@ -559,6 +559,7 @@ file, not each line), scores rounded down to four decimals (so a shot that diffe
       "failed": { "left": [], "right": [] },   // stylesheets and font faces that didn't load: "font Inter 700", "stylesheet https://…"
       "fonts": { "added": [], "removed": ["Inter 600"] },   // web font faces one side loaded; absent when equal
       "masked": ["rotating quote (data-renderdiff-mask)"],   // absent unless a side marked elements data-renderdiff-mask
+      "stopped": ["right"],   // WebKit only, absent unless a load still open after 5s was stopped for the shot
       "computed": { "dom": 1, "changes": [], "truncated": 0, "unmatched": { "left": [], "right": ["body > nav > a[href=\"/pricing\"]"] },
         "rules": [{ "side": "left", "sheet": "docs.css", "conditions": ["@media (width >= 60em)"], "rules": 5, "elements": 67 }],
         "prefixes": { "left": ["-webkit-user-select: none"], "right": [] } },   // --computed only; null: snapshot failed, "computedError" says why; rules: one-sided rule groups, elements they could style here; prefixes: { left, right }, prefixed declarations only that side's CSS source has
