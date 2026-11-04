@@ -270,6 +270,7 @@ describe("--rerun-failed", () => {
     assert.deepEqual(s.rerun, { shots: 1, routes: 1, reused: 1, untouched: 0 }, context(run));
     assert.deepEqual(result(results(run.outDir), "/ticker", 375), result(was, "/ticker", 375));
     assert.deepEqual(s.clean, [], "a reused unstable shot is still not clean");
+    assert.deepEqual(s.unstable, [], "a route with a larger unstable shot keeps its row");
   });
 
   test("a run that doesn't repeat the previous one is refused", async () => {

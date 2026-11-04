@@ -554,13 +554,14 @@ async function differing(a: Buffer, b: Buffer): Promise<Uint8Array | null> {
 export async function cancelUnstable(
   left: Shot,
   right: Shot,
-): Promise<{ count: number; box: ReturnType<typeof bbox> | null }> {
-  if (!left.unstable && !right.unstable) return { count: 0, box: null };
+): Promise<{ count: number; box?: { x: number; y: number; w: number; h: number } }> {
+  if (!left.unstable && !right.unstable) return { count: 0 };
   const raws = await Promise.all([decode(left.png), decode(right.png)]);
   const w = Math.max(raws[0].info.width, raws[1].info.width);
   const h = Math.max(raws[0].info.height, raws[1].info.height);
   const union = new Uint8Array(w * h);
   let count = 0;
+  let [x0, y0, x1, y1] = [w, h, -1, -1];
   [left, right].forEach((shot, s) => {
     const u = shot.unstable;
     if (!u) return;
@@ -571,6 +572,8 @@ export async function cancelUnstable(
       if (!union[j]) {
         union[j] = 1;
         count++;
+        const [x, y] = [j % w, (j / w) | 0];
+        [x0, y0, x1, y1] = [Math.min(x0, x), Math.min(y0, y), Math.max(x1, x), Math.max(y1, y)];
       }
     }
   });
@@ -596,7 +599,7 @@ export async function cancelUnstable(
     }),
   );
   // ponytail: one box spans scattered patches; cluster like compare's regions() if that misleads.
-  return { count, box: count ? bbox(union, w) : null };
+  return count ? { count, box: { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 } } : { count };
 }
 
 /** The smallest box holding every set pixel of a row-major `width`-wide mask. */

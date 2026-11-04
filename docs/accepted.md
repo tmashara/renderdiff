@@ -60,7 +60,8 @@ fingerprint covers it.
 accepted (against the accepted file as it is now), reruns the rest — differences, unstable
 shots, errors — and merges them back into `results.json` and `report.html` in route and width
 order. A shot with no differing pixels and at most 100 unstable ones (anti-aliased corners,
-which recur on every load) is kept too, and is still not clean.
+which recur on every load) is kept too, and is still not clean (listed on
+`unstable ≤100px:`).
 The out dir is kept rather than wiped; only a rerun shot's own old files are replaced.
 A `rerun:` line says how many shots it reran on how many routes, and how many it reused.
 `meta` describes the rerun (its clock, browser and time); a reused shot was taken under the

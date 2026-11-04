@@ -1144,7 +1144,8 @@ export function compact(
       accepted.push(route);
       continue;
     }
-    if (rows.every((r) => nearClean(r) || same.some((x) => x === r))) {
+    const near = ok.filter((r) => !same.includes(r) && nearClean(r));
+    if (same.length + near.length === rows.length) {
       noisy.push(route);
       continue;
     }

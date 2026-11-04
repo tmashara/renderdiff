@@ -23,18 +23,19 @@ clean: /
 renderdiff: 2 of 3 routes differ (6 of 15 shots), 0 errors, worst 97.41% /about@1440 — /Users/you/site/renderdiff-out/results.json
 ```
 
-A row covers the widths that agree on height and width delta, bands (side and height),
-aligned score and text; the score and region count are then shown as ranges, and `unstable`
-as the largest. Under a row, `failed` lists stylesheets and font faces a side failed to load
-(fix those first), `fonts` the web font faces only one side loaded, `dom` names up to three
-elements behind the changes, two properties each (`@w` when the row covers several widths: the
-first one's), and `crops` lists that row's crop files. Errors print in full, grouped across the widths that share a message. Clean means not
-one pixel differs, none went unmeasured as unstable and no stylesheet or font failed; a route
-with unstable pixels or a failed asset gets its own row. A route whose every shot is clean or
-has no differing pixel and at most 100 unstable ones (anti-aliased corners), with no failed
-asset or `varies`, goes on the `unstable ≤100px:` line instead: unchanged, but not clean. A shot whose only difference varied
-between two loads of the right side is clean, but listed under `varies`. `--progress` gets
-the per-shot output when piped, `--no-progress` the summary on a terminal.
+A row covers the widths that agree on height and width delta, bands (side and height), aligned
+score and text; the score and region count are then shown as ranges, and `unstable` as the
+largest. Under a row, `failed` lists stylesheets and font faces a side failed to load (fix
+those first), `fonts` the web font faces only one side loaded, `dom` names up to three elements
+behind the changes, two properties each (`@w` when the row covers several widths: the first
+one's), and `crops` lists that row's crop files. Errors print in full, grouped across the
+widths that share a message. Clean means not one pixel differs, none went unmeasured as
+unstable and no stylesheet or font failed; a route with unstable pixels or a failed asset gets
+its own row. A route whose every shot is clean or has no differing pixel and at most 100
+unstable ones (anti-aliased corners), with no failed asset or `varies`, goes on the
+`unstable ≤100px:` line instead: unchanged, but not clean. A shot whose only difference varied
+between two loads of the right side is clean, but listed under `varies`. `--progress` gets the
+per-shot output when piped, `--no-progress` the summary on a terminal.
 
 ## Tokens
 
