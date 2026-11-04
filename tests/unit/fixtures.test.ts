@@ -141,7 +141,10 @@ describe("authoring rules", () => {
         for (const m of html.matchAll(/(?:src|href)="([^"]+)"/g)) {
           const url = m[1]!;
           assert.ok(
-            url.startsWith("/shared/") || url.startsWith("#") || url.startsWith("data:"),
+            url.startsWith("/shared/") ||
+              url.startsWith("#") ||
+              url.startsWith("data:") ||
+              url === "/never",
             `${dir}/${side} references ${url} — fixtures must not leave the fixture origin`,
           );
         }

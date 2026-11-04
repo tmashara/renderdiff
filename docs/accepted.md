@@ -15,6 +15,9 @@ renderdiff http://localhost:3000 https://example.com / /about --rerun-failed
 `--accept "<reason>"` runs as usual, then writes every difference it saw that isn't accepted
 yet to `renderdiff.accepted.json`, next to the config file (or in cwd without one), each with
 the reason. Scope it the way you scope any run: pass only the routes and `--width`s to accept.
+It records every unaccepted change in that scope, not only the ones you meant, so fix the
+unintended ones before accepting, or check `git diff renderdiff.accepted.json` afterwards and
+delete the lines you didn't mean.
 Commit the file; it is one entry per line, so its diff reads as what was accepted.
 
 A shot whose every difference matches an accepted one is `accepted`: it is listed on an
@@ -52,7 +55,8 @@ The same goes for renderdiff upgrades that change what counts as a changed pixel
 lowered the threshold): accepted regions can come back with a new box, so re-accept once
 you've looked. Likewise, a region whose element only resized inside a parent whose own style
 changed now names that parent too, so its accepted entry no longer matches: re-accept it, in
-CI.
+CI. So does a band an element grew into (padding, a larger font): it was recorded with
+`elements: []` and now names that element, so it shows again until you re-accept it, in CI.
 
 A shot whose pages differ in width, or in height without the rows aligning into bands, is
 never accepted: the padding past the shorter page belongs to no band or region, so no

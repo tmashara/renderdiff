@@ -27,7 +27,7 @@ A row covers the widths that agree on height and width delta, bands (side and he
 score and text; the score and region count are then shown as ranges, and `unstable` as the
 largest. Under a row, `failed` lists stylesheets and font faces a side failed to load (fix
 those first), `fonts` the web font faces only one side loaded, `dom` names up to three elements
-behind the changes, two properties each (`@w` when the row covers several widths: the first
+behind the changes, two properties each, worst first, then `(+N more)` (`@w` when the row covers several widths: the first
 one's), and `crops` lists that row's crop files. Errors print in full, grouped across the
 widths that share a message. Clean means not one pixel differs, none went unmeasured as
 unstable and no stylesheet or font failed; a route with unstable pixels or a failed asset gets
@@ -66,7 +66,7 @@ per-shot output when piped, `--no-progress` the summary on a terminal.
 | `computed: N findings` | With `--computed`: each `key prop left→right` once, with the routes and widths it was seen at; `dom identical`: the markup matches apart from asset hashes and generated class names, so look at CSS or script. See [below](#computed-styles---computed). |
 | `rules: N changed groups` | With `--computed`: style rules only one side has, by stylesheet and `@media`, and whether any shot had an element they could style. `matched nothing`: the run proved nothing about those rules. See [below](#rule-coverage). |
 | `aria: identical on N of M route(s)` | With `--aria`: routes whose accessibility tree matches at every width, then each differing route's lines, `+` left only, `-` right only. See [below](#aria-snapshots---aria). |
-| `crops …` | Up to 3 PNGs per comparison, bands first, relative to `results.json`. Left is on top or on the left, and the change is boxed in red. |
+| `crops …` | Up to 3 PNGs per comparison, worst first, relative to `results.json`. Left is on top or on the left, and the change is boxed in red. |
 | `ERROR …` | Unmeasured, which is neither a pass nor a fail. Exits 3. |
 | `renderdiff: …` | The verdict line: routes and shots that differ (accepted ones aside), errors, `, U unstable (max Npx)` when any shot had unstable pixels, the worst score, and with `--threshold` how many scored below it. |
 | `unstable ≤100px: /a /b` | Routes whose every shot is clean or has no differing pixel and at most 100 unstable ones, no failed asset and no `varies`. They get no row. Not clean: report them under Not verified. |
@@ -114,7 +114,7 @@ Under each score, `--progress` output and the report card say where to look:
 ```
 
 Regions say *where* pixels differ, `dom` says *which element and property* caused it, and
-crops are *pictures* of the first three changes. Read in that order: text, `dom`, then crops
+crops are *pictures* of the worst three changes. Read in that order: text, `dom`, then crops
 for anything `dom` doesn't explain.
 
 ## Regions
@@ -124,7 +124,7 @@ missing link barely moves the score; it is still a region. Only the area both si
 searched: padding is reported by the height delta and the bands. With bands, regions come
 from the realigned rows, so content a band only pushed down isn't one (above, the band is
 the whole difference, so there are none). The card lists the top five with their pixel
-counts; up to three crops cover the bands first, then the largest regions.
+counts; up to three crops cover the worst changes (see [Crops](#crops)).
 
 A region whose differing pixels sit in one or two rows spanning at least half the page is a
 line: a divider, border or focus ring that one side lost. `line -1px@y812` means only the
@@ -146,7 +146,7 @@ noise touches every row.
 
 ## Elements (`dom`)
 
-What is under the first five bands and regions, up to three each, read from the live pages
+What is under the first 20 bands and regions, up to three each, read from the live pages
 right after the shot. Each is a CSS selector unique on its side, so `--selector` takes it.
 
 - `-sel "text"` exists only on the right, `+sel` only on the left.
@@ -166,7 +166,8 @@ right after the shot. Each is a CSS selector unique on its side, so `--selector`
 
 An element without text is only paired when its box is the same size on both sides;
 `rightSelector` is set when the right side was found by its text under another selector. A
-band names only what one side added, not what it pushed down, so it can name nothing; what
+band names what one side added, else what grew there (`h1 padding-top 60px→0px`), never what
+it only pushed down, so it can name nothing; what
 fixed chrome covers isn't named. Probing gives up after 5s, leaving the elements out. Shadow
 DOM and iframes aren't searched.
 
@@ -365,9 +366,13 @@ error, `page did not settle`, after one retry, with the two frames saved as
 
 ## Crops
 
-`{slug}.{width}.c{n}.png`: up to three per comparison, bands (rows only one side has) first,
-tallest first, then the largest regions. Each shows left and right at native scale, padded by
-48px and at least 320px wide, with a 1px red box around the change; on the side that lacks a
+`{slug}.{width}.c{n}.png`: up to three per comparison, worst first: rows or elements only one
+side has (or whose text changed), then property changes, then shifts. A band with no element
+named counts as one-sided, and a region with none (past the first 20, or nothing found) as a
+property change, ahead of regions that only shifted. Ties keep bands tallest first, then
+regions largest first. A change whose elements an earlier crop already names goes after the
+others, so it gives up its crop only to one that names something new: two changes inside one
+`svg` still get two crops. Each shows left and right at native scale, padded by 48px and at least 320px wide, with a 1px red box around the change; on the side that lacks a
 band's rows, a 2px red seam is inserted where they would be, hiding nothing. Left is always on
 top (`stacked`, for wide changes) or on the left (`side`, for tall ones). A crop stays within
 1,568px on its long edge and 1,568 image tokens (⌈w/28⌉·⌈h/28⌉) and is never scaled below

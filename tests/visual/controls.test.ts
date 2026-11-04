@@ -28,6 +28,7 @@ import { CONTROLS, toPath } from "../helpers/corpus.ts";
 import {
   cleanupTempDirs,
   context,
+  leftCss,
   runCli,
   tempDir,
   renderdiffArgs,
@@ -506,6 +507,67 @@ test("/nav @1440 crops the missing link, not the content it pushed up", async ()
   assert.equal(c!.scale, 1);
   // As wide as the link plus context, not the page.
   assert.ok((await sharp(run.file(c!.path)).metadata()).width! <= 400);
+});
+
+const restyled = (route: string, css: string) =>
+  runCli([
+    ...renderdiffArgs({ left: site.left, right: site.right, routes: [route], widths: [1440] }),
+    ...leftCss(tempDir(), css),
+  ]);
+
+test("/nav with taller bands above still crops and names the missing link", async () => {
+  const r = await restyled(
+    "/nav",
+    "h1 { padding-top: 60px } .lede { padding-bottom: 48px } .notes { padding-top: 64px }",
+  );
+  const j = result(results(r.outDir), "/nav", 1440);
+  assert.ok(j.bands!.filter((b) => b.h > 24).length >= 3, context(r));
+  assert.ok(
+    j.crops.some((c) => Math.abs(c.right.y - PRICING[1440]!) <= 8 && c.right.h === 24),
+    JSON.stringify(j.crops),
+  );
+  const dom = parseSummary(r.stdout).routes.get("/nav")!.rows[0]!.dom ?? "";
+  assert.match(dom, /-a\[href="#pricing"\] "Pricing"/, context(r));
+  assert.match(dom, /h1 padding-top 60px→0px/, context(r));
+});
+
+test("a small one-sided change is cropped and named before larger recolours", async () => {
+  const r = await restyled(
+    "/color",
+    `.strip:first-of-type > .swatch:not(:nth-child(3)) { background: #2e7d32 }
+     .notes h2::after { content: "!" }`,
+  );
+  const j = result(results(r.outDir), "/color", 1440);
+  assert.ok(j.regions.filter((g) => g.pixels > 30_000).length >= 3, context(r));
+  const small = j.regions.find((g) => g.elements?.some((e) => e.side === "left"));
+  assert.ok(small && small.pixels < 1_000, context(r));
+  const { x, y, w, h } = small;
+  assert.deepEqual(j.crops[0]!.left, { x, y, w, h });
+  const dom = parseSummary(r.stdout).routes.get("/color")!.rows[0]!.dom ?? "";
+  assert.match(dom, /^\+h2::after; /, context(r));
+  assert.match(dom, / \(\+2 more\)$/, "4 swatches and the pseudo-element, 3 shown");
+});
+
+test("two changes inside one svg each get a crop", async () => {
+  const hook = path.join(tempDir(), "hook.mjs");
+  fs.writeFileSync(
+    hook,
+    `export default { before: (page, { side }) => page.evaluate((fill) => document.body.insertAdjacentHTML("afterbegin",
+      \`<svg width="1200" height="600"><circle cx="100" cy="300" r="40" fill="\${fill}"/><circle cx="1100" cy="300" r="40" fill="\${fill}"/></svg>\`),
+      side === "left" ? "#2e7d32" : "#1f6feb") };\n`,
+  );
+  const r = await runCli([
+    ...renderdiffArgs({ left: site.left, right: site.right, routes: ["/"], widths: [1440] }),
+    "--config",
+    hook,
+  ]);
+  const j = result(results(r.outDir), "/", 1440);
+  assert.equal(j.regions.length, 2, context(r));
+  assert.deepEqual(
+    j.crops.map((c) => c.left.x).sort((a, b) => a - b),
+    j.regions.map((g) => g.x).sort((a, b) => a - b),
+    context(r),
+  );
 });
 
 test("/taller @1440 crops the extra band, left over right at native scale", () => {

@@ -74,7 +74,7 @@ export interface ComparedResult extends BaseResult {
   masked?: string[];
   /** Paths relative to the out dir. `diff` is absent only for a zero-diff shot in `renderdiff pack` output. */
   images: { left: string; right: string; diff?: string };
-  /** At most three: bands, tallest first, then the largest regions. Not one per region. */
+  /** At most three, worst first: one-sided or text changes, then property changes, then shifts. */
   crops: CropResult[];
   /** Every band and region matched an accepted one, and no padding or unstable pixel went unmatched. */
   accepted: boolean;

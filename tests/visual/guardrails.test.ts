@@ -203,6 +203,27 @@ describe("page shot width", () => {
     }
   });
 
+  test("the shot is the document's size, cut to it, at every width", async () => {
+    // html outgrows body by its padding; #edge spills past overflow-x; #tail past the end.
+    const run = await capture(
+      ["/geometry", "/geometry @#box", "/geometry @#edge", "/geometry @#tail", "/short"],
+      { widths: [1440, 375] },
+    );
+    assert.equal(run.code, 0, context(run));
+    const size = async (file: string) => {
+      const { width, height } = await sharp(run.file(file)).metadata();
+      return [width, height];
+    };
+    for (const width of [1440, 375]) {
+      assert.deepEqual(await size(`geometry.${width}.left.png`), [width, 1200], context(run));
+      assert.deepEqual(await size(`geometry@_box.${width}.left.png`), [304, 200], context(run));
+      assert.deepEqual(await size(`geometry@_edge.${width}.left.png`), [300, 100], context(run));
+      assert.deepEqual(await size(`geometry@_tail.${width}.left.png`), [200, 144], context(run));
+      // Shorter than the viewport: shot at the viewport's height.
+      assert.deepEqual(await size(`short.${width}.left.png`), [width, 900], context(run));
+    }
+  });
+
   test("an app shell whose body scrolls is shot below the fold", async () => {
     const run = await capture(["/appshell"]);
     assert.equal(run.code, 0, context(run));
@@ -307,6 +328,41 @@ describe("motion", () => {
     for (const width of [1440, 375]) {
       assert.equal(cardFor(run, "/animated", width).diffPixels, 0, context(run));
     }
+  });
+
+  test("Web Animations finish or hold still, in shadow roots and frames too", async () => {
+    // A 20s slide shot before its end scores below parity; an endless spin is unstable.
+    const run = await capture(["/waapi"], { widths: [1440, 375] });
+    assert.equal(run.code, 0, context(run));
+    for (const width of [1440, 375]) {
+      const c = cardFor(run, "/waapi", width);
+      assert.equal(c.diffPixels, 0, context(run));
+      assert.equal(c.unstablePixels, 0, context(run));
+    }
+  });
+
+  test("a frame that never loads is skipped, not waited on", async () => {
+    // A 20s deadline, so a shot that waits on the frame errors here instead of passing late.
+    const run = await runCli(
+      renderdiffArgs({
+        left: site.left,
+        right: site.right,
+        routes: ["/stalled-frame"],
+        widths: [1440],
+      }),
+      { env: { RENDERDIFF_SHOT_TIMEOUT: "20" } },
+    );
+    assert.equal(run.code, 0, context(run));
+    assert.equal(cardFor(run, "/stalled-frame").diffPixels, 0, context(run));
+  });
+
+  test("Web Animations hold still on the tiled path too", async () => {
+    const run = await capture(["/waapi"], { config: path.join(CONFIGS, "waapi-tall.mjs") });
+    assert.equal(run.code, 0, context(run));
+    assert.ok((await sharp(run.file("waapi.1440.left.png")).metadata()).height! > 17_000);
+    const c = cardFor(run, "/waapi");
+    assert.equal(c.diffPixels, 0, context(run));
+    assert.equal(c.unstablePixels, 0, context(run));
   });
 });
 

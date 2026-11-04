@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layout parity</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for a frame that never loads. The fixture server never answers /never, so the
+   frame's document never commits; the shot must skip it, not wait on it. */
+iframe { display: block; width: 288px; height: 160px; border: 1px solid var(--line); margin: 0 0 32px; }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Stalled frame</h1>
+<iframe title="never answers" src="/never"></iframe>
+<section class="notes">
+<h2>Notes</h2>
+<p>An embed whose server accepts the connection and then says nothing is common on real pages: a slow ad, a widget behind a dead proxy. Everything else on the page has loaded, so the shot should be taken in normal time with the frame left blank.</p>
+</section>
+</div>
+</body>
+</html>

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layout parity</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for Web Animations. STILL_CSS stops CSS animations in the document, not
+   element.animate(), and it reaches neither shadow roots nor frames. Both sides are the same
+   file: a finite animation caught mid-way scores below parity, an endless one is unstable. */
+.box { width: 96px; height: 96px; background: var(--accent); margin: 0 0 32px; }
+iframe { display: block; width: 288px; height: 160px; border: 1px solid var(--line); margin: 0 0 32px; }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Web Animations</h1>
+<div class="box" id="finite"></div>
+<div class="box" id="endless"></div>
+<div id="host"></div>
+<iframe title="framed motion" srcdoc="<style>body{margin:16px}div{width:64px;height:64px;background:#1f6feb;margin:0 0 16px}</style><div id=spin></div><input value=caret autofocus><script>spin.animate([{transform:'translateX(0)'},{transform:'translateX(160px)'}],{duration:900,iterations:Infinity});document.querySelector('input').focus()</script>"></iframe>
+<section class="notes">
+<h2>Notes</h2>
+<p>One box slides for twenty seconds and should be shot at its end, one spins forever and should be shot at rest, a shadow root fades forever, and a frame holds a sliding box and a focused input whose caret must not show.</p>
+</section>
+</div>
+<script>
+finite.animate([{ transform: "translateX(0)" }, { transform: "translateX(200px)" }], { duration: 20000, fill: "forwards" });
+endless.animate([{ transform: "rotate(0)" }, { transform: "rotate(360deg)" }], { duration: 1100, iterations: Infinity });
+const shadow = host.attachShadow({ mode: "open" });
+shadow.innerHTML = '<div style="width:96px;height:96px;background:#16202b;margin:0 0 32px"></div>';
+shadow.firstChild.animate([{ opacity: 1 }, { opacity: 0.1 }], { duration: 700, iterations: Infinity, direction: "alternate" });
+</script>
+</body>
+</html>

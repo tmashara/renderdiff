@@ -20,7 +20,7 @@ Three groups:
   elements each change names (`margin`, `color`, `nav`), and a lost `::before` line and a
   re-parented pairing (`divider`).
 - **Guard rails** — `blank`, `tall`, `animated`, `lazy`, `lazy-deep`, `lazy-js`, `lazy-grow`, `consent`,
-  `drifting`, `tracker`, `clock`, `ticker`, `unsettled`, `unsettled-once`, `sprite`, `short`, `tall-region`, `reorder`, `stripe`, `frameset`, `menu`, `scroll-spy`, `signed-in`, `fixed`, `inserted`, `labelled`, `broken-asset`, `fonts`, `media`, `long`, `video`, `video-seek`, `lottie`, `hang`, `origin`, `cooperate`, `mask-geometry`, `bistable`, `offcanvas`, `appshell`, `smooth-scroll`, `rules`, `reflowing`.
+  `drifting`, `tracker`, `clock`, `ticker`, `unsettled`, `unsettled-once`, `sprite`, `short`, `tall-region`, `reorder`, `stripe`, `frameset`, `menu`, `scroll-spy`, `signed-in`, `fixed`, `inserted`, `labelled`, `broken-asset`, `fonts`, `media`, `long`, `video`, `video-seek`, `lottie`, `hang`, `origin`, `cooperate`, `mask-geometry`, `bistable`, `offcanvas`, `appshell`, `smooth-scroll`, `rules`, `reflowing`, `waapi`, `geometry`, `stalled-frame`.
   One per defence in `src/capture.ts` / `src/config.ts`.
 
 ## Authoring rules
@@ -66,8 +66,8 @@ Breaking any of these produces a flaky suite, and the flake looks like a renderd
    stability check, `unsettled`, which recolours the whole page to trip the
    unstable-pixel cap, `unsettled-once`, which does so on its first render only,
    `mask-geometry`, whose box moves once after settle, `lottie`, whose script-driven
-   player exists to be held on one frame, and `smooth-scroll`, whose left scroller scrolls
-   smoothly.
+   player exists to be held on one frame, `smooth-scroll`, whose left scroller scrolls
+   smoothly, and `waapi`, whose `element.animate()` calls exist to be held for the shot.
 
 ## Adding a route
 
