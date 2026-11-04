@@ -194,6 +194,13 @@ changed:
 - Paint: `background-color`, `background-image`, `box-shadow`, `opacity`, `transform`,
   `visibility`, `clip`, `clip-path`, `mask`, `content`.
 
+A `linear-gradient` (or `repeating-`) in `background-image` compares by what it paints: a
+side keyword and its angle (`to right`, `90deg`), an angle past 180° and the reversed stops,
+a corner and its opposite with reversed stops, and default `0%`/`100%` positions are equal.
+Stops in px, `calc()` and colour hints still compare as written. A `clip` or `clip-path`
+change on an element fully clipped on both sides (a zero-area `clip` rect, or an `inset()`
+of 50% or more) is no finding; its other properties still are.
+
 The summary gets one block, after the rows:
 
 ```

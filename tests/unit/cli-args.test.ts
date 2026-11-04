@@ -103,6 +103,25 @@ describe("help and version", () => {
     assert.equal(short.stdout, long.stdout);
   });
 
+  test("each subcommand takes --help or -h anywhere and prints the help; other flags still fail", async () => {
+    const long = await runCli(["--help"], { noOut: true });
+    const runs = await Promise.all(
+      [
+        ["report", "--help"],
+        ["merge", "a", "b", "-h"],
+        ["pack", "-h", "out"],
+        ["probe", "--help"],
+        ["report", "out", "--nope"],
+      ].map((argv) => runCli(argv, { noOut: true })),
+    );
+    for (const r of runs.slice(0, -1)) {
+      assert.equal(r.code, 0, r.stderr);
+      assert.equal(r.stdout, long.stdout);
+    }
+    assert.equal(runs.at(-1)!.code, 2);
+    assert.match(runs.at(-1)!.stderr, /unexpected argument: --nope/);
+  });
+
   test("--version prints the package version", async () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, "package.json"), "utf8")) as {
       version: string;

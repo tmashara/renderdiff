@@ -56,6 +56,90 @@ describe("diffSnapshots", () => {
     ]);
   });
 
+  test("a background-image written another way is no change; a different gradient is", () => {
+    const bg = (l: string, r: string) =>
+      diffSnapshots(
+        { body: el("<body>", { "background-image": l }) },
+        { body: el("<body>", { "background-image": r }) },
+      ).changes.length;
+    const [A, B] = ["rgb(255, 0, 0)", "rgb(0, 0, 255)"];
+    const same = [
+      [`linear-gradient(to top, ${A}, ${B} 90%)`, `linear-gradient(${B} 10%, ${A})`],
+      [`linear-gradient(to right, ${A}, ${B})`, `linear-gradient(90deg, ${A}, ${B})`],
+      [`linear-gradient(0deg, ${B}, ${A})`, `linear-gradient(${A}, ${B})`],
+      [`linear-gradient(-90deg, ${A}, ${B})`, `linear-gradient(270deg, ${A} 0px, ${B} 100%)`],
+      [`linear-gradient(to right top, ${A}, ${B})`, `linear-gradient(to left bottom, ${B}, ${A})`],
+      [
+        `repeating-linear-gradient(to top, ${A}, ${B} 20%)`,
+        `repeating-linear-gradient(${B} 80%, ${A})`,
+      ],
+      [
+        `url("a.png"), linear-gradient(to left, ${A}, ${B})`,
+        `url("a.png"), linear-gradient(90deg, ${B}, ${A})`,
+      ],
+    ];
+    for (const [l, r] of same) assert.equal(bg(l!, r!), 0, `${l} vs ${r}`);
+    const differ = [
+      [`linear-gradient(${A}, ${B})`, `linear-gradient(${A}, rgb(0, 128, 0))`],
+      [`linear-gradient(${A}, ${B} 90%)`, `linear-gradient(${A}, ${B} 80%)`],
+      [`linear-gradient(45deg, ${A}, ${B})`, `linear-gradient(90deg, ${A}, ${B})`],
+      [`linear-gradient(to right top, ${A}, ${B})`, `linear-gradient(45deg, ${A}, ${B})`],
+      [`linear-gradient(${A}, 30%, ${B})`, `linear-gradient(0deg, ${B}, 70%, ${A})`],
+      [`linear-gradient(${A} 20px, ${B})`, `linear-gradient(0deg, ${B}, ${A} calc(100% - 20px))`],
+      [
+        `linear-gradient(to right, ${A}, ${B}), linear-gradient(${A}, ${B})`,
+        `linear-gradient(90deg, ${A}, ${B}), linear-gradient(${B}, ${A})`,
+      ],
+    ];
+    for (const [l, r] of differ) assert.equal(bg(l!, r!), 1, `${l} vs ${r}`);
+  });
+
+  test("clip and clip-path changes on a box fully clipped on both sides are dropped, not other props", () => {
+    const sr = (left: Record<string, string>, right: Record<string, string>) =>
+      diffSnapshots(
+        { "body > span": el("<span>", { position: "absolute", ...left }) },
+        { "body > span": el("<span>", { position: "absolute", ...right }) },
+      ).changes.map((c) => c.prop);
+    const zero = "rect(0px, 0px, 0px, 0px)";
+    assert.deepEqual(
+      sr(
+        { clip: "auto", "clip-path": "inset(50%)", color: "red" },
+        { clip: zero, "clip-path": "inset(50%)", color: "blue" },
+      ),
+      ["color"],
+    );
+    assert.deepEqual(
+      sr({ clip: "auto", "clip-path": "inset(50%)" }, { clip: zero, "clip-path": "none" }),
+      [],
+    );
+    assert.deepEqual(
+      sr({ clip: "auto", "clip-path": "inset(50%)" }, { clip: "auto", "clip-path": "none" }),
+      ["clip-path"],
+    );
+    assert.deepEqual(
+      sr(
+        { clip: zero, "clip-path": "none", position: "static" },
+        { clip: "auto", "clip-path": "inset(50%)", position: "static" },
+      ),
+      ["clip", "clip-path"],
+    );
+  });
+
+  test("a skip link that no longer shows on focus is kept though its resting clip change is dropped", () => {
+    const zero = "rect(0px, 0px, 0px, 0px)";
+    const link = (path: string, focused: Record<string, string>): Snapshot => ({
+      "body > a": el("<a>", { position: "absolute", clip: zero, "clip-path": path }),
+      "body > a:focus-visible": el("<a>", { position: "absolute", ...focused }),
+    });
+    const d = diffSnapshots(
+      link("inset(50%)", { clip: "auto", "clip-path": "inset(50%)" }),
+      link("none", { clip: "auto", "clip-path": "none" }),
+    );
+    assert.deepEqual(d.changes, [
+      { key: "body > a:focus-visible", prop: "clip-path", values: ["inset(50%)", "none"] },
+    ]);
+  });
+
   test("a descendant that changed differently from its parent is kept", () => {
     const changes = collapseInherited([
       { key: "body", prop: "color", values: ["red", "blue"] },

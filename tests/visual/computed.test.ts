@@ -193,7 +193,7 @@ test("past 500 links the rest are counted, and the page is left resting", async 
   await p.close();
 });
 
-test("a lint autofix swapping wrapping or clipping keywords is a finding, not inherited down", async () => {
+test("a lint autofix swapping wrapping keywords is a finding, not inherited down; a hidden box's clipping isn't", async () => {
   const body =
     `<div style="width:120px"><code>averyveryverylongidentifierwithoutbreaks<b>x</b></code></div>` +
     `<span class="h">hidden</span><p>Some text.</p>`;
@@ -206,8 +206,6 @@ test("a lint autofix swapping wrapping or clipping keywords is a finding, not in
   assert.deepEqual(changed(d), [
     ["body > div > code", "word-break"],
     ["body > div > code", "overflow-wrap"],
-    ["body > span.h", "clip"],
-    ["body > span.h", "clip-path"],
   ]);
 });
 
@@ -219,4 +217,15 @@ test("hiding for the text read leaves each style attribute as it was", async () 
   assert.deepEqual(text, ["c"]);
   assert.equal(await p.evaluate(() => document.body.innerHTML), body);
   await p.close();
+});
+
+test("gradients Chrome serializes differently but that paint the same are no finding", async () => {
+  const body = `<p class="a">a</p><p class="b">b</p><p class="c">c</p><p class="d">d</p>`;
+  const { d } = await diff(body, body, [
+    ".a { background: linear-gradient(to top, #f00, #00f 90%) } .b { background: linear-gradient(to right, red, blue) }" +
+      " .c { background: linear-gradient(0deg, blue, red) } .d { background: linear-gradient(to right top, red, blue) }",
+    ".a { background: linear-gradient(#00f 10%, #f00) } .b { background: linear-gradient(90deg, red, blue) }" +
+      " .c { background: linear-gradient(red, blue) } .d { background: linear-gradient(45deg, red, blue) }",
+  ]);
+  assert.deepEqual(changed(d), [["body > p.d", "background-image"]]);
 });

@@ -88,6 +88,98 @@ const INHERITED = new Set([
   "visibility",
 ]);
 const DISPLAY = FIELDS.indexOf("display");
+const POSITION = FIELDS.indexOf("position");
+const CLIP = FIELDS.indexOf("clip");
+const CLIP_PATH = FIELDS.indexOf("clip-path");
+
+/** Splits on commas outside parentheses. */
+const topLevel = (s: string) => {
+  const out: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === "(") depth++;
+    else if (s[i] === ")") depth--;
+    else if (s[i] === "," && !depth) {
+      out.push(s.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  return [...out, s.slice(start).trim()];
+};
+
+const SIDES: Record<string, number> = { top: 0, right: 90, bottom: 180, left: 270 };
+const FLIP: Record<string, string> = { top: "bottom", bottom: "top", left: "right", right: "left" };
+
+/**
+ * One linear gradient layer as `angle, color pos%, …` pointing into [0, 180), so equal
+ * gradients written another way compare equal; null when it can't be read exactly.
+ */
+function canonLinear(layer: string): string | null {
+  const m = /^((?:repeating-)?linear-gradient)\((.*)\)$/.exec(layer);
+  if (!m) return null;
+  const args = topLevel(m[2]!);
+  const dir = /^(?:to ([a-z ]+?)|(-?[\d.]+)deg)? ?(in [a-z -]+)?$/.exec(args[0]!);
+  if (dir && (dir[1] || dir[2] || dir[3])) args.shift();
+  const interp = dir?.[3] ?? "";
+  if (/increasing|decreasing/.test(interp)) return null;
+  const words = dir?.[1]?.split(" ") ?? [];
+  let angle = dir?.[2] ? Number(dir[2]) : words.length === 1 ? SIDES[words[0]!] : 180;
+  if (angle === undefined || words.length > 2 || !words.every((w) => w in FLIP)) return null;
+  angle = ((angle % 360) + 360) % 360;
+  const stops: { color: string; pos?: number }[] = [];
+  for (const a of args) {
+    const s = /^(.*?)(?: (-?[\d.]+)(%|px))?$/.exec(a)!;
+    let bare = s[1]!;
+    while (/\([^()]*\)/.test(bare)) bare = bare.replace(/\([^()]*\)/g, "");
+    // A colour has no space outside parentheses, so one there is a position we can't flip.
+    if (!/[a-z]/i.test(bare) || bare.includes(" ") || s[1]!.includes("calc(")) return null;
+    if (s[3] === "px" && Number(s[2]) !== 0) return null;
+    stops.push({ color: s[1]!, ...(s[2] === undefined ? {} : { pos: Number(s[2]) }) });
+  }
+  if (stops.length < 2) return null;
+  stops[0]!.pos ??= 0;
+  stops.at(-1)!.pos ??= 100;
+  let max = -Infinity;
+  for (const s of stops) if (s.pos !== undefined) s.pos = max = Math.max(max, s.pos);
+  for (let i = 1; i < stops.length; i++) {
+    if (stops[i]!.pos !== undefined) continue;
+    let j = i;
+    while (stops[j]!.pos === undefined) j++;
+    const [from, to] = [stops[i - 1]!.pos!, stops[j]!.pos!];
+    for (let k = i; k < j; k++) stops[k]!.pos = from + ((to - from) * (k - i + 1)) / (j - i + 1);
+  }
+  let corner = words.length === 2 ? words : null;
+  if (corner ? corner.includes("bottom") : angle >= 180) {
+    if (corner) corner = corner.map((w) => FLIP[w]!);
+    else angle -= 180;
+    stops.reverse();
+    for (const s of stops) s.pos = 100 - s.pos!;
+  }
+  const head = corner ? `to ${corner.join(" ")}` : `${angle}deg`;
+  return `${m[1]}(${[head, interp].filter(Boolean).join(" ")}, ${stops.map((s) => `${s.color} ${+s.pos!.toFixed(4)}%`).join(", ")})`;
+}
+
+/** Same `background-image` once each linear gradient layer is canonical; other layers as written. */
+export const sameImage = (a: string, b: string) => {
+  const canon = (v: string) => topLevel(v).map((l) => canonLinear(l) ?? l);
+  const [x, y] = [canon(a), canon(b)];
+  return x.length === y.length && x.every((l, i) => l === y[i]);
+};
+
+/** Paints nothing: a zero-area `clip` rect where clip applies, or a `%` `clip-path: inset()` that meets itself. */
+const fullClip = (styles: string[]) => {
+  const r = /^rect\((-?[\d.]+)px, (-?[\d.]+)px, (-?[\d.]+)px, (-?[\d.]+)px\)$/
+    .exec(styles[CLIP]!)
+    ?.slice(1)
+    .map(Number);
+  if (r && /^(absolute|fixed)$/.test(styles[POSITION]!) && (r[2]! <= r[0]! || r[1]! <= r[3]!))
+    return true;
+  const ins = /^inset\(([\d.% ]+)\)$/.exec(styles[CLIP_PATH]!)?.[1]!.split(" ");
+  if (!ins?.every((v) => v.endsWith("%"))) return false;
+  const [t, rt = t, b = t, l = rt] = ins.map(parseFloat) as [number, number?, number?, number?];
+  return t + b >= 100 || rt + l >= 100;
+};
 
 const PSEUDO = /::(before|after)$/;
 const isPseudo = (key: string) => PSEUDO.test(key);
@@ -209,9 +301,14 @@ export function diffSnapshots(
         changes.push({ key, prop: "display", values: [l.styles[DISPLAY]!, r.styles[DISPLAY]!] });
         continue;
       }
+      // Skipped here, not later, so a resting change dropped can't hide a state's real one.
+      const hidden = fullClip(l.styles) && fullClip(r.styles);
       FIELDS.forEach((prop, i) => {
-        if (l.styles[i] !== r.styles[i])
-          changes.push({ key, prop, values: [l.styles[i]!, r.styles[i]!] });
+        const [a, b] = [l.styles[i]!, r.styles[i]!];
+        if (a === b) return;
+        if (prop === "background-image" && sameImage(a, b)) return;
+        if (hidden && (i === CLIP || i === CLIP_PATH)) return;
+        changes.push({ key, prop, values: [a, b] });
       });
     } else if (
       isPseudo(key) &&
