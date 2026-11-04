@@ -70,6 +70,8 @@ export const GUARDRAILS = [
   "smooth-scroll",
   "rules",
   "reflowing",
+  "waapi",
+  "geometry",
 ] as const;
 
 export const ALL: string[] = [...EQUIVALENCE, ...CONTROLS, ...GUARDRAILS];

@@ -1,5 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import type { Locator, Page, Request, Response } from "playwright";
+import type { CDPSession, Locator, Page, Request, Response } from "playwright";
 import sharp from "sharp";
 import { label, MASK_COLOR, masksFor, type ResolvedConfig, type Route } from "./config.ts";
 
@@ -504,12 +504,9 @@ export async function capture(
     const before = await read();
     const png = tiled
       ? await captureTiled(page, area)
-      : await page.screenshot({
-          fullPage: true,
-          // Playwright trims the clip's height to the document's.
-          clip: clip ?? (hidesX ? { x: 0, y: 0, width, height: 1e6 } : undefined),
-          animations: "disabled",
-        });
+      : await stilled(page, () =>
+          pageShot(page, clip ?? (hidesX ? { x: 0, y: 0, width, height: 1e6 } : undefined)),
+        );
     return paintBoxes(png, [...before, ...(await read())]);
   };
 
@@ -520,13 +517,13 @@ export async function capture(
   for (let n = 2; ; n++) {
     await page.waitForTimeout(50);
     const png = await shoot();
-    if (png.equals(prev))
-      return { png, unstable: null, blank, text, origin, failed, fonts: loadedFonts, marked };
-    if (n === tries)
+    const stable = png.equals(prev);
+    if (stable || n === tries)
       return {
-        png,
-        prev,
-        unstable: await differing(prev, png),
+        // Chromium's fast encoder writes larger files than sharp's; tiles are sharp's already.
+        png: tiled ? png : await sharp(png).png().toBuffer(),
+        ...(stable ? {} : { prev }),
+        unstable: stable ? null : await differing(prev, png),
         blank,
         text,
         origin,
@@ -664,33 +661,159 @@ async function paintBoxes(png: Buffer, boxes: Box[]): Promise<Buffer> {
  * `deviceScaleFactor` is 1 (`CONTEXT_OPTIONS` in config.ts), so clip coords are CSS px.
  */
 async function captureTiled(page: Page, box: Box): Promise<Buffer> {
-  const client = await page.context().newCDPSession(page);
-  try {
-    const tiles: Buffer[] = [];
-    for (let y = 0; y < box.height; y += TILE_HEIGHT) {
-      const height = Math.min(TILE_HEIGHT, box.height - y);
-      const { data } = await client.send("Page.captureScreenshot", {
-        format: "png",
-        captureBeyondViewport: true,
-        // Lossless either way, and sharp re-encodes the stitch.
-        optimizeForSpeed: true,
-        clip: { x: box.x, y: box.y + y, width: box.width, height, scale: 1 },
-      });
-      tiles.push(Buffer.from(data, "base64"));
-    }
-
-    return sharp({
-      create: {
-        width: box.width,
-        height: box.height,
-        channels: 4,
-        background: MASK_COLOR,
-      },
-    })
-      .composite(tiles.map((input, i) => ({ input, left: 0, top: i * TILE_HEIGHT })))
-      .png()
-      .toBuffer();
-  } finally {
-    await client.detach();
+  const client = await cdp(page);
+  const tiles: Buffer[] = [];
+  for (let y = 0; y < box.height; y += TILE_HEIGHT) {
+    const height = Math.min(TILE_HEIGHT, box.height - y);
+    const { data } = await client.send("Page.captureScreenshot", {
+      format: "png",
+      captureBeyondViewport: true,
+      // Lossless either way, and sharp re-encodes the stitch.
+      optimizeForSpeed: true,
+      clip: { x: box.x, y: box.y + y, width: box.width, height, scale: 1 },
+    });
+    tiles.push(Buffer.from(data, "base64"));
   }
+
+  return sharp({
+    create: {
+      width: box.width,
+      height: box.height,
+      channels: 4,
+      background: MASK_COLOR,
+    },
+  })
+    .composite(tiles.map((input, i) => ({ input, left: 0, top: i * TILE_HEIGHT })))
+    .png()
+    .toBuffer();
+}
+
+const sessions = new WeakMap<Page, Promise<CDPSession>>();
+
+/** One CDP session per page, for the life of the page. */
+function cdp(page: Page): Promise<CDPSession> {
+  let s = sessions.get(page);
+  if (!s) sessions.set(page, (s = page.context().newCDPSession(page)));
+  return s;
+}
+
+type Resumable = Window & { __renderdiffResume?: () => void };
+
+/**
+ * Runs in each frame: what Playwright 1.62's `page.screenshot` does for `animations: "disabled"`
+ * and its default `caret: "hide"`, open shadow roots included, until `__renderdiffResume`.
+ * Finite animations finish, infinite ones cancel, and carets go transparent; STILL_CSS reaches
+ * neither `element.animate()`, shadow roots nor frames.
+ */
+function still() {
+  const roots: (Document | ShadowRoot)[] = [];
+  const walk = (root: Document | ShadowRoot) => {
+    roots.push(root);
+    root.querySelectorAll("*").forEach((e) => e.shadowRoot && walk(e.shadowRoot));
+  };
+  walk(document);
+  const carets = new Map<HTMLElement, [string, string]>();
+  for (const root of roots)
+    root.querySelectorAll<HTMLElement>("input,textarea,[contenteditable]").forEach((e) => {
+      carets.set(e, [
+        e.style.getPropertyValue("caret-color"),
+        e.style.getPropertyPriority("caret-color"),
+      ]);
+      e.style.setProperty("caret-color", "transparent", "important");
+    });
+  const cancelled = new Set<Animation>();
+  const handle = (root: Document | ShadowRoot) => {
+    for (const a of root.getAnimations()) {
+      if (!a.effect || a.playbackRate === 0 || cancelled.has(a)) continue;
+      try {
+        if (Number.isFinite(a.effect.getComputedTiming().endTime)) a.finish();
+        else {
+          a.cancel();
+          cancelled.add(a);
+        }
+      } catch {}
+    }
+  };
+  const listening = roots.map((root) => {
+    const h = () => handle(root);
+    h();
+    root.addEventListener("transitionrun", h);
+    root.addEventListener("animationstart", h);
+    return () => {
+      root.removeEventListener("transitionrun", h);
+      root.removeEventListener("animationstart", h);
+    };
+  });
+  (window as Resumable).__renderdiffResume = () => {
+    carets.forEach(([v, p], e) => e.style.setProperty("caret-color", v, p));
+    listening.forEach((off) => off());
+    cancelled.forEach((a) => {
+      try {
+        a.play();
+      } catch {}
+    });
+    delete (window as Resumable).__renderdiffResume;
+  };
+}
+
+/** `shot`, with every frame `still` and fonts loaded, as `page.screenshot` prepares a page. */
+async function stilled<T>(page: Page, shot: () => Promise<T>): Promise<T> {
+  const frames = page.frames();
+  await Promise.all(frames.map((f) => f.evaluate(still).catch(() => {})));
+  try {
+    await page.evaluate(async () => void (await document.fonts.ready)).catch(() => {});
+    return await shot();
+  } finally {
+    await Promise.all(
+      frames.map((f) =>
+        f.evaluate(() => (window as Resumable).__renderdiffResume?.()).catch(() => {}),
+      ),
+    );
+  }
+}
+
+/**
+ * `page.screenshot({ fullPage: true, clip })` as Playwright 1.62 takes it on Chromium, through
+ * CDP for `optimizeForSpeed`, which it can't pass: the clip, page px, trimmed to the document.
+ */
+async function pageShot(page: Page, clip?: Box): Promise<Buffer> {
+  const size = await page.evaluate(() => {
+    const [b, d] = [document.body ?? document.documentElement, document.documentElement];
+    return {
+      width: Math.max(
+        b.scrollWidth,
+        d.scrollWidth,
+        b.offsetWidth,
+        d.offsetWidth,
+        b.clientWidth,
+        d.clientWidth,
+      ),
+      height: Math.max(
+        b.scrollHeight,
+        d.scrollHeight,
+        b.offsetHeight,
+        d.offsetHeight,
+        b.clientHeight,
+        d.clientHeight,
+      ),
+    };
+  });
+  const c = clip ?? { x: 0, y: 0, ...size };
+  const [x, y] = [Math.max(0, Math.min(c.x, size.width)), Math.max(0, Math.min(c.y, size.height))];
+  const view = page.viewportSize()!;
+  const { data } = await (
+    await cdp(page)
+  ).send("Page.captureScreenshot", {
+    format: "png",
+    optimizeForSpeed: true,
+    captureBeyondViewport: !(size.width <= view.width && size.height <= view.height),
+    clip: {
+      x,
+      y,
+      width: Math.max(0, Math.min(c.x + c.width, size.width)) - x,
+      height: Math.max(0, Math.min(c.y + c.height, size.height)) - y,
+      scale: 1,
+    },
+  });
+  return Buffer.from(data, "base64");
 }
