@@ -18,7 +18,7 @@ results.json · Gotchas.
   wt="$(mktemp -d)/base"; git worktree add --detach "$wt" "$(git merge-base HEAD origin/main)"
   echo "$wt"; git -C "$wt" log -1 --format='%h %s'  # the verdict names it: "base build of abc1234"
   cp .env.local "$wt/"                              # untracked env files the build needs, if any
-  # next call, in the tool's background mode:
+  # next call, serve and wait together (the log keeps the call from hanging):
   (cd "$wt" && npm ci && npm run build && npx serve -l 3002 dist) > "$wt.log" 2>&1 &
   until curl -so /dev/null localhost:3002; do kill -0 $! || { tail -20 "$wt.log"; exit 1; }; sleep 1; done
   # after the runs:
