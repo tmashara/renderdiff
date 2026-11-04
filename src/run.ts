@@ -489,13 +489,13 @@ export async function run({
                   return own.length ? own : [g];
                 }),
               );
-              const sels = [
-                ...new Set(
-                  regions
-                    .flatMap((g) => g.elements ?? [])
-                    .map((e) => e.selector.replace(/::\w+$/, "")),
-                ),
-              ];
+              // Only what changed its text: a pushed element's text is still the page's.
+              const sels = variesSels(
+                regions
+                  .flatMap((g) => g.elements ?? [])
+                  .filter((e) => e.side !== "both" || e.changed.text),
+              );
+              // Both or neither, each settled so no page is left hidden when locate reads it.
               const [lt, rt] = sels.length
                 ? await Promise.all(
                     (["left", "right"] as const).map((side) =>
@@ -512,14 +512,13 @@ export async function run({
                       ),
                     ),
                   )
-                : [null, null];
-              // Both or neither: one side re-read against the other's old text would differ itself.
-              const text = lt && rt ? { left: lt, right: rt } : null;
+                : [];
+              const both = lt && rt;
               const u = rightShot.unstable;
-              const l = { ...leftShot, png: raw[0], ...(text && { text: text.left }) };
+              const l = { ...leftShot, png: raw[0], ...(both && { text: lt }) };
               const r = {
                 ...rightShot,
-                ...(text && { text: text.right }),
+                ...(both && { text: rt }),
                 png: raw[1],
                 unstable: u ? mask.map((v, i) => v | u[i]!) : mask,
               };
@@ -1132,16 +1131,16 @@ async function boxMask(png: Buffer, boxes: Box[]): Promise<Uint8Array> {
 /** A selector ending in a bare tag, maybe `:nth-of-type(n)`: masking it would hide real changes. */
 const BARE = /(^|[\s>+~])[a-z][\w-]*(:nth-of-type\(\d+\))?$/;
 
+/** Distinct selectors of `els`, a pseudo-element's as its host's. */
+const variesSels = (els: ElementDiff[]) => [
+  ...new Set(els.map((e) => e.selector.replace(/::\w+$/, ""))),
+];
+
 /** Routes whose right side differed between two loads, and the mask that would cover it. */
 export function fmtVaries(results: RouteResult[], routes: string[]): string[] {
   const rows = results.filter((r): r is ComparedResult => r.status === "compared" && !!r.varies);
-  const selectors = (rs: ComparedResult[]) => [
-    ...new Set(
-      rs.flatMap((r) =>
-        r.varies!.flatMap((g) => g.elements ?? []).map((e) => e.selector.replace(/::\w+$/, "")),
-      ),
-    ),
-  ];
+  const selectors = (rs: ComparedResult[]) =>
+    variesSels(rs.flatMap((r) => r.varies!.flatMap((g) => g.elements ?? [])));
   // Pushed, not changed itself: a counter resizes its own box, a reflow moves its neighbours'.
   const moved = (r: ComparedResult) =>
     r.varies!.some((g) =>

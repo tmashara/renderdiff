@@ -295,15 +295,24 @@ test("an element that only resized names the parent whose own style changed, aft
     named.some((e) => e.selector === "article.card:nth-of-type(2) > h3"),
     context(r),
   );
-  const dom = parseSummary(r.stdout).routes.get("/flex-vs-grid")!.rows[0]!.dom ?? "";
-  const first = dom
-    .replace(/^@\S+ /, "")
-    .split("; ")
-    .slice(0, 3);
-  assert.ok(
-    first.some((d) => d.startsWith("article.card:nth-of-type(2) padding-left")),
-    dom,
+  assert.match(
+    parseSummary(r.stdout).routes.get("/flex-vs-grid")!.rows[0]!.dom ?? "",
+    /^(?:[^;]+; ){0,2}article\.card:nth-of-type\(2\) padding-left/,
   );
+});
+
+test("an element only pushed names the parent that only resized", async () => {
+  const r = await hooked(
+    `await page.evaluate(() => document.querySelector(".page").insertAdjacentHTML("afterbegin", '<div class="wrap"><div class="box"></div></div>'));
+    await page.addStyleTag({ content: ".wrap { max-width: 400px } .box { width: 96px; height: 48px; margin: 0 auto; background: #c62828 }" + (side === "left" ? " .wrap { max-width: 600px }" : "") });`,
+  );
+  const named = result(results(r.outDir), "/flex-vs-grid", 1440).regions.flatMap(
+    (g) => g.elements ?? [],
+  );
+  const box = named.find((e) => e.selector.endsWith("div.box"));
+  assert.deepEqual(box && [box.changed, box.left!.x - box.right!.x], [{}, 100], context(r));
+  const wrap = named.find((e) => e.selector.endsWith("div.wrap"));
+  assert.deepEqual(wrap?.changed, { width: ["600px", "400px"] }, context(r));
 });
 
 test("an element whose own width changed, or whose parent only resized, gets no cause", async () => {

@@ -274,13 +274,13 @@ function adoptCss(css: string) {
  * read with `masks` hidden; visibility keeps layout. Also what the blank check needs.
  */
 export async function readText(page: Page, root: Locator | null, masks: Locator[]) {
-  const hidden: string[][] = [];
+  const hidden: (string | null)[][] = [];
   try {
     for (const l of masks) {
       hidden.push(
         await l.evaluateAll((els) =>
           els.map((e) => {
-            const prev = (e as HTMLElement).style.visibility;
+            const prev = e.getAttribute("style");
             (e as HTMLElement).style.visibility = "hidden";
             return prev;
           }),
@@ -311,9 +311,15 @@ export async function readText(page: Page, root: Locator | null, masks: Locator[
     return { text, ...rest };
   } finally {
     // Reverse order, so an element two masks share gets its original value back.
+    // The attribute itself: an emptied `style=""` would read as a markup change to --computed.
     for (let i = hidden.length - 1; i >= 0; i--) {
       await masks[i]!.evaluateAll(
-        (els, prev) => els.forEach((e, j) => ((e as HTMLElement).style.visibility = prev[j] ?? "")),
+        (els, prev) =>
+          els.forEach((e, j) => {
+            const v = prev[j];
+            if (v === null || v === undefined) e.removeAttribute("style");
+            else e.setAttribute("style", v);
+          }),
         hidden[i]!,
       );
     }

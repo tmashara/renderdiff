@@ -8,7 +8,7 @@ import { after, before, test } from "node:test";
 import { chromium, type Browser, type Page } from "playwright";
 import { diffSnapshots } from "../../src/computed.ts";
 import { locate, PROPS, snapshot, snapshotStates } from "../../src/locate.ts";
-import type { Shot } from "../../src/capture.ts";
+import { readText, type Shot } from "../../src/capture.ts";
 import type { Region } from "../../src/compare.ts";
 
 let browser: Browser;
@@ -209,4 +209,14 @@ test("a lint autofix swapping wrapping or clipping keywords is a finding, not in
     ["body > span.h", "clip"],
     ["body > span.h", "clip-path"],
   ]);
+});
+
+test("hiding for the text read leaves each style attribute as it was", async () => {
+  const body = `<p>a</p><p style="color: red">b</p><p>c</p>`;
+  const p = await page(body);
+  const ps = p.locator("p:nth-of-type(-n + 2)");
+  const { text } = await readText(p, null, [ps, ps]);
+  assert.deepEqual(text, ["c"]);
+  assert.equal(await p.evaluate(() => document.body.innerHTML), body);
+  await p.close();
 });

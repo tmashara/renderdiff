@@ -715,13 +715,18 @@ export async function locate(
         );
       // ponytail: one level of cause; deeper than the parent, --computed names the rule
       if (el.left && el.right && !own(el.changed) && moved(el.left, el.right)) {
+        // A pushed element's cause can be a parent that only resized; a resized one's can't.
+        const resized = Object.keys(el.changed).length > 0;
         for (const [p, q] of [
           [a!.prev, b!.prev],
           [a!.parent, b!.parent],
         ] as Pair[]) {
           if (!p || !q || p.sel !== q.sel) continue;
           const cause = element([p, q], [shots[0].origin, shots[1].origin]);
-          if (own(cause.changed) && !out.some((o) => o.selector === cause.selector)) {
+          if (
+            (resized ? own(cause.changed) : Object.keys(cause.changed).length) &&
+            !out.some((o) => o.selector === cause.selector)
+          ) {
             out.push(cause);
             break;
           }
