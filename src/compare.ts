@@ -111,14 +111,7 @@ const CELL = 16;
 /** `MASK_COLOR` (#FF00FF, opaque) as one little-endian RGBA word. */
 const MAGENTA = 0xffff00ff;
 
-/**
- * A decoded shot on a common (w, h) canvas so both frames are the same size for
- * pixelmatch, with the image top-left and magenta everywhere else.
- *
- * Rows copied rather than `sharp.extend()`, which rejects any single edge past 10 000px.
- * Two pages can easily differ by more than that — one long scrolling page against a short
- * one — and that is exactly the case worth diffing.
- */
+/** Rows copied by hand: `sharp.extend()` rejects edges past 10 000px. Assumes opaque shots. */
 function pad({ data, info }: Awaited<ReturnType<typeof decode>>, w: number, h: number): Buffer {
   if (info.width === w && info.height === h) return data;
   const out = Buffer.alloc(w * h * 4);
@@ -131,24 +124,22 @@ function pad({ data, info }: Awaited<ReturnType<typeof decode>>, w: number, h: n
 export async function compare(left: Shot, right: Shot): Promise<Diff> {
   // Real PNG dimensions, not the `scrollHeight` we measured: that can disagree with
   // what Chromium actually painted.
-  const same = left.png.equals(right.png);
-  const [ld, rd] = await Promise.all([decode(left.png), same ? null : decode(right.png)]);
-  const lw = ld.info.width,
-    lh = ld.info.height,
-    rw = rd?.info.width ?? lw,
-    rh = rd?.info.height ?? lh;
+  const lp = decode(left.png);
+  const [ld, rd] = await Promise.all([lp, left.png.equals(right.png) ? lp : decode(right.png)]);
+  const { width: lw, height: lh } = ld.info,
+    { width: rw, height: rh } = rd.info;
 
   const w = Math.max(lw, rw);
   const h = Math.max(lh, rh);
 
   const l = pad(ld, w, h);
-  const r = rd ? pad(rd, w, h) : l;
+  const r = pad(rd, w, h);
 
   const text = textDiff(left.text, right.text);
   const out = Buffer.alloc(w * h * 4);
   // Identical shots skip pixelmatch's grey drawing and leave the diff PNG fully transparent.
   // `l`/`r`/`out` are Buffers, i.e. Uint8Arrays — pixelmatch takes them directly.
-  const diffPixels = l.equals(r) ? 0 : pixelmatch(l, r, out, w, h, PIXELMATCH);
+  const diffPixels = l === r || l.equals(r) ? 0 : pixelmatch(l, r, out, w, h, PIXELMATCH);
 
   // Default zlib level: the diff PNG is a local intermediate (mostly transparent with
   // sparse red), so max compression buys little size for noticeably more CPU per job.
