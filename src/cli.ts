@@ -569,6 +569,13 @@ async function probe(a: Args, loads: number): Promise<never> {
   }
 }
 
+if (
+  ["report", "merge", "pack"].includes(process.argv[2]!) &&
+  process.argv.slice(3).some((t) => t === "--help" || t === "-h")
+) {
+  console.log(HELP.trimEnd());
+  process.exit(0);
+}
 if (process.argv[2] === "report") await report(process.argv.slice(3));
 if (process.argv[2] === "merge" || process.argv[2] === "pack")
   await outCommand(process.argv[2], process.argv.slice(3));

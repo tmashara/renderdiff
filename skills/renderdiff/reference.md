@@ -214,10 +214,12 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
   whose height changed (unless set in px). Shown on one side and `display: none` on the other
   is one `display` finding. A pseudo-element one side no longer generates is `content` against
   `none`. An `auto` margin reads as `auto`, not the px it resolved to, which varies with
-  layout.
+  layout. `clip`/`clip-path` changes on an element fully clipped on both sides (sr-only) are
+  dropped. Linear gradients compare by what they paint (`to right` = `90deg`, reversed stops).
 - A finding on a clean route is a change you can't see in this state: a hidden element
-  (closed menu), another breakpoint, hover on non-interactive elements, open menus. Decide it; a
-  `before` hook can open the state.
+  (closed menu), another breakpoint, hover on non-interactive elements, open menus. Or it is
+  notation that renders the same but isn't normalized (a radial gradient, px stops, a colour
+  hint). Decide it; a `before` hook can open the state.
 - Fails per shot (reported, pixels stand) past 15s or 50,000 elements. Not walked: SVG
   internals, shadow DOM, iframes, masked and `display: none` subtrees.
 - `rules: N changed groups, X never matched, Y matched on some shots`: style rules only one
