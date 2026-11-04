@@ -570,7 +570,7 @@ async function probe(a: Args, loads: number): Promise<never> {
 }
 
 if (
-  ["report", "merge", "pack", "probe"].includes(process.argv[2]!) &&
+  ["report", "merge", "pack"].includes(process.argv[2]!) &&
   process.argv.slice(3).some((t) => t === "--help" || t === "-h")
 ) {
   console.log(HELP.trimEnd());

@@ -90,6 +90,15 @@ describe("diffSnapshots", () => {
         `linear-gradient(to right, ${A}, ${B}), linear-gradient(${A}, ${B})`,
         `linear-gradient(90deg, ${A}, ${B}), linear-gradient(${B}, ${A})`,
       ],
+      [
+        `linear-gradient(in oklch longer hue, ${A}, ${A})`,
+        `linear-gradient(to top in oklch longer hue, ${A}, ${A})`,
+      ],
+      [
+        `repeating-linear-gradient(rgb(0, 0, 0) 50%, rgb(0, 255, 0) 50%)`,
+        `repeating-linear-gradient(to top, rgb(0, 255, 0) 50%, rgb(0, 0, 0) 50%)`,
+      ],
+      [`linear-gradient(1e-05deg, ${A}, ${B})`, `linear-gradient(1e-05deg, ${A} 50%, ${B})`],
     ];
     for (const [l, r] of differ) assert.equal(bg(l!, r!), 1, `${l} vs ${r}`);
   });

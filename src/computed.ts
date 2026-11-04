@@ -92,8 +92,7 @@ const POSITION = FIELDS.indexOf("position");
 const CLIP = FIELDS.indexOf("clip");
 const CLIP_PATH = FIELDS.indexOf("clip-path");
 
-/** Splits on commas outside parentheses. */
-const topLevel = (s: string) => {
+const splitTop = (s: string) => {
   const out: string[] = [];
   let depth = 0;
   let start = 0;
@@ -118,11 +117,11 @@ const FLIP: Record<string, string> = { top: "bottom", bottom: "top", left: "righ
 function canonLinear(layer: string): string | null {
   const m = /^((?:repeating-)?linear-gradient)\((.*)\)$/.exec(layer);
   if (!m) return null;
-  const args = topLevel(m[2]!);
-  const dir = /^(?:to ([a-z ]+?)|(-?[\d.]+)deg)? ?(in [a-z -]+)?$/.exec(args[0]!);
+  const args = splitTop(m[2]!);
+  const dir = /^(?:to ([a-z ]+?)|(-?[\d.]+(?:e[+-]?\d+)?)deg)? ?(in [a-z -]+)?$/.exec(args[0]!);
   if (dir && (dir[1] || dir[2] || dir[3])) args.shift();
   const interp = dir?.[3] ?? "";
-  if (/increasing|decreasing/.test(interp)) return null;
+  if (/increasing|decreasing|longer/.test(interp)) return null;
   const words = dir?.[1]?.split(" ") ?? [];
   let angle = dir?.[2] ? Number(dir[2]) : words.length === 1 ? SIDES[words[0]!] : 180;
   if (angle === undefined || words.length > 2 || !words.every((w) => w in FLIP)) return null;
@@ -132,8 +131,14 @@ function canonLinear(layer: string): string | null {
     const s = /^(.*?)(?: (-?[\d.]+)(%|px))?$/.exec(a)!;
     let bare = s[1]!;
     while (/\([^()]*\)/.test(bare)) bare = bare.replace(/\([^()]*\)/g, "");
-    // A colour has no space outside parentheses, so one there is a position we can't flip.
-    if (!/[a-z]/i.test(bare) || bare.includes(" ") || s[1]!.includes("calc(")) return null;
+    // A colour has no space outside parentheses nor ends in a number, so either is a position we can't flip.
+    if (
+      !/[a-z]/i.test(bare) ||
+      bare.includes(" ") ||
+      /\d[a-z%]*$/i.test(bare) ||
+      s[1]!.includes("calc(")
+    )
+      return null;
     if (s[3] === "px" && Number(s[2]) !== 0) return null;
     stops.push({ color: s[1]!, ...(s[2] === undefined ? {} : { pos: Number(s[2]) }) });
   }
@@ -142,27 +147,22 @@ function canonLinear(layer: string): string | null {
   stops.at(-1)!.pos ??= 100;
   let max = -Infinity;
   for (const s of stops) if (s.pos !== undefined) s.pos = max = Math.max(max, s.pos);
-  for (let i = 1; i < stops.length; i++) {
-    if (stops[i]!.pos !== undefined) continue;
-    let j = i;
-    while (stops[j]!.pos === undefined) j++;
-    const [from, to] = [stops[i - 1]!.pos!, stops[j]!.pos!];
-    for (let k = i; k < j; k++) stops[k]!.pos = from + ((to - from) * (k - i + 1)) / (j - i + 1);
-  }
+  // A zero-length repeat paints one colour that depends on stop order.
+  if (stops[0]!.pos === stops.at(-1)!.pos) return null;
   let corner = words.length === 2 ? words : null;
   if (corner ? corner.includes("bottom") : angle >= 180) {
     if (corner) corner = corner.map((w) => FLIP[w]!);
     else angle -= 180;
     stops.reverse();
-    for (const s of stops) s.pos = 100 - s.pos!;
+    for (const s of stops) if (s.pos !== undefined) s.pos = 100 - s.pos;
   }
   const head = corner ? `to ${corner.join(" ")}` : `${angle}deg`;
-  return `${m[1]}(${[head, interp].filter(Boolean).join(" ")}, ${stops.map((s) => `${s.color} ${+s.pos!.toFixed(4)}%`).join(", ")})`;
+  return `${m[1]}(${[head, interp].filter(Boolean).join(" ")}, ${stops.map((s) => (s.pos === undefined ? s.color : `${s.color} ${+s.pos.toFixed(4)}%`)).join(", ")})`;
 }
 
 /** Same `background-image` once each linear gradient layer is canonical; other layers as written. */
-export const sameImage = (a: string, b: string) => {
-  const canon = (v: string) => topLevel(v).map((l) => canonLinear(l) ?? l);
+const sameImage = (a: string, b: string) => {
+  const canon = (v: string) => splitTop(v).map((l) => canonLinear(l) ?? l);
   const [x, y] = [canon(a), canon(b)];
   return x.length === y.length && x.every((l, i) => l === y[i]);
 };
@@ -301,13 +301,12 @@ export function diffSnapshots(
         changes.push({ key, prop: "display", values: [l.styles[DISPLAY]!, r.styles[DISPLAY]!] });
         continue;
       }
-      // Skipped here, not later, so a resting change dropped can't hide a state's real one.
-      const hidden = fullClip(l.styles) && fullClip(r.styles);
       FIELDS.forEach((prop, i) => {
         const [a, b] = [l.styles[i]!, r.styles[i]!];
         if (a === b) return;
         if (prop === "background-image" && sameImage(a, b)) return;
-        if (hidden && (i === CLIP || i === CLIP_PATH)) return;
+        // Skipped here, not later, so a resting change dropped can't hide a state's real one.
+        if ((i === CLIP || i === CLIP_PATH) && fullClip(l.styles) && fullClip(r.styles)) return;
         changes.push({ key, prop, values: [a, b] });
       });
     } else if (

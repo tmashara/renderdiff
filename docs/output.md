@@ -197,9 +197,11 @@ changed:
 A `linear-gradient` (or `repeating-`) in `background-image` compares by what it paints: a
 side keyword and its angle (`to right`, `90deg`), an angle past 180° and the reversed stops,
 a corner and its opposite with reversed stops, and default `0%`/`100%` positions are equal.
-Stops in px, `calc()` and colour hints still compare as written. A `clip` or `clip-path`
-change on an element fully clipped on both sides (a zero-area `clip` rect, or an `inset()`
-of 50% or more) is no finding; its other properties still are.
+Stops in px, `calc()`, colour hints and `increasing`, `decreasing` or `longer` hue still
+compare as written. A `clip` or `clip-path` change on an element fully clipped on both sides
+is no finding; its other properties still are. Fully clipped is a `%` `clip-path: inset()`
+with top + bottom ≥ 100% or left + right ≥ 100%, or a zero-area `clip` rect on an
+absolutely or fixed positioned element.
 
 The summary gets one block, after the rows:
 
