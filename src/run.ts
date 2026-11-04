@@ -7,7 +7,16 @@ import { chromium, errors, type Browser, type BrowserContext, type Page } from "
 import sharp from "sharp";
 import { applyAccepted, readAccepted, unacceptable, updateAccepted } from "./accept.ts";
 import { CACHE_DIR, cacheFile, replayable, REPLAY_TTL, saveRecording, shotId } from "./cache.ts";
-import { bbox, cancelUnstable, capture, HookError, prepare, step, type Shot } from "./capture.ts";
+import {
+  bbox,
+  cancelUnstable,
+  capture,
+  HookError,
+  prepare,
+  readText,
+  step,
+  type Shot,
+} from "./capture.ts";
 import { compare, crops, type Band, type Box, type Region } from "./compare.ts";
 import {
   diffAria,
@@ -480,10 +489,37 @@ export async function run({
                   return own.length ? own : [g];
                 }),
               );
+              const sels = [
+                ...new Set(
+                  regions
+                    .flatMap((g) => g.elements ?? [])
+                    .map((e) => e.selector.replace(/::\w+$/, "")),
+                ),
+              ];
+              const [lt, rt] = sels.length
+                ? await Promise.all(
+                    (["left", "right"] as const).map((side) =>
+                      readText(
+                        pages[side],
+                        route.selector ? pages[side].locator(route.selector[side]) : null,
+                        [
+                          ...masksFor(cfg, pages[side], route),
+                          ...sels.map((s) => pages[side].locator(s)),
+                        ],
+                      ).then(
+                        (t) => t.text,
+                        () => null,
+                      ),
+                    ),
+                  )
+                : [null, null];
+              // Both or neither: one side re-read against the other's old text would differ itself.
+              const text = lt && rt ? { left: lt, right: rt } : null;
               const u = rightShot.unstable;
-              const l = { ...leftShot, png: raw[0] };
+              const l = { ...leftShot, png: raw[0], ...(text && { text: text.left }) };
               const r = {
                 ...rightShot,
+                ...(text && { text: text.right }),
                 png: raw[1],
                 unstable: u ? mask.map((v, i) => v | u[i]!) : mask,
               };

@@ -29,6 +29,7 @@ import {
   cleanupTempDirs,
   context,
   runCli,
+  tempDir,
   renderdiffArgs,
   type CliResult,
 } from "../helpers/cli.ts";
@@ -266,6 +267,62 @@ for (const width of WIDTHS) {
     });
   });
 }
+
+const hooked = (body: string) => {
+  const file = path.join(tempDir(), "hook.mjs");
+  fs.writeFileSync(file, `export default { before: async (page, { side }) => { ${body} } };\n`);
+  return runCli(
+    renderdiffArgs({
+      left: site.left,
+      right: site.right,
+      routes: ["/flex-vs-grid"],
+      widths: [1440],
+      config: file,
+    }),
+  );
+};
+
+test("an element that only resized names the parent whose own style changed, after it", async () => {
+  const r = await hooked(
+    `if (side === "left") await page.addStyleTag({ content: ".deck .card:nth-child(2) { padding-left: 40px }" });`,
+  );
+  const named = result(results(r.outDir), "/flex-vs-grid", 1440).regions.flatMap(
+    (g) => g.elements ?? [],
+  );
+  const card = named.find((e) => e.selector === "article.card:nth-of-type(2)");
+  assert.deepEqual(card?.changed, { "padding-left": ["40px", "16px"] }, context(r));
+  assert.ok(
+    named.some((e) => e.selector === "article.card:nth-of-type(2) > h3"),
+    context(r),
+  );
+  const dom = parseSummary(r.stdout).routes.get("/flex-vs-grid")!.rows[0]!.dom ?? "";
+  const first = dom
+    .replace(/^@\S+ /, "")
+    .split("; ")
+    .slice(0, 3);
+  assert.ok(
+    first.some((d) => d.startsWith("article.card:nth-of-type(2) padding-left")),
+    dom,
+  );
+});
+
+test("an element whose own width changed, or whose parent only resized, gets no cause", async () => {
+  const r = await hooked(
+    `await page.evaluate(() => { const c = document.querySelectorAll(".deck .card")[4]; const d = document.createElement("div"); d.className = "inner"; d.append(...c.childNodes); c.append(d); });
+    if (side === "left") await page.addStyleTag({ content: ".deck .card:nth-child(4) p { width: 200px } .deck .inner { width: 200px }" });`,
+  );
+  const named = result(results(r.outDir), "/flex-vs-grid", 1440).regions.flatMap(
+    (g) => g.elements ?? [],
+  );
+  assert.deepEqual(
+    named.map((e) => [e.selector, Object.keys(e.changed)]).sort(),
+    [
+      ["article.card:nth-of-type(4) > p", ["width", "height"]],
+      ["div.inner > p", ["width", "height"]],
+    ],
+    context(r),
+  );
+});
 
 for (const width of WIDTHS) {
   test(`divider @${width} names the lost ::before line, and the card's re-parented pairing`, () => {
