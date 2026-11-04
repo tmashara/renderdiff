@@ -340,6 +340,15 @@ describe("motion", () => {
       assert.equal(c.unstablePixels, 0, context(run));
     }
   });
+
+  test("Web Animations hold still on the tiled path too", async () => {
+    const run = await capture(["/waapi"], { config: path.join(CONFIGS, "waapi-tall.mjs") });
+    assert.equal(run.code, 0, context(run));
+    assert.ok((await sharp(run.file("waapi.1440.left.png")).metadata()).height! > 17_000);
+    const c = cardFor(run, "/waapi");
+    assert.equal(c.diffPixels, 0, context(run));
+    assert.equal(c.unstablePixels, 0, context(run));
+  });
 });
 
 describe("lazy images", () => {

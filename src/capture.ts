@@ -502,11 +502,11 @@ export async function capture(
   // Read on both sides of the shot, so a box that moves while it is taken stays covered.
   const shoot = async () => {
     const before = await read();
-    const png = tiled
-      ? await captureTiled(page, area)
-      : await stilled(page, () =>
-          pageShot(page, clip ?? (hidesX ? { x: 0, y: 0, width, height: 1e6 } : undefined)),
-        );
+    const png = await stilled(page, () =>
+      tiled
+        ? captureTiled(page, area)
+        : pageShot(page, clip ?? (hidesX ? { x: 0, y: 0, width, height: 1e6 } : undefined)),
+    );
     return paintBoxes(png, [...before, ...(await read())]);
   };
 
