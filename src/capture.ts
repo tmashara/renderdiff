@@ -291,7 +291,6 @@ export async function readText(page: Page, root: Locator | null, masks: Locator[
       const body = document.body ?? document.documentElement;
       return {
         scrollHeight: document.documentElement.scrollHeight,
-        scrollWidth: document.documentElement.scrollWidth,
         innerText:
           ((root === document.documentElement ? body : root) as HTMLElement).innerText || "",
         pageText: body.innerText?.length ?? 0,
@@ -443,7 +442,7 @@ export async function capture(
       return v ? `${v} (data-renderdiff-mask)` : "data-renderdiff-mask";
     }),
   );
-  const { scrollHeight, scrollWidth, text, pageText, media } = await readText(page, el, masks);
+  const { scrollHeight, text, pageText, media } = await readText(page, el, masks);
   const blank = pageText < 200 && !media ? `height=${scrollHeight}, text=${pageText} chars` : null;
 
   step.set(page, "screenshot");
@@ -491,13 +490,26 @@ export async function capture(
         .find((v) => v !== "visible") ?? "visible",
     ),
   );
-  // A page that scrolls sideways keeps its full width, as a one-shot fullPage shot does.
-  const area = clip ?? { x: 0, y: 0, width: hidesX ? width : scrollWidth, height: scrollHeight };
-  const ceiling = Math.max(40_000, Math.floor(MAX_PAGE_AREA / area.width));
-  if (area.height > ceiling) {
+  // Sized as the one-shot path sizes it, so a page that scrolls sideways keeps its full width.
+  const full = clip ? null : await page.evaluate(docSize);
+  const area: Box = clip ?? {
+    x: 0,
+    y: 0,
+    height: full!.height,
+    width: hidesX ? width : full!.width,
+  };
+  if (area.height > maxHeight) {
     throw new Error(
-      `${el ? "element" : "page"} is ${area.height}px tall at ${area.width}px wide, past the ${ceiling}px sanity ceiling ` +
+      `${el ? "element" : "page"} is ${area.height}px tall at ${width}px wide, past the ${maxHeight}px sanity ceiling ` +
         `for that width (${MAX_PAGE_AREA.toLocaleString("en-US")} pixels) ` +
+        `at ${url} — likely a broken layout, not a real page`,
+    );
+  }
+  // The height bound alone holds only at the viewport's width; a stray far-right box widens the stitch.
+  if (area.width * area.height > width * maxHeight) {
+    throw new Error(
+      `${el ? "element" : "page"} is ${area.width}×${area.height}px at ${width}px wide, past the ` +
+        `${(width * maxHeight).toLocaleString("en-US")}-pixel sanity ceiling for that width ` +
         `at ${url} — likely a broken layout, not a real page`,
     );
   }
