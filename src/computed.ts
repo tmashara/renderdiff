@@ -1,6 +1,7 @@
 import type { Page } from "playwright";
 import { textDiff } from "./compare.ts";
 import { name } from "./config.ts";
+import { andMore } from "./format.ts";
 import { MAX_STATES, SNAP_PROPS } from "./locate.ts";
 import type { ComparedResult, RouteResult } from "./report.ts";
 
@@ -33,6 +34,16 @@ export interface ComputedDiff {
   unchecked?: number;
   /** Style rules only that side has, grouped by stylesheet and enclosing at-rules; absent when not read. */
   rules?: RuleGroup[];
+  /** Vendor-prefixed declarations in the CSS source only that side has, each once; absent when not read. */
+  prefixes?: { left: string[]; right: string[] };
+}
+
+/** One prefixed declaration only one side has, with every route and width it was seen at. */
+export interface PrefixFinding {
+  side: "left" | "right";
+  /** As written, whitespace normalised: `-webkit-user-select: none`. */
+  declaration: string;
+  at: Finding["at"];
 }
 
 export interface RuleGroup {
@@ -447,6 +458,22 @@ function oneSided(a: string[], b: string[]): number[] {
   });
 }
 
+/** The `-webkit-`/`-moz-`/`-ms-`/`-o-` declarations in CSS source, whitespace normalised. */
+export function prefixed(css: string): string[] {
+  const decl = /(?<![\w-])(-(?:webkit|moz|ms|o)-[a-z-]+)\s*:\s*([^;{}]*[^;{}\s])(?=\s*[;}])/gi;
+  return [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(decl)].map(
+    ([, prop, value]) =>
+      `${prop!.toLowerCase()}: ${value!.replace(/\s+/g, " ").replace(/\s*([,()/!])\s*/g, "$1")}`,
+  );
+}
+
+/** Each side's prefixed declarations the other has fewer copies of, ignoring which rule or file holds them. */
+export function prefixDiff(left: string[], right: string[]): { left: string[]; right: string[] } {
+  const [l, r] = [left, right].map((texts) => texts.flatMap(prefixed));
+  const only = (a: string[], b: string[]) => [...new Set(oneSided(a, b).map((i) => a[i]!))].sort();
+  return { left: only(l!, r!), right: only(r!, l!) };
+}
+
 /** `--computed`'s rule coverage: the style rules only one side has, and what each side's could style. */
 export async function ruleCoverage(
   pages: [Page, Page],
@@ -531,6 +558,49 @@ export function groupRules(results: RouteResult[]): RuleFinding[] {
   return [...out.values()].sort((a, b) => rank(a) - rank(b));
 }
 
+/** Each one-sided prefixed declaration once, most widespread first. */
+export function groupPrefixes(results: RouteResult[]): PrefixFinding[] {
+  const out = new Map<string, PrefixFinding>();
+  for (const r of computedOf(results)) {
+    for (const side of ["left", "right"] as const) {
+      for (const declaration of r.computed!.prefixes?.[side] ?? []) {
+        const id = JSON.stringify([side, declaration]);
+        const f = out.get(id) ?? { side, declaration, at: [] };
+        out.set(id, f);
+        addAt(f.at, r);
+      }
+    }
+  }
+  const shots = (f: PrefixFinding) => f.at.reduce((n, a) => n + a.widths.length, 0);
+  return [...out.values()].sort(
+    (a, b) => shots(b) - shots(a) || a.declaration.localeCompare(b.declaration),
+  );
+}
+
+/** The `prefixes:` block: per side, the prefixed declarations only it has, and where. */
+function fmtPrefixes(rows: ComparedResult[]): string[] {
+  if (!rows.some((r) => r.computed?.prefixes)) return [];
+  const all = groupPrefixes(rows);
+  if (!all.length) return ["prefixes: no prefixed declaration differs between the sides"];
+  return [
+    `prefixes: ${all.length} prefixed declaration${all.length === 1 ? "" : "s"} only one side has`,
+    ...(["left", "right"] as const).flatMap((side) => {
+      const fs = all.filter((f) => f.side === side);
+      if (!fs.length) return [];
+      const at: Finding["at"] = [];
+      for (const { url, widths } of fs.flatMap((f) => f.at)) {
+        const seen = at.find((a) => a.url === url);
+        if (!seen) at.push({ url, widths: [...widths] });
+        else seen.widths.push(...widths.filter((w) => !seen.widths.includes(w)));
+      }
+      const shown = fs.slice(0, PREFIXES_SHOWN).map((f) => f.declaration);
+      return [
+        `  only ${side} has: ${shown.join("; ")}${andMore(fs.length, PREFIXES_SHOWN)}  ${fmtAt(at)}`,
+      ];
+    }),
+  ];
+}
+
 const fmtGroup = (f: RuleFinding) =>
   `${f.side === "left" ? "+" : "-"}${[f.sheet, ...f.conditions].join(" ")} (${f.rules} rule${f.rules === 1 ? "" : "s"})`;
 
@@ -559,6 +629,7 @@ function fmtRules(rows: ComparedResult[]): string[] {
 
 /** Findings shown in the console summary; results.json has them all. */
 export const SHOWN = 20;
+const PREFIXES_SHOWN = 10;
 const AT_ROUTES = 3;
 /** Unmatched routes, and keys per route, in the console summary. */
 const UNMATCHED_SHOWN = 5;
@@ -621,7 +692,7 @@ export function fmtComputed(results: RouteResult[], routes: string[]): string[] 
   out.push(...unmatched.slice(0, UNMATCHED_SHOWN));
   if (unmatched.length > UNMATCHED_SHOWN)
     out.push(`  (+${unmatched.length - UNMATCHED_SHOWN} more routes with unmatched elements)`);
-  return [...out, ...fmtRules(rows)];
+  return [...out, ...fmtRules(rows), ...fmtPrefixes(rows)];
 }
 
 // ponytail: raw indented lines, so a wrapper role added or removed re-indents everything below it; key lines by role path if that gets noisy

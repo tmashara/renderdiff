@@ -14,6 +14,7 @@ import {
   HookError,
   prepare,
   readText,
+  sheetSources,
   step,
   type Shot,
 } from "./capture.ts";
@@ -24,6 +25,7 @@ import {
   fmtAria,
   fmtComputed,
   pageError,
+  prefixDiff,
   ruleCoverage,
 } from "./computed.ts";
 import { locate, MAX_SPOTS, severity, snapshotStates, type ElementDiff } from "./locate.ts";
@@ -599,6 +601,13 @@ export async function run({
           cov.unreadable[0].forEach((h) => unreadable.left.add(h));
           cov.unreadable[1].forEach((h) => unreadable.right.add(h));
         }
+        const sources = computed?.computed
+          ? await Promise.race([
+              Promise.all([sheetSources(pages.left), sheetSources(pages.right)]).catch(() => null),
+              sleep(RULES_TIMEOUT, null, { ref: false }),
+            ])
+          : null;
+        if (sources) computed!.computed!.prefixes = prefixDiff(...sources);
         // Masked content is noise here too; every next job reloads the page, so no restore.
         const tree = async (page: Page, side: "left" | "right") => {
           for (const m of masksFor(cfg, page, route))

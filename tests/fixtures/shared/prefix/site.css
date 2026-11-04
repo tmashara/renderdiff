@@ -1,0 +1,9 @@
+/* prefix-same, left: pretty-printed, in source order. */
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+.clip {
+  -webkit-background-clip: text;
+  background-image: linear-gradient(90deg, #0b5, #05b);
+}

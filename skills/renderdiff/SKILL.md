@@ -20,6 +20,7 @@ the § named at each step. Setting up a project (`/renderdiff init`): [init.md](
 | Change | Run |
 | --- | --- |
 | CSS only, markup untouched (refactor, dead-CSS removal, token swap) | pixels + `--computed`. First diff the two builds (§ Reference and routes): if only asset hashes differ, or every changed rule means the same, no shots are needed; otherwise shoot the routes the changed rules reach. Expect `dom identical` on every route: then each `computed:` finding is a real style change, even on a clean route. A changed rule that matched nothing (`rules:`) means the run proved nothing about it: add a route or hook that reaches it. `dom differs`: often a wrapper's class changed, re-keying its subtree (§ `--computed`). Hover menus and open menus aren't shot without a `before` hook that ends waiting for the open state, and dead-CSS removal breaks exactly those. |
+| Lint autofix, Autoprefixer or browserslist change | pixels + `--computed`, and read `prefixes:`: Chrome renders and parses `-webkit-user-select` and `user-select` alike, so a dropped prefix Safari needs shows nowhere else. Each line there is a prefixed declaration only one side's CSS has; decide whether its targets still need it. |
 | Markup changes (framework, template or component migration) | pixels, plus `--aria`: `aria: identical` means a screen reader gets the same page. `--computed` findings would only be hints. |
 | Dependency or build upgrade | pixels, plus `--computed` if the markup should be identical. |
 | One component | pixels with `--selector <sel>` or `'/route @sel'`. |
