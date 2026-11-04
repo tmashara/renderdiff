@@ -23,7 +23,7 @@ export interface ElementDiff {
   reparented?: true;
 }
 
-const MAX_SPOTS = 20;
+export const MAX_SPOTS = 20;
 const PER_SPOT = 3;
 const MAX_CHANGED = 6;
 

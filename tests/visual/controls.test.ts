@@ -528,7 +528,6 @@ test("/nav with taller bands above still crops and names the missing link", asyn
   );
   const dom = parseSummary(r.stdout).routes.get("/nav")!.rows[0]!.dom ?? "";
   assert.match(dom, /-a\[href="#pricing"\] "Pricing"/, context(r));
-  // A band an element grew into names that element; it used to name nothing.
   assert.match(dom, /h1 padding-top 60px→0px/, context(r));
 });
 
@@ -547,6 +546,28 @@ test("a small one-sided change is cropped and named before larger recolours", as
   const dom = parseSummary(r.stdout).routes.get("/color")!.rows[0]!.dom ?? "";
   assert.match(dom, /^\+h2::after; /, context(r));
   assert.match(dom, / \(\+2 more\)$/, "4 swatches and the pseudo-element, 3 shown");
+});
+
+test("two changes inside one svg each get a crop", async () => {
+  const hook = path.join(tempDir(), "hook.mjs");
+  fs.writeFileSync(
+    hook,
+    `export default { before: (page, { side }) => page.evaluate((fill) => document.body.insertAdjacentHTML("afterbegin",
+      \`<svg width="1200" height="600"><circle cx="100" cy="300" r="40" fill="\${fill}"/><circle cx="1100" cy="300" r="40" fill="\${fill}"/></svg>\`),
+      side === "left" ? "#2e7d32" : "#1f6feb") };\n`,
+  );
+  const r = await runCli([
+    ...renderdiffArgs({ left: site.left, right: site.right, routes: ["/"], widths: [1440] }),
+    "--config",
+    hook,
+  ]);
+  const j = result(results(r.outDir), "/", 1440);
+  assert.equal(j.regions.length, 2, context(r));
+  assert.deepEqual(
+    j.crops.map((c) => c.left.x).sort((a, b) => a - b),
+    j.regions.map((g) => g.x).sort((a, b) => a - b),
+    context(r),
+  );
 });
 
 test("/taller @1440 crops the extra band, left over right at native scale", () => {

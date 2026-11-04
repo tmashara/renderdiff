@@ -26,7 +26,7 @@ import {
   pageError,
   ruleCoverage,
 } from "./computed.ts";
-import { locate, severity, snapshotStates, type ElementDiff } from "./locate.ts";
+import { locate, MAX_SPOTS, severity, snapshotStates, type ElementDiff } from "./locate.ts";
 import {
   alive,
   CONTEXT_OPTIONS,
@@ -40,6 +40,7 @@ import {
 } from "./config.ts";
 import {
   fmtBand,
+  andMore,
   fmtElements,
   fmtFailed,
   fmtText,
@@ -64,6 +65,8 @@ import {
 
 /** A busy main thread can stall the probe; the elements are a hint, so give up rather than wait. */
 const LOCATE_TIMEOUT = 5_000;
+/** Located on their own first: as many as before the cap rose to `MAX_SPOTS`. */
+const FIRST_SPOTS = 5;
 /** A full-page walk reads every element's style; past this, report the snapshot as failed. */
 export const COMPUTED_TIMEOUT = 15_000;
 /** Rule coverage after it: past this, the shot keeps its `computed` without `rules`. */
@@ -542,14 +545,19 @@ export async function run({
           diff: `${base}.diff.png`,
         };
         // Both pages still hold this job's document: the next load waits for the loop.
-        const named = await Promise.race([
-          locate([pages.left, pages.right], [leftShot, rightShot], spots, [
-            masksFor(cfg, pages.left, route),
-            masksFor(cfg, pages.right, route),
-          ]).catch(() => null),
-          sleep(LOCATE_TIMEOUT, null, { ref: false }),
-        ]);
-        named?.forEach((els, i) => (spots[i]!.target.elements = els));
+        const t0 = Date.now();
+        const probe = (some: Spot[]) =>
+          Promise.race([
+            locate([pages.left, pages.right], [leftShot, rightShot], some, [
+              masksFor(cfg, pages.left, route),
+              masksFor(cfg, pages.right, route),
+            ]).catch(() => null),
+            sleep(LOCATE_TIMEOUT - (Date.now() - t0), null, { ref: false }),
+          ]);
+        // The first few alone, so a slow page that times out on the rest still names those.
+        const first = await probe(spots.slice(0, FIRST_SPOTS));
+        const rest = first && (await probe(spots.slice(FIRST_SPOTS, MAX_SPOTS)));
+        [...(first ?? []), ...(rest ?? [])].forEach((els, i) => (spots[i]!.target.elements = els));
         const made = await crops(leftShot.png, rightShot.png, worstFirst(spots));
         const snap = (page: Page, side: "left" | "right") =>
           snapshotStates(
@@ -1231,40 +1239,37 @@ const rank = (s: Spot) => {
   return els.length ? Math.min(...els.map(severity)) : s.kind === "band" ? 0 : 1;
 };
 
-/** Spots by `severity`, skipping one whose elements an earlier one already names. */
+/** Spots by `rank`, each whose elements an earlier one already names moved after the rest. */
 function worstFirst(spots: Spot[]): Spot[] {
   const seen = new Set<string>();
-  return [...spots]
-    .sort((a, b) => rank(a) - rank(b))
-    .filter((s) => {
-      const sels = (s.target.elements ?? []).map((e) => e.selector);
-      if (sels.length && sels.every((x) => seen.has(x))) return false;
-      sels.forEach((x) => seen.add(x));
-      return true;
-    });
+  const fresh: Spot[] = [],
+    named: Spot[] = [];
+  for (const s of [...spots].sort((a, b) => rank(a) - rank(b))) {
+    const sels = (s.target.elements ?? []).map((e) => e.selector);
+    (sels.length && sels.every((x) => seen.has(x)) ? named : fresh).push(s);
+    sels.forEach((x) => seen.add(x));
+  }
+  return [...fresh, ...named];
 }
 
 /** At most this many elements per summary line. */
 const DOM_ELEMENTS = 3;
 
-/** `a; b; c (+2 more)`: the first `DOM_ELEMENTS` of `elementsOf` and how many more. */
-function fmtDom(r: Parameters<typeof elementsOf>[0]): string {
-  const els = elementsOf(r);
-  const more = els.length - DOM_ELEMENTS;
-  return fmtElements(els.slice(0, DOM_ELEMENTS)) + (more > 0 ? ` (+${more} more)` : "");
-}
-
-/** Located elements by `severity`, then bands tallest first then regions, one per selector; none accepted. */
-function elementsOf(r: {
+/**
+ * `a; b; c (+2 more)`: located elements by `severity`, then bands tallest first then regions,
+ * one per selector, none accepted; the first `DOM_ELEMENTS` and how many more.
+ */
+function fmtDom(r: {
   regions: { elements?: ElementDiff[]; accepted?: string }[];
   bands: Band[] | null;
-}): ElementDiff[] {
+}): string {
   const all = [...[...(r.bands ?? [])].sort((a, b) => b.h - a.h), ...r.regions].flatMap((g) =>
     g.accepted ? [] : (g.elements ?? []),
   );
-  return all
+  const els = all
     .filter((e, i) => all.findIndex((o) => o.selector === e.selector) === i)
     .sort((a, b) => severity(a) - severity(b));
+  return fmtElements(els.slice(0, DOM_ELEMENTS)) + andMore(els.length, DOM_ELEMENTS);
 }
 
 /**

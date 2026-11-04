@@ -366,10 +366,13 @@ error, `page did not settle`, after one retry, with the two frames saved as
 
 ## Crops
 
-`{slug}.{width}.c{n}.png`: up to three per comparison, worst first: rows or elements only one side has (or whose text changed), then property changes, then shifts. A band whose
-elements weren't named counts as one-sided; ties keep bands tallest first, then regions largest
-first, and a change whose elements an earlier crop already names is skipped. Each shows left and right at native scale, padded by
-48px and at least 320px wide, with a 1px red box around the change; on the side that lacks a
+`{slug}.{width}.c{n}.png`: up to three per comparison, worst first: rows or elements only one
+side has (or whose text changed), then property changes, then shifts. A band with no element
+named counts as one-sided, and a region with none (past the first 20, or nothing found) as a
+property change, ahead of regions that only shifted. Ties keep bands tallest first, then
+regions largest first. A change whose elements an earlier crop already names goes after the
+others, so it gives up its crop only to one that names something new: two changes inside one
+`svg` still get two crops. Each shows left and right at native scale, padded by 48px and at least 320px wide, with a 1px red box around the change; on the side that lacks a
 band's rows, a 2px red seam is inserted where they would be, hiding nothing. Left is always on
 top (`stacked`, for wide changes) or on the left (`side`, for tall ones). A crop stays within
 1,568px on its long edge and 1,568 image tokens (⌈w/28⌉·⌈h/28⌉) and is never scaled below
