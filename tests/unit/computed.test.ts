@@ -461,19 +461,31 @@ test("a snapshot error keeps the page's message, not page.evaluate's prefix or s
 });
 
 describe("prefixed", () => {
-  test("reads declarations as written, whatever the whitespace, comments or importance", () => {
+  test("reads declarations as written, comments dropped, whitespace and importance normalised", () => {
     assert.deepEqual(
       prefixed(`html{-webkit-text-size-adjust:100%}/* -moz-x: y; */
         .a { -webkit-mask : linear-gradient( red , blue )  !important ; -MS-filter: none }`),
       [
         "-webkit-text-size-adjust: 100%",
-        "-webkit-mask: linear-gradient(red,blue)!important",
+        "-webkit-mask: linear-gradient( red , blue ) !important",
         "-ms-filter: none",
       ],
     );
+  });
+
+  test("a /* in url() or a string is no comment, and a data URI's ; stays in its value", () => {
+    assert.deepEqual(prefixed(".a{background:url(/img/*.png)} .b{-webkit-user-select:none}"), [
+      "-webkit-user-select: none",
+    ]);
     assert.deepEqual(
-      prefixed(".a { -webkit-mask: linear-gradient(red, blue) !important; }"),
-      prefixed(".a{-webkit-mask:linear-gradient(red,blue)!important}"),
+      prefixed('.a{content:"/*"} .b{-webkit-user-select:none} /* .c{-webkit-x:1} */'),
+      ["-webkit-user-select: none"],
+    );
+    assert.deepEqual(
+      prefixed(
+        '.a{-webkit-mask:url("data:image/svg+xml;utf8,<svg/>") center;-webkit-x:1 !IMPORTANT}',
+      ),
+      ['-webkit-mask: url("data:image/svg+xml;utf8,<svg/>") center', "-webkit-x: 1 !important"],
     );
   });
 
@@ -484,6 +496,26 @@ describe("prefixed", () => {
         @media (-webkit-min-device-pixel-ratio: 2) { .b { transition: -webkit-transform 1s } }
         .c { user-select: none; x-webkit-y: 1 }`),
       [],
+    );
+  });
+
+  test("a minifier's rewrite of a value is no finding; a dropped prefix still is", () => {
+    const none = { left: [], right: [] };
+    assert.deepEqual(
+      prefixDiff(
+        [".a { -webkit-transition: opacity 0.3s ease; }"],
+        [".a{-webkit-transition:opacity .3s ease}"],
+      ),
+      none,
+    );
+    assert.deepEqual(
+      prefixDiff(
+        [
+          ".a{-webkit-transition:opacity 0.3s;-webkit-user-select:none} .b{-webkit-user-select:none}",
+        ],
+        [".a{-webkit-transition:opacity .3s;user-select:none} .b{-webkit-user-select:none}"],
+      ),
+      { left: ["-webkit-user-select: none"], right: [] },
     );
   });
 

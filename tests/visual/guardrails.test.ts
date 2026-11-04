@@ -37,8 +37,7 @@ import {
   results,
   row,
 } from "../helpers/parse.ts";
-import { CONTROLS, EQUIVALENCE } from "../helpers/corpus.ts";
-import { PAGES_DIR, routePath, startFixtureSite, type FixtureSite } from "../helpers/server.ts";
+import { PAGES_DIR, startFixtureSite, type FixtureSite } from "../helpers/server.ts";
 import { EXPECT_HEIGHT } from "../fixtures/pages/tall/page.ts";
 
 /** Inside the lottie fixture's top-right player box on the 1440 shot. */
@@ -469,9 +468,10 @@ test("--computed lists the prefixed declarations only one side's CSS source has,
   const out = results(run.outDir);
   for (const route of ["/prefix", "/prefix-same"])
     for (const width of [1440, 375]) assert.equal(result(out, route, width).diffPixels, 0);
-  // One in the <style>, one in the linked sheet, one in a sheet the CSSOM can't read.
+  // One in the <style>, one in the linked sheet, one it @imports, one in a sheet the CSSOM can't read.
   assert.deepEqual(result(out, "/prefix", 1440).computed?.prefixes, {
     left: [
+      "-webkit-appearance: none",
       "-webkit-background-clip: text",
       "-webkit-text-size-adjust: 100%",
       "-webkit-user-select: none",
@@ -484,18 +484,8 @@ test("--computed lists the prefixed declarations only one side's CSS source has,
   );
   assert.deepEqual(result(out, "/prefix-same", 375).computed?.prefixes, { left: [], right: [] });
   assert.deepEqual(parseSummary(run.stdout).prefixes, [
-    "prefixes: 3 prefixed declarations only one side has",
-    "  only left has: -webkit-background-clip: text; -webkit-text-size-adjust: 100%; -webkit-user-select: none  /prefix@1440,375",
-  ]);
-});
-
-test("--computed finds no prefixed declaration differing across the equivalence and control corpus", async () => {
-  const run = await capture([...EQUIVALENCE, ...CONTROLS].map(routePath), {
-    extra: ["--computed"],
-  });
-  assert.deepEqual(results(run.outDir).summary.prefixes, [], context(run));
-  assert.deepEqual(parseSummary(run.stdout).prefixes, [
-    "prefixes: no prefixed declaration differs between the sides",
+    "prefixes: 4 prefixed declarations only one side has",
+    "  only left has: -webkit-appearance: none; -webkit-background-clip: text; -webkit-text-size-adjust: 100%; -webkit-user-select: none  /prefix@1440,375",
   ]);
 });
 

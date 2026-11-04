@@ -6,9 +6,9 @@
 <link rel="stylesheet" href="/shared/base.css">
 <link rel="stylesheet" href="/shared/prefix/link.right.css">
 <style>
-/* GUARD RAIL for --computed's prefix check. The left side writes three declarations with a
+/* GUARD RAIL for --computed's prefix check. The left side writes four declarations with a
    -webkit- prefix and the right without, as a lint autofix would: one here, one in the linked
-   sheet, one in a sheet from another origin. Chromium renders both alike and its CSSOM reads
+   sheet, one in the sheet it @imports, one in a sheet from another origin. Chromium renders both alike and its CSSOM reads
    both as the unprefixed name, so only the CSS source tells them apart. */
 html { text-size-adjust: 100%; }
 .clip { display: inline-block; font-size: 48px; color: transparent; background-image: linear-gradient(90deg, #0b5, #05b); }

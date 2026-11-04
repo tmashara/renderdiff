@@ -229,10 +229,8 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
   `min-width:` → `width >=` is. Details and limits: docs/output.md § Rule coverage in the
   renderdiff repo.
 - `prefixes: N prefixed declarations only one side has`: `-webkit-`/`-moz-`/`-ms-`/`-o-`
-  declarations in one side's CSS source only (every loaded stylesheet and `<style>`, as
-  written), whatever rule or file holds them. Chrome parses `-webkit-user-select` as
-  `user-select`, so neither pixels nor `rules:` show a dropped prefix that Safari needs; this
-  does. Not seen: `insertRule`, adopted sheets, `style` attributes. Never changes the exit code.
+  properties one side's CSS source declares more often. Details and limits: docs/output.md
+  § Vendor prefixes in the renderdiff repo.
 
 ## `--aria`
 

@@ -460,17 +460,62 @@ function oneSided(a: string[], b: string[]): number[] {
 
 /** The `-webkit-`/`-moz-`/`-ms-`/`-o-` declarations in CSS source, whitespace normalised. */
 export function prefixed(css: string): string[] {
-  const decl = /(?<![\w-])(-(?:webkit|moz|ms|o)-[a-z-]+)\s*:\s*([^;{}]*[^;{}\s])(?=\s*[;}])/gi;
-  return [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(decl)].map(
+  // A value is quoted strings, parenthesised groups (a data URI's `;`) and other text, each one way only.
+  const decl =
+    /(?<![\w-])(-(?:webkit|moz|ms|o)-[a-z-]+)\s*:((?:"[^"]*"|'[^']*'|\([^)]*\)|[^;{}"'(])+)(?=[;}])/gi;
+  return [...uncomment(css).matchAll(decl)].map(
     ([, prop, value]) =>
-      `${prop!.toLowerCase()}: ${value!.replace(/\s+/g, " ").replace(/\s*([,()/!])\s*/g, "$1")}`,
+      `${prop!.toLowerCase()}: ${value!
+        .trim()
+        .replace(/\s+/g, " ")
+        .replace(/\s*!\s*important$/i, " !important")}`,
   );
 }
 
-/** Each side's prefixed declarations the other has fewer copies of, ignoring which rule or file holds them. */
+/** `css` without its comments; a `/*` inside a string or parentheses (`url(/img/*.png)`) isn't one. */
+function uncomment(css: string): string {
+  const out: string[] = [];
+  let [from, quote, depth] = [0, "", 0];
+  for (let i = 0; i < css.length; i++) {
+    const c = css[i];
+    if (quote) {
+      if (c === "\\") i++;
+      else if (c === quote) quote = "";
+    } else if (c === '"' || c === "'") quote = c;
+    else if (c === "(") depth++;
+    else if (c === ")") depth = Math.max(0, depth - 1);
+    else if (!depth && c === "/" && css[i + 1] === "*") {
+      out.push(css.slice(from, i));
+      const end = css.indexOf("*/", i + 2);
+      i = end < 0 ? css.length : end + 1;
+      from = i + 1;
+    }
+  }
+  out.push(css.slice(from));
+  return out.join("");
+}
+
+/**
+ * Per side, the prefixed properties it has more declarations of, as that many of its
+ * declarations, ones the other side lacks verbatim first. Counting names, not values, keeps a
+ * minifier's `0.3s`→`.3s` from reading as a pair.
+ */
 export function prefixDiff(left: string[], right: string[]): { left: string[]; right: string[] } {
   const [l, r] = [left, right].map((texts) => texts.flatMap(prefixed));
-  const only = (a: string[], b: string[]) => [...new Set(oneSided(a, b).map((i) => a[i]!))].sort();
+  const prop = (d: string) => d.slice(0, d.indexOf(":"));
+  const only = (a: string[], b: string[]) => {
+    const extra = new Map<string, number>();
+    for (const d of a) extra.set(prop(d), (extra.get(prop(d)) ?? 0) + 1);
+    for (const d of b) extra.set(prop(d), (extra.get(prop(d)) ?? 0) - 1);
+    const picked: string[] = [];
+    for (const i of new Set([...oneSided(a, b), ...a.keys()])) {
+      const n = extra.get(prop(a[i]!))!;
+      if (n <= 0) continue;
+      extra.set(prop(a[i]!), n - 1);
+      picked.push(a[i]!);
+    }
+    return [...new Set(picked)].sort();
+  };
   return { left: only(l!, r!), right: only(r!, l!) };
 }
 
@@ -582,23 +627,20 @@ function fmtPrefixes(rows: ComparedResult[]): string[] {
   if (!rows.some((r) => r.computed?.prefixes)) return [];
   const all = groupPrefixes(rows);
   if (!all.length) return ["prefixes: no prefixed declaration differs between the sides"];
-  return [
+  const out = [
     `prefixes: ${all.length} prefixed declaration${all.length === 1 ? "" : "s"} only one side has`,
-    ...(["left", "right"] as const).flatMap((side) => {
-      const fs = all.filter((f) => f.side === side);
-      if (!fs.length) return [];
-      const at: Finding["at"] = [];
-      for (const { url, widths } of fs.flatMap((f) => f.at)) {
-        const seen = at.find((a) => a.url === url);
-        if (!seen) at.push({ url, widths: [...widths] });
-        else seen.widths.push(...widths.filter((w) => !seen.widths.includes(w)));
-      }
-      const shown = fs.slice(0, PREFIXES_SHOWN).map((f) => f.declaration);
-      return [
-        `  only ${side} has: ${shown.join("; ")}${andMore(fs.length, PREFIXES_SHOWN)}  ${fmtAt(at)}`,
-      ];
-    }),
   ];
+  for (const side of ["left", "right"] as const) {
+    const fs = all.filter((f) => f.side === side);
+    if (!fs.length) continue;
+    const at: Finding["at"] = [];
+    for (const r of rows) if (r.computed?.prefixes?.[side].length) addAt(at, r);
+    const shown = fs.slice(0, PREFIXES_SHOWN).map((f) => f.declaration);
+    out.push(
+      `  only ${side} has: ${shown.join("; ")}${andMore(fs.length, PREFIXES_SHOWN)}  ${fmtAt(at)}`,
+    );
+  }
+  return out;
 }
 
 const fmtGroup = (f: RuleFinding) =>

@@ -322,20 +322,20 @@ rules: 3 changed groups, 1 never matched, 2 matched on some shots
 
 Chrome parses `-webkit-user-select: none` and `user-select: none` into the same rule, so a lint
 autofix that drops a prefix Safari still needs is no pixel change and no rule change. So
-`--computed` also reads each side's CSS as written and lists the prefixed declarations only
-one side has:
+`--computed` also reads each side's CSS as written and counts its prefixed properties:
 
 ```
 prefixes: 3 prefixed declarations only one side has
   only left has: -webkit-background-clip: text; -webkit-text-size-adjust: 100%; -webkit-user-select: none  /a@1440,375
 ```
 
-- The source is every stylesheet the page loaded, as served (cross-origin ones too), and the
-  text of every `<style>`, open shadow roots included. Frames aren't read.
-- A declaration is its prefixed property and value, whitespace and comments dropped; which
-  selector, rule or file holds it doesn't count. So minifying, reordering, moving a
-  declaration between files, or a new asset hash is no change, while one side holding a
-  declaration once more than the other is.
+- The source is every stylesheet the page loaded, as served (cross-origin and `@import`ed ones
+  too), and the text of every `<style>`, open shadow roots included. Frames aren't read.
+- What counts is how many declarations of each prefixed property a side has; which selector,
+  rule or file holds them, and their values, don't. So a dropped prefix is one fewer
+  `-webkit-user-select` on that side, while minifying (`0.3s` → `.3s`), reordering, moving a
+  declaration between files or a new asset hash is no change. The value is shown as context:
+  that side's declarations of the property, ones the other side lacks as written first.
 - Prefixed selectors (`::-webkit-scrollbar`), media features and values (`-webkit-box`) aren't
   read.
 - Up to 10 declarations per side shown; results.json has them all. `prefixes: no prefixed
@@ -343,6 +343,8 @@ prefixes: 3 prefixed declarations only one side has
 - Informational, like `rules:`: it never changes the exit code.
 - CSS with no source text isn't seen: rules a script adds with `insertRule`, constructed
   (adopted) stylesheets, and `style` attributes.
+- A third-party sheet that changes between loads (an ad or chat widget) shows as prefixes
+  either side has; block it with `blockUrlPatterns` in the config.
 
 ## ARIA snapshots (`--aria`)
 

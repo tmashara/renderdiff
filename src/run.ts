@@ -587,26 +587,22 @@ export async function run({
               })),
             ])
           : null;
-        // Outside the snapshot's race, so a slow read loses only `rules`.
-        const cov = computed?.computed
-          ? await Promise.race([
-              ruleCoverage([pages.left, pages.right], [pages.left.url(), pages.right.url()]).catch(
-                () => null,
+        // Outside the snapshot's race, and each in its own, so a slow read loses only its part.
+        const bounded = <T>(p: Promise<T>) =>
+          Promise.race([p.catch(() => null), sleep(RULES_TIMEOUT, null, { ref: false })]);
+        const [cov, sources] = computed?.computed
+          ? await Promise.all([
+              bounded(
+                ruleCoverage([pages.left, pages.right], [pages.left.url(), pages.right.url()]),
               ),
-              sleep(RULES_TIMEOUT, null, { ref: false }),
+              bounded(Promise.all([sheetSources(pages.left), sheetSources(pages.right)])),
             ])
-          : null;
+          : [null, null];
         if (cov) {
           computed!.computed!.rules = cov.rules;
           cov.unreadable[0].forEach((h) => unreadable.left.add(h));
           cov.unreadable[1].forEach((h) => unreadable.right.add(h));
         }
-        const sources = computed?.computed
-          ? await Promise.race([
-              Promise.all([sheetSources(pages.left), sheetSources(pages.right)]).catch(() => null),
-              sleep(RULES_TIMEOUT, null, { ref: false }),
-            ])
-          : null;
         if (sources) computed!.computed!.prefixes = prefixDiff(...sources);
         // Masked content is noise here too; every next job reloads the page, so no restore.
         const tree = async (page: Page, side: "left" | "right") => {

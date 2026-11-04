@@ -206,8 +206,12 @@ export async function prepare(page: Page, cfg: ResolvedConfig, now: number): Pro
   if (cfg.computed) sources.set(page, []);
   page.on("response", (r) => {
     if (r.status() >= 400) sheet(r.request());
-    if (r.request().isNavigationRequest() && r.frame() === page.mainFrame()) doc.set(page, r);
-    // Read now: a body is gone once the page navigates.
+    if (r.request().isNavigationRequest() && r.frame() === page.mainFrame()) {
+      doc.set(page, r);
+      // A new document, from the load, a hook or a redirect; a pushState has no response.
+      sources.get(page)?.splice(0);
+    }
+    // Routing is always on, so the HTTP cache is off and no sheet is a bodiless 304; read now, before navigating drops it.
     if (r.ok() && r.request().resourceType() === "stylesheet" && r.frame() === page.mainFrame())
       sources.get(page)?.push(r.text().catch(() => ""));
   });
@@ -268,11 +272,7 @@ export async function prepare(page: Page, cfg: ResolvedConfig, now: number): Pro
   });
 }
 
-/**
- * `--computed`: this load's CSS as written, which the CSSOM isn't (Chromium serialises
- * `-webkit-user-select` as `user-select`): its stylesheet bodies, cross-origin ones
- * included, and every `<style>`'s text, open shadow roots too.
- */
+/** `--computed`: this document's CSS as written, which Chromium's CSSOM isn't: stylesheet bodies and `<style>` text. */
 export async function sheetSources(page: Page): Promise<string[]> {
   const inline = await page.evaluate(() => {
     const out: string[] = [];
@@ -366,7 +366,6 @@ export async function capture(
   await page.clock.setSystemTime(now);
   // Here, not on framenavigated, which a pushState during hydration fires too.
   network.get(page)!.failed.clear();
-  sources.get(page)?.splice(0);
   doc.delete(page);
   const res = await page
     .goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 })
