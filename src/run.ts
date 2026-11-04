@@ -134,7 +134,7 @@ const ours = (f: string) =>
   f === "evidence.html" ||
   f === "results.json" ||
   f === CACHE_DIR ||
-  /^[a-z0-9_~@-]+\.[\d.]+\.((left|right)(\.unsettled-[ab])?|diff|c\d+)\.png$/.test(f);
+  /^[a-z0-9_~@-]+\.[\d.]+\.((left|right)(\.unsettled-[ab])?|diff|c\d+)\.(png|webp)$/.test(f);
 
 function wipeable(dir: string): boolean {
   if (!fs.existsSync(dir)) return true;
@@ -184,6 +184,8 @@ function previous(file: string, now: Record<string, unknown>): Results | string 
   } catch {
     return `${file} is not valid JSON; run without --rerun-failed`;
   }
+  if (prev.meta?.packed)
+    return `${file} was written by renderdiff pack, for publishing; rerun in the out dir it was packed from`;
   if (prev.results?.some((r) => r.from))
     return `${file} was written by renderdiff merge; rerun into a new --out and merge again`;
   const was: Record<string, unknown> = {
@@ -817,16 +819,8 @@ function readResults(dir: string): Results {
   }
 }
 
-/** `renderdiff merge`: the full run's results with the partial run's shots replacing or added. */
-export async function merge(fullDir: string, partialDir: string, outDir: string): Promise<void> {
-  const full = readResults(fullDir);
-  const partial = readResults(partialDir);
-  for (const side of ["left", "right"] as const) {
-    if (full.meta[side] !== partial.meta[side])
-      throw new Error(
-        `${side} differs: ${full.meta[side]} in ${fullDir}, ${partial.meta[side]} in ${partialDir}`,
-      );
-  }
+/** Throws unless `outDir` is new, empty or ours, and outside every one of `dirs`. */
+function checkOut(dirs: string[], outDir: string) {
   const real = (p: string): string => {
     try {
       return fs.realpathSync.native(p);
@@ -834,7 +828,7 @@ export async function merge(fullDir: string, partialDir: string, outDir: string)
       return path.join(real(path.dirname(path.resolve(p))), path.basename(p));
     }
   };
-  for (const dir of [fullDir, partialDir]) {
+  for (const dir of dirs) {
     const rel = path.relative(real(dir), real(outDir));
     if (!rel || (rel.split(path.sep)[0] !== ".." && !path.isAbsolute(rel)))
       throw new Error(`--out ${outDir} is or is inside ${dir}; pass a new directory`);
@@ -844,6 +838,32 @@ export async function merge(fullDir: string, partialDir: string, outDir: string)
       `output directory ${outDir} holds files renderdiff didn't write — ` +
         `refusing to wipe it. Pass --out with a new or empty directory.`,
     );
+}
+
+function wipe(outDir: string) {
+  if (fs.existsSync(outDir)) {
+    for (const f of fs.readdirSync(outDir))
+      fs.rmSync(path.join(outDir, f), { recursive: true, force: true });
+  }
+  fs.mkdirSync(outDir, { recursive: true });
+}
+
+/** `renderdiff merge`: the full run's results with the partial run's shots replacing or added. */
+export async function merge(fullDir: string, partialDir: string, outDir: string): Promise<void> {
+  const full = readResults(fullDir);
+  const partial = readResults(partialDir);
+  const packed = [fullDir, partialDir].find((_, i) => [full, partial][i]!.meta.packed);
+  if (packed)
+    throw new Error(
+      `${packed} was written by renderdiff pack, for publishing; merge the out dirs it was packed from`,
+    );
+  for (const side of ["left", "right"] as const) {
+    if (full.meta[side] !== partial.meta[side])
+      throw new Error(
+        `${side} differs: ${full.meta[side]} in ${fullDir}, ${partial.meta[side]} in ${partialDir}`,
+      );
+  }
+  checkOut([fullDir, partialDir], outDir);
 
   const key = (r: RouteResult) => `${name(r)}@${r.width}`;
   const taken = new Map(
@@ -866,11 +886,7 @@ export async function merge(fullDir: string, partialDir: string, outDir: string)
     }
   }
 
-  if (fs.existsSync(outDir)) {
-    for (const f of fs.readdirSync(outDir))
-      fs.rmSync(path.join(outDir, f), { recursive: true, force: true });
-  }
-  fs.mkdirSync(outDir, { recursive: true });
+  wipe(outDir);
   for (const [f, { src }] of copies) fs.copyFileSync(path.join(src, f), path.join(outDir, f));
 
   const union = <T>(a: T[], b: T[]) => [
@@ -904,6 +920,89 @@ export async function merge(fullDir: string, partialDir: string, outDir: string)
       `${taken.size - replaced} added) into ${outDir}`,
   );
   console.log(compact(results, [...new Set(results.map(name))], resultsPath, meta.threshold));
+}
+
+/** `renderdiff pack`: a copy to publish, holding only what results.json names, as lossless WebP. */
+export async function pack(srcDir: string, outDir: string): Promise<void> {
+  const data = readResults(srcDir);
+  checkOut([srcDir], outDir);
+  const plan = new Map<string, string>();
+  const to = async (f: string) => {
+    const file = path.join(srcDir, f);
+    if (!fs.existsSync(file)) throw new Error(`${file} is missing`);
+    const { width = 0, height = 0 } = await sharp(file).metadata();
+    // ponytail: past WebP's 16,383px limit a shot stays PNG; tile it if tall pages come to dominate the size.
+    const out = Math.max(width, height) > 16_383 ? f : f.replace(/\.png$/, ".webp");
+    plan.set(f, out);
+    return out;
+  };
+  const same = (a: string, b: string) => {
+    const [fa, fb] = [path.join(srcDir, a), path.join(srcDir, b)];
+    return (
+      fs.existsSync(fb) &&
+      fs.statSync(fa).size === fs.statSync(fb).size &&
+      fs.readFileSync(fa).equals(fs.readFileSync(fb))
+    );
+  };
+  const results: RouteResult[] = [];
+  for (const r of data.results) {
+    if (r.status === "error") {
+      results.push(r.frames ? { ...r, frames: await Promise.all(r.frames.map(to)) } : r);
+      continue;
+    }
+    const { left, right, diff } = r.images;
+    const l = await to(left);
+    // Byte-equal only: a zero-diff shot can still differ under pixelmatch's threshold.
+    const images = {
+      left: l,
+      right: same(left, right) ? l : await to(right),
+      ...(diff && r.diffPixels ? { diff: await to(diff) } : {}),
+    };
+    const crops = await Promise.all(r.crops.map(async (c) => ({ ...c, path: await to(c.path) })));
+    results.push({ ...r, images, crops });
+  }
+  const size = (f: string) => fs.statSync(f).size;
+  const before = [...new Set(data.results.flatMap(files))]
+    .map((f) => path.join(srcDir, f))
+    .filter((f) => fs.existsSync(f))
+    .reduce((n, f) => n + size(f), 0);
+
+  wipe(outDir);
+  const every = Math.ceil(plan.size / 10);
+  let done = 0;
+  let after = 0;
+  await Promise.all(
+    [...plan].map(async ([f, out]) => {
+      const [src, dst] = [path.join(srcDir, f), path.join(outDir, out)];
+      if (f === out) fs.copyFileSync(src, dst);
+      else await sharp(src).webp({ lossless: true }).toFile(dst);
+      after += size(dst);
+      if (++done % every === 0 || done === plan.size)
+        console.error(`renderdiff pack: ${done}/${plan.size} images`);
+    }),
+  );
+
+  const meta = { ...data.meta, packed: new Date().toISOString() };
+  const stale = data.summary.stale ?? [];
+  await writeReport(results, meta, outDir, stale);
+  writeResults(results, meta, outDir, stale);
+  const evidence = path.join(srcDir, "evidence.html");
+  const fresh =
+    fs.existsSync(evidence) &&
+    fs.statSync(evidence).mtimeMs >= fs.statSync(path.join(srcDir, "results.json")).mtimeMs;
+  if (fresh) fs.copyFileSync(evidence, path.join(outDir, "evidence.html"));
+  else {
+    if (fs.existsSync(evidence))
+      console.error(
+        `renderdiff pack: ${evidence} is older than results.json, so its verdict was dropped; ` +
+          `run renderdiff report --verdict on ${srcDir} first to keep one`,
+      );
+    await writeEvidence(readResults(outDir), outDir, null);
+  }
+  const mb = (n: number) => `${(n / 1e6).toFixed(1)} MB`;
+  console.log(
+    `packed ${results.length} shot(s) into ${outDir}: ${plan.size} images, ${mb(before)} → ${mb(after)}`,
+  );
 }
 
 const browserOf = (l: { browser: Browser; channel: string | null }) => ({

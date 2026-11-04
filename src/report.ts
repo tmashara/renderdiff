@@ -72,8 +72,8 @@ export interface ComparedResult extends BaseResult {
   text: TextDiff;
   /** Reasons of `data-renderdiff-mask` elements either side carried. Absent when none did. */
   masked?: string[];
-  /** Paths relative to the out dir. */
-  images: { left: string; right: string; diff: string };
+  /** Paths relative to the out dir. `diff` is absent only for a zero-diff shot in `renderdiff pack` output. */
+  images: { left: string; right: string; diff?: string };
   /** At most three: bands, tallest first, then the largest regions. Not one per region. */
   crops: CropResult[];
   /** Every band and region matched an accepted one, and no padding or unstable pixel went unmatched. */
@@ -94,7 +94,7 @@ export interface ComparedResult extends BaseResult {
 
 /** A crop of one change: left and right panels, a 1px red box round it, or a 2px red seam. */
 export interface CropResult {
-  /** `{slug}.{width}.c{n}.png`, relative to the out dir. */
+  /** `{slug}.{width}.c{n}.png` (`.webp` once packed), relative to the out dir. */
   path: string;
   kind: "band" | "region";
   /** The change on each side, in that side's page px. `h` 0 is where the other side's band would go. */
@@ -151,6 +151,8 @@ export interface RunMeta {
   rerun: { rerun: number; reused: number } | null;
   /** With `--computed`: stylesheets a side couldn't read (cross-origin), left out of rule coverage. */
   unreadableSheets?: { left: string[]; right: string[] };
+  /** With `renderdiff pack`: when this copy was packed, ISO. `merge` and `--rerun-failed` refuse it. */
+  packed?: string;
 }
 
 export interface Summary {
@@ -316,7 +318,7 @@ const esc = (s: string) =>
 const band = (score: number) => (score >= 0.995 ? "good" : score >= 0.97 ? "warn" : "bad");
 
 /** The shot's file stem, `{slug}.{width}`: unique per route and width. */
-const cardId = (r: ComparedResult) => r.images.left.replace(/\.left\.png$/, "");
+const cardId = (r: ComparedResult) => r.images.left.replace(/\.left\.(png|webp)$/, "");
 
 const href = (r: RouteResult) => (r.status === "compared" ? `#${esc(cardId(r))}` : "#errors");
 
@@ -490,7 +492,7 @@ function card(r: ComparedResult): string {
   <div class="grid">
     <figure><figcaption>left</figcaption><a href="${imgs.left}" target="_blank"><img loading="lazy" src="${imgs.left}"></a></figure>
     <figure><figcaption>right</figcaption><a href="${imgs.right}" target="_blank"><img loading="lazy" src="${imgs.right}"></a></figure>
-    <figure><figcaption>diff</figcaption><a href="${imgs.diff}" target="_blank"><img loading="lazy" src="${imgs.diff}"></a></figure>
+    <figure><figcaption>diff</figcaption>${imgs.diff ? `<a href="${imgs.diff}" target="_blank"><img loading="lazy" src="${imgs.diff}"></a>` : `<p class="nodiff">no differing pixels</p>`}</figure>
   </div>
   <div class="slider" style="--x:50%">
     <img loading="lazy" src="${imgs.right}">
@@ -529,6 +531,7 @@ const STYLE = `<style>
   .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:.75rem }
   @media (max-width:900px) { .grid { grid-template-columns:1fr } }
   figure { margin:0 }
+  .nodiff { color:var(--mut); margin:0 }
   figcaption { color:var(--mut); font-size:11px; text-transform:uppercase;
                letter-spacing:.05em; margin-bottom:.35rem }
   img { width:100%; height:auto; border:1px solid var(--line); border-radius:4px;

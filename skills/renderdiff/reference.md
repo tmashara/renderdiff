@@ -401,6 +401,13 @@ the verdict file as plain text, coverage, and cards for shots that aren't clean,
 accepted ones, with crops embedded (past 12MB or missing, left out and noted). No external
 references. Exits 2 without `results.json` or a readable verdict file.
 
+## `pack`
+
+`renderdiff pack <out-dir> --out <dir>`, no browser: a copy to publish with only the images
+`results.json` names, as lossless WebP (a side past 16,383px stays PNG), one file for
+byte-identical sides, no `images.diff` for a zero-diff shot, `meta.packed` set, never
+`.cache/`. `merge` and `--rerun-failed` refuse a packed dir; `report` works on it.
+
 ## `merge`
 
 `renderdiff merge <full-out> <partial-out> --out <dir>`, no browser: the full run's results

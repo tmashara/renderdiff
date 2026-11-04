@@ -251,6 +251,9 @@ For an intended change, run with `--threshold 0 --no-recheck`, then
 description, with `--base-url <url>` for absolute image links once the out dir is uploaded
 ([docs/output.md](https://github.com/tmashara/renderdiff/blob/main/docs/output.md#markdown)).
 
+`renderdiff pack <out> --out <dir>` writes a smaller copy to publish, without `.cache/`
+([docs/output.md](https://github.com/tmashara/renderdiff/blob/main/docs/output.md#pack)).
+
 `renderdiff merge <full-out> <partial-out> --out <dir>` writes the full run's results to a new
 out dir with the shots a partial run also took (say, a few routes rerun under a new mask)
 replaced by its, and its other shots added. Each merged shot carries `from`:

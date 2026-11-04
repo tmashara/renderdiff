@@ -200,6 +200,7 @@ const HELP = `
     renderdiff http://localhost:3000 https://example.com /pricing::/plans
     renderdiff report <out-dir> [--verdict <file>] [--title <text>] [--markdown <file> [--base-url <url>]]
     renderdiff merge <full-out> <partial-out> --out <dir>
+    renderdiff pack <out-dir> --out <dir>
     renderdiff probe <url> [--width <n>] [--loads <n>]
 
   An argument starting with http:// or https:// is an origin: the first is left (your
@@ -231,6 +232,11 @@ const HELP = `
 
   renderdiff merge writes <full-out>'s results to --out with each shot <partial-out> also
   has replaced by the partial run's, and its other shots added. Both must compare the same origins.
+
+  renderdiff pack copies <out-dir> to --out for publishing: report.html, evidence.html,
+  results.json and only the images it names, as lossless WebP (a shot past 16,383px stays PNG),
+  one image for a shot whose sides are byte-identical and no diff for a zero-diff shot.
+  Never .cache/. merge and --rerun-failed refuse a packed dir.
 
   renderdiff probe loads one URL --loads times (default 8, in parallel up to --concurrency),
   each in a fresh browser context as a run loads a side (with the storage state of the config
@@ -422,20 +428,23 @@ async function report(argv: string[]): Promise<never> {
   }
 }
 
-/** `renderdiff merge <full-out> <partial-out> --out <dir>`: no browser, so never exit 1 or 3. */
-async function merge(argv: string[]): Promise<never> {
+/** `renderdiff merge` and `renderdiff pack`: out dirs in, a new --out; no browser, so never exit 1 or 3. */
+async function outCommand(command: "merge" | "pack", argv: string[]): Promise<never> {
   try {
+    const n = command === "merge" ? 2 : 1;
     const dirs: string[] = [];
     let out: string | undefined;
     for (const { v, value } of flags(argv)) {
       if (v === "--out") out = value();
-      else if (v.startsWith("-") || dirs.length === 2) throw new Error(`unexpected argument: ${v}`);
+      else if (v.startsWith("-") || dirs.length === n) throw new Error(`unexpected argument: ${v}`);
       else dirs.push(v);
     }
-    if (dirs.length !== 2 || !out)
-      throw new Error("usage: renderdiff merge <full-out> <partial-out> --out <dir>");
-    const { merge } = await import("./run.ts");
-    await merge(dirs[0]!, dirs[1]!, out);
+    if (dirs.length !== n || !out)
+      throw new Error(
+        `usage: renderdiff ${command} ${n === 2 ? "<full-out> <partial-out>" : "<out-dir>"} --out <dir>`,
+      );
+    const run = await import("./run.ts");
+    await (n === 2 ? run.merge(dirs[0]!, dirs[1]!, out) : run.pack(dirs[0]!, out));
     process.exit(0);
   } catch (e) {
     console.error(`✗ ${e instanceof Error ? e.message : String(e)}`);
@@ -561,7 +570,8 @@ async function probe(a: Args, loads: number): Promise<never> {
 }
 
 if (process.argv[2] === "report") await report(process.argv.slice(3));
-if (process.argv[2] === "merge") await merge(process.argv.slice(3));
+if (process.argv[2] === "merge" || process.argv[2] === "pack")
+  await outCommand(process.argv[2], process.argv.slice(3));
 
 const probing = process.argv[2] === "probe";
 let loads = 0;
