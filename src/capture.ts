@@ -672,6 +672,8 @@ async function captureTiled(page: Page, box: Box): Promise<Buffer> {
       const { data } = await client.send("Page.captureScreenshot", {
         format: "png",
         captureBeyondViewport: true,
+        // Lossless either way, and sharp re-encodes the stitch.
+        optimizeForSpeed: true,
         clip: { x: box.x, y: box.y + y, width: box.width, height, scale: 1 },
       });
       tiles.push(Buffer.from(data, "base64"));
