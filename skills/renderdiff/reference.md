@@ -14,20 +14,24 @@ results.json · Gotchas.
 - **The base build**, from the repo root:
 
   ```bash
-  wt="$(mktemp -d)/base"; git worktree add --detach "$wt" origin/main
-  git -C "$wt" log -1 --format='%h %s'   # the verdict names it: "base build of abc1234"
-  cp .env.local "$wt/"                   # untracked env files the build needs, if any
-  (cd "$wt" && npm ci && npm run build && npx serve -l 3002 dist) &
-  until curl -so /dev/null localhost:3002; do sleep 1; done
-  # … runs …
-  kill $(lsof -tiTCP:3002 -sTCP:LISTEN); git worktree remove --force "$wt"
+  curl -so /dev/null localhost:3002 && { echo "3002 is taken"; exit 1; }
+  wt="$(mktemp -d)/base"; git worktree add --detach "$wt" "$(git merge-base HEAD origin/main)"
+  echo "$wt"; git -C "$wt" log -1 --format='%h %s'  # the verdict names it: "base build of abc1234"
+  cp .env.local "$wt/"                              # untracked env files the build needs, if any
+  # next call, in the tool's background mode:
+  (cd "$wt" && npm ci && npm run build && npx serve -l 3002 dist) > "$wt.log" 2>&1 &
+  until curl -so /dev/null localhost:3002; do kill -0 $! || { tail -20 "$wt.log"; exit 1; }; sleep 1; done
+  # after the runs:
+  kill $(lsof -tiTCP:3002 -sTCP:LISTEN) || fuser -k 3002/tcp; git worktree remove --force "$wt"
   ```
 
-  Outside the repo: a worktree inside it resolves the change's `node_modules`, and Tailwind
-  or tsc scan its sources into the change build, a quiet wrong build. One fixed port per base,
-  every run: `--rerun-failed` and `--cache-right` key on the right origin, port included.
-  Stop by port: `$!` and a `kill` of the subshell or `sh -c` leave the server running. Never
-  `rm -rf` the worktree or run `git worktree prune`: the user's own worktrees live there too.
+  Shell state is gone between tool calls: write `$wt` out as printed. Outside the repo: inside
+  it, the base resolves the repo's `node_modules` and the change build's Tailwind/tsc globs
+  scan the base. The merge base, not `origin/main`: commits merged since you branched would
+  show as diffs. One fixed port per base, every run: `--rerun-failed` and `--cache-right` key
+  on the right origin, port included. Stop by port: killing `$!` leaves the server running.
+  `worktree remove` refuses anything that isn't a worktree; `rm -rf` leaves it registered;
+  `prune` also drops the user's missing worktrees.
 - **Production builds on both sides.** Dev overlays exist on one side only; Next's and
   Astro's are hidden by default, others go in `hideSelectors`.
 - **Static builds:** `npx serve -l 3002 dist` (or any static server). Match the real host's

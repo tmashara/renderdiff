@@ -35,8 +35,8 @@ source (product edits for a test).
 
 1. **Build.** Take the command from the real deploy (CI workflow, `vercel.json`
    `buildCommand`, `netlify.toml`, env like `DEPLOY_ENV`), not from `package.json` alone.
-   Build the base by the recipe in § Reference and routes (worktree outside the repo) and
-   record the command that worked and its output dir.
+   Build the base by the recipe in § Reference and routes and record the command that worked
+   and its output dir.
 2. **Serve.** `npx serve -l <port> -c <absolute path to <app>/serve.json> <dist>` (`-c` is
    read against `<dist>`), the `serve.json` mirroring the host's clean URLs, trailing slashes
    and redirects (§ Reference and routes). Curl a sample of routes (slashless, trailing
@@ -133,7 +133,7 @@ sample and a full run>
 <leftover noise that isn't masked, and why; mask reasons live in the configs>
 
 ## Cleanup
-<stop servers by port; `git worktree remove --force <wt>`, never `rm -rf` or `prune`>
+<stop servers by port; `git worktree remove --force <wt>`>
 
 ## Publish
 <only if asked: where, how to shrink, privacy>
