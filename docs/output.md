@@ -23,16 +23,19 @@ clean: /
 renderdiff: 2 of 3 routes differ (6 of 15 shots), 0 errors, worst 97.41% /about@1440 — /Users/you/site/renderdiff-out/results.json
 ```
 
-A row covers the widths that agree on height and width delta, bands (side and height),
-aligned score and text; the score and region count are then shown as ranges, and `unstable`
-as the largest. Under a row, `failed` lists stylesheets and font faces a side failed to load
-(fix those first), `fonts` the web font faces only one side loaded, `dom` names up to three
-elements behind the changes, two properties each (`@w` when the row covers several widths: the
-first one's), and `crops` lists that row's crop files. Errors print in full, grouped across the widths that share a message. Clean means not
-one pixel differs, none went unmeasured as unstable and no stylesheet or font failed; a route
-with unstable pixels or a failed asset gets its own row. A shot whose only difference varied
-between two loads of the right side is clean, but listed under `varies`. `--progress` gets
-the per-shot output when piped, `--no-progress` the summary on a terminal.
+A row covers the widths that agree on height and width delta, bands (side and height), aligned
+score and text; the score and region count are then shown as ranges, and `unstable` as the
+largest. Under a row, `failed` lists stylesheets and font faces a side failed to load (fix
+those first), `fonts` the web font faces only one side loaded, `dom` names up to three elements
+behind the changes, two properties each (`@w` when the row covers several widths: the first
+one's), and `crops` lists that row's crop files. Errors print in full, grouped across the
+widths that share a message. Clean means not one pixel differs, none went unmeasured as
+unstable and no stylesheet or font failed; a route with unstable pixels or a failed asset gets
+its own row. A route whose every shot is clean or has no differing pixel and at most 100
+unstable ones (anti-aliased corners), with no failed asset or `varies`, goes on the
+`unstable ≤100px:` line instead: unchanged, but not clean. A shot whose only difference varied
+between two loads of the right side is clean, but listed under `varies`. `--progress` gets the
+per-shot output when piped, `--no-progress` the summary on a terminal.
 
 ## Tokens
 
@@ -46,7 +49,7 @@ the per-shot output when piped, `--no-progress` the summary on a terminal.
 | `unaligned` | Heights differ but too few rows match to find bands. Use the height delta and regions. |
 | `line -1px@y812` | A 1–2px line across the page only the right draws (`+`: only the left; no sign: both, differently). A lost border or divider; not counted in `reg`. |
 | `3 reg` | Regions: connected patches of differing pixels. A missing link barely moves the score, but it is still a region. |
-| `unstable 1,204px` | Pixels that kept changing between shots of the same load (a ticker, a carousel). Excluded from the score, so the route is never clean. |
+| `unstable 1,204px within 928×160 at (256,168)` | Pixels that kept changing between shots of the same load (a ticker, a carousel), and the box holding them (`@w` when the row covers several widths: the one with the most). Excluded from the score, so the route is never clean. One box spans every unstable patch on the page, so scattered ones give a large box. |
 | `varies /a @1440  148,480px painted out  div.drift` | After the routes: the right side differed between two fresh loads there (a counter, a rotating banner). Those elements' whole boxes are painted out on both sides like a mask and left out of the score, so the count can exceed the pixels that changed; the shot can't be accepted. `(not located)`: no element was named, its region was painted. `layout moved`: a named element sits somewhere else on the two loads with the same text, pushed by the layout rather than changed itself, so no mask is suggested. |
 | `  --mask 'div.drift'` | The flag that masks the `varies` elements, for the next run. Only selectors ending in an id, class or attribute are suggested: a bare `p:nth-of-type(14)` would hide real changes too. None for a route marked `layout moved`. |
 | `  masks: [{ selector: … }]` | The same as config `masks` entries, with `reason: "varies per load"`. |
@@ -66,6 +69,7 @@ the per-shot output when piped, `--no-progress` the summary on a terminal.
 | `crops …` | Up to 3 PNGs per comparison, bands first, relative to `results.json`. Left is on top or on the left, and the change is boxed in red. |
 | `ERROR …` | Unmeasured, which is neither a pass nor a fail. Exits 3. |
 | `renderdiff: …` | The verdict line: routes and shots that differ (accepted ones aside), errors, `, U unstable (max Npx)` when any shot had unstable pixels, the worst score, and with `--threshold` how many scored below it. |
+| `unstable ≤100px: /a /b` | Routes whose every shot is clean or has no differing pixel and at most 100 unstable ones, no failed asset and no `varies`. They get no row. Not clean: report them under Not verified. |
 | `accepted:` / `stale accepted:` | Routes whose every difference was accepted, and accepted entries the run no longer saw. See [accepted.md](accepted.md). |
 | `rerun:` | With `--rerun-failed`: how many shots were rerun and how many reused. |
 | `right:` | With `--cache-right`: whether the right side was replayed, and from when, or loaded live and recorded. |
@@ -96,7 +100,7 @@ because an unmeasured route is not a verified one.
 | Text | `text: 0 added, 1 removed` | `text -"Pricing"` | `text: { added: [], removed: ["Pricing"] }` |
 | Regions | `3 regions, largest 64×32 at (256,192)` | `3 reg` | `regions: [...]` |
 | Line | `line -1px@y812` | `line -1px@y812` | `regions[i].line: { y: 812, h: 1, side: "right" }` |
-| Unstable | `(unstable 1,204px)` | `unstable 1,204px` | `unstablePixels: 1204` |
+| Unstable | `(unstable 1,204px)`, then `unstable within 928×160 at (256,168)` | `unstable 1,204px within 928×160 at (256,168)` | `unstablePixels: 1204, unstableBox: { x: 256, y: 168, w: 928, h: 160 }` |
 | Failed assets | `failed left: font Inter 700` | `failed left: font Inter 700` | `failed: { left: ["font Inter 700"], right: [] }` |
 | Font faces | `fonts -"Inter 600"` | `fonts -"Inter 600"` | `fonts: { added: [], removed: ["Inter 600"] }` |
 
@@ -340,7 +344,10 @@ sides differed at capture time, even when its pixels were painted out as unstabl
 
 Pixels that changed between two shots of the *same* page load, so they're noise from that
 origin (a ticker, a carousel). They're painted magenta on both sides and excluded from the
-score, and a route with any is never on the `clean:` line. More than 25% unstable is an
+score, and a route with any is never on the `clean:` line. `unstableBox` in results.json (and
+the row and `--progress`) gives the box holding them; masks are magenta too, so don't search
+the PNG for it. A route with at most 100 on any shot and nothing else goes on the
+`unstable ≤100px:` line rather than a row. More than 25% unstable is an
 error, `page did not settle`, after one retry, with the two frames saved as
 `{slug}.{width}.{side}.unsettled-a.png`/`-b.png`.
 
@@ -471,6 +478,7 @@ file, not each line), scores rounded down to four decimals (so a shot that diffe
       "score": 0.9714,           // share of measured pixels that match
       "alignedScore": 1,         // score over the aligned rows; null unless there are bands
       "diffPixels": 33120, "totalPixels": 1158000, "unstablePixels": 0,
+      "unstableBox": { "x": 256, "y": 168, "w": 928, "h": 160 },   // absent when unstablePixels is 0, and in older files
       "varies": [], "variesPixels": 0,   // absent unless a second right load differed: its regions, with elements, and the px painted out
       "heightDelta": -24, "widthDelta": 0,          // left − right
       "regions": [],             // left-page px; with bands, from the realigned rows

@@ -7,7 +7,7 @@ import { chromium, errors, type Browser, type BrowserContext, type Page } from "
 import sharp from "sharp";
 import { applyAccepted, readAccepted, unacceptable, updateAccepted } from "./accept.ts";
 import { CACHE_DIR, cacheFile, replayable, REPLAY_TTL, saveRecording, shotId } from "./cache.ts";
-import { cancelUnstable, capture, HookError, prepare, step, type Shot } from "./capture.ts";
+import { bbox, cancelUnstable, capture, HookError, prepare, step, type Shot } from "./capture.ts";
 import { compare, crops, type Band, type Box, type Region } from "./compare.ts";
 import {
   diffAria,
@@ -128,19 +128,6 @@ function slugs(routes: Route[]): Map<string, string> {
   return out;
 }
 
-/** The smallest box holding every set pixel of a row-major `width`-wide mask. */
-function bbox(mask: Uint8Array, width: number) {
-  let [x0, y0, x1, y1] = [width, Infinity, -1, -1];
-  for (let i = 0; i < mask.length; i++) {
-    if (!mask[i]) continue;
-    const x = i % width,
-      y = Math.floor(i / width);
-    [x0, x1, y1] = [Math.min(x0, x), Math.max(x1, x), y];
-    if (y0 === Infinity) y0 = y;
-  }
-  return { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
-}
-
 /** Only a directory holding nothing but files renderdiff writes is safe to wipe. */
 const ours = (f: string) =>
   f === "report.html" ||
@@ -160,6 +147,14 @@ const broken = (r: ComparedResult) => !!(r.failed?.left.length || r.failed?.righ
 export const reusable = (r: RouteResult) =>
   r.status === "compared" &&
   ((r.diffPixels === 0 && r.unstablePixels === 0 && !broken(r)) || r.accepted);
+
+/** No differing pixel and only anti-aliasing-sized noise: reused by a rerun, still not clean. */
+const nearClean = (r: RouteResult) =>
+  r.status === "compared" &&
+  r.diffPixels === 0 &&
+  r.unstablePixels <= REUSE_UNSTABLE &&
+  !r.varies &&
+  !broken(r);
 
 const files = (r: RouteResult) =>
   r.status === "compared"
@@ -199,7 +194,8 @@ function previous(file: string, now: Record<string, unknown>): Results | string 
     if (key === "config" && value !== was[key]) {
       return (
         `the config (masks, hooks, hidden selectors, blocked URLs, CSS, storage state, --computed, --aria) ` +
-        `differs from the one that wrote ${file}; run without --rerun-failed to start over`
+        `differs from the one that wrote ${file}; run without --rerun-failed to start over, ` +
+        `or run the routes you changed into a new --out and renderdiff merge it with this one`
       );
     }
     if (JSON.stringify(value) !== JSON.stringify(was[key])) {
@@ -286,13 +282,7 @@ export async function run({
       // A shot measured against a replay stands only for a run that would replay it too.
       const replay = had?.status === "compared" && had.rightReplayedFrom;
       const fresh = !replay || (cacheRight && Date.now() - Date.parse(replay) < REPLAY_TTL);
-      const noise =
-        had?.status === "compared" &&
-        had.diffPixels === 0 &&
-        had.unstablePixels <= REUSE_UNSTABLE &&
-        !had.varies &&
-        !broken(had);
-      if (had && (reusable(had) || noise) && fresh) results.push(had);
+      if (had && (reusable(had) || nearClean(had)) && fresh) results.push(had);
       else jobs.push({ route, width });
     }
   }
@@ -422,7 +412,10 @@ export async function run({
         // A replay that went live in part compared against two different moments of the reference.
         if (missed) rightShot.failed.push(`${missed} request(s) not in the recording, loaded live`);
         const raw = [leftShot.png, rightShot.png] as const;
-        const unstablePixels = await cancelUnstable(leftShot, rightShot);
+        const { count: unstablePixels, box: unstableBox } = await cancelUnstable(
+          leftShot,
+          rightShot,
+        );
 
         let { diffPng, spots, ...metrics } = await compare(leftShot, rightShot);
         if (unstablePixels > MAX_UNSTABLE_SHARE * metrics.totalPixels) {
@@ -492,7 +485,7 @@ export async function run({
                 png: raw[1],
                 unstable: u ? mask.map((v, i) => v | u[i]!) : mask,
               };
-              const painted = await cancelUnstable(l, r);
+              const { count: painted } = await cancelUnstable(l, r);
               ({ diffPng, spots, ...metrics } = await compare(l, r));
               [leftShot.png, rightShot.png] = [l.png, r.png];
               varies = regions;
@@ -602,6 +595,7 @@ export async function run({
           status: "compared",
           ...metrics,
           unstablePixels,
+          ...(unstableBox ? { unstableBox } : {}),
           ...(variesPixels ? { varies, variesPixels } : {}),
           images,
           crops: cropped,
@@ -619,6 +613,7 @@ export async function run({
         const details = [
           sel,
           assets ? `failed ${assets}` : "",
+          unstableBox ? `unstable within ${fmtRegion(unstableBox)}` : "",
           regions.length
             ? `${regions.length} region${regions.length > 1 ? "s" : ""}, largest ${fmtRegion(regions[0]!)}`
             : "",
@@ -1131,6 +1126,7 @@ export function compact(
   const out: string[] = [];
   const clean: string[] = [];
   const accepted: string[] = [];
+  const noisy: string[] = [];
   let differ = 0;
   for (const route of routes) {
     const rows = results.filter((r) => name(r) === route);
@@ -1146,6 +1142,11 @@ export function compact(
     }
     if (same.length + acc.length === rows.length) {
       accepted.push(route);
+      continue;
+    }
+    const near = ok.filter((r) => !same.includes(r) && nearClean(r));
+    if (same.length + near.length === rows.length) {
+      noisy.push(route);
       continue;
     }
     if (changed.some((r) => r.diffPixels > 0)) differ++;
@@ -1188,6 +1189,7 @@ export function compact(
       if (r.status === "error") failed.set(r.error, [...(failed.get(r.error) ?? []), r.width]);
     for (const [error, widths] of failed) out.push(`  @${widths.join(",")}  ERROR ${error}`);
   }
+  if (noisy.length) out.unshift(`unstable ≤${REUSE_UNSTABLE}px: ${noisy.join(" ")}`);
   if (accepted.length) out.unshift(`accepted: ${accepted.join(" ")}`);
   if (clean.length) out.unshift(`clean: ${clean.join(" ")}`);
   out.push(
@@ -1240,7 +1242,11 @@ function row(g: ComparedResult[]): string {
   const accepted = g.map(
     (x) => [...(x.bands ?? []), ...x.regions].filter((c) => c.accepted).length,
   );
-  const unstable = Math.max(...g.map((x) => x.unstablePixels));
+  const most = g.reduce((a, x) => (x.unstablePixels > a.unstablePixels ? x : a));
+  const unstable = most.unstablePixels;
+  const box = most.unstableBox
+    ? ` within ${fmtRegion(most.unstableBox)}${g.length > 1 ? ` @${most.width}` : ""}`
+    : "";
   // Band y varies with width; a collapsed row shows the first one's, marked approximate.
   const y = (b: Band) => `@y${g.length > 1 ? "~" : ""}${b.y}`;
   const text = [...r.text.added.map((t) => `+"${t}"`), ...r.text.removed.map((t) => `-"${t}"`)];
@@ -1256,7 +1262,7 @@ function row(g: ComparedResult[]): string {
     r.alignedScore !== null ? `aligned ${pct(r.alignedScore)}` : "",
     ...more(lined.regions.flatMap((c) => (drawn(c) ? [fmtLine(c.line!, approx)] : []))),
     Math.max(...regions) ? `${span(regions, String)} reg` : "",
-    unstable ? `unstable ${unstable.toLocaleString("en-US")}px` : "",
+    unstable ? `unstable ${unstable.toLocaleString("en-US")}px${box}` : "",
     Math.max(...accepted) ? `${span(accepted, String)} accepted` : "",
     text.length ? fmtText(text) : "",
   ]

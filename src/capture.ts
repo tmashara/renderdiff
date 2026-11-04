@@ -548,15 +548,20 @@ async function differing(a: Buffer, b: Buffer): Promise<Uint8Array | null> {
 
 /**
  * Paint every pixel either side found unstable onto both sides, so that noise is left
- * out of the measurement. Rewrites `left.png` / `right.png`; returns the painted pixel count.
+ * out of the measurement. Rewrites `left.png` / `right.png`; returns the painted pixel count
+ * and the box holding them.
  */
-export async function cancelUnstable(left: Shot, right: Shot): Promise<number> {
-  if (!left.unstable && !right.unstable) return 0;
+export async function cancelUnstable(
+  left: Shot,
+  right: Shot,
+): Promise<{ count: number; box?: { x: number; y: number; w: number; h: number } }> {
+  if (!left.unstable && !right.unstable) return { count: 0 };
   const raws = await Promise.all([decode(left.png), decode(right.png)]);
   const w = Math.max(raws[0].info.width, raws[1].info.width);
   const h = Math.max(raws[0].info.height, raws[1].info.height);
   const union = new Uint8Array(w * h);
   let count = 0;
+  let [x0, y0, x1, y1] = [w, h, -1, -1];
   [left, right].forEach((shot, s) => {
     const u = shot.unstable;
     if (!u) return;
@@ -567,6 +572,8 @@ export async function cancelUnstable(left: Shot, right: Shot): Promise<number> {
       if (!union[j]) {
         union[j] = 1;
         count++;
+        const [x, y] = [j % w, (j / w) | 0];
+        [x0, y0, x1, y1] = [Math.min(x0, x), Math.min(y0, y), Math.max(x1, x), Math.max(y1, y)];
       }
     }
   });
@@ -591,7 +598,21 @@ export async function cancelUnstable(left: Shot, right: Shot): Promise<number> {
         .toBuffer();
     }),
   );
-  return count;
+  // ponytail: one box spans scattered patches; cluster like compare's regions() if that misleads.
+  return count ? { count, box: { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 } } : { count };
+}
+
+/** The smallest box holding every set pixel of a row-major `width`-wide mask. */
+export function bbox(mask: Uint8Array, width: number) {
+  let [x0, y0, x1, y1] = [width, Infinity, -1, -1];
+  for (let i = 0; i < mask.length; i++) {
+    if (!mask[i]) continue;
+    const x = i % width,
+      y = Math.floor(i / width);
+    [x0, x1, y1] = [Math.min(x0, x), Math.max(x1, x), y];
+    if (y0 === Infinity) y0 = y;
+  }
+  return { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
 }
 
 type Box = { x: number; y: number; width: number; height: number };
