@@ -15,6 +15,9 @@ inputs:
   routes:
     description: Routes separated by spaces or newlines, e.g. "/ /about /pricing::/plans". Split on spaces, so a per-route selector ('/route @sel') doesn't work here; put it in the config. Optional when the config lists them.
     default: ""
+  browser:
+    description: chromium or webkit; both sides are shot in it. For both, use two steps with their own out and artifact-name.
+    default: chromium
   config:
     description: Path to a renderdiff config file. Default renderdiff.config.{ts,mts,js,mjs} in the workspace.
     default: ""
@@ -70,15 +73,17 @@ runs:
     - uses: actions/cache@v4
       with:
         path: ${{ runner.tool_cache }}/renderdiff-ms-playwright
-        key: renderdiff-chromium-${{ runner.os }}-${{ runner.arch }}-${{ steps.pw.outputs.version }}
+        key: renderdiff-${{ inputs.browser }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.pw.outputs.version }}
 
     - shell: bash
       working-directory: ${{ github.action_path }}
       env:
         PLAYWRIGHT_BROWSERS_PATH: ${{ runner.tool_cache }}/renderdiff-ms-playwright
+        BROWSER: ${{ inputs.browser }}
       run: |
         npm ci --omit=dev --ignore-scripts --no-audit --no-fund
-        npx playwright install --with-deps chromium
+        case "$BROWSER" in chromium|webkit) ;; *) echo "browser must be chromium or webkit, got '$BROWSER'"; exit 2 ;; esac
+        npx playwright install --with-deps "$BROWSER"
 
     - id: run
       shell: bash
@@ -89,6 +94,7 @@ runs:
         RIGHT: ${{ inputs.right }}
         ROUTES: ${{ inputs.routes }}
         CONFIG: ${{ inputs.config }}
+        BROWSER: ${{ inputs.browser }}
         WIDTHS: ${{ inputs.widths }}
         THRESHOLD: ${{ inputs.threshold }}
         CONCURRENCY: ${{ inputs.concurrency }}
@@ -119,7 +125,7 @@ runs:
         fi
 
         if [ "$code" = 0 ]; then
-          args=("--left=$LEFT" "--right=$RIGHT" "--out=$OUT" --no-progress)
+          args=("--left=$LEFT" "--right=$RIGHT" "--out=$OUT" "--browser=$BROWSER" --no-progress)
           read -ra routes <<< "$(echo "$ROUTES" | tr '\n' ' ')"
           args+=("${routes[@]}")
           for w in ${WIDTHS//,/ }; do args+=("--width=$w"); done
@@ -139,7 +145,7 @@ runs:
           set -e
           rm -f "${state:-}"
 
-          accepted="$(dirname "${CONFIG:-./_}")/renderdiff.accepted.json"
+          accepted="$(dirname "${CONFIG:-./_}")/renderdiff.accepted$([ "$BROWSER" = chromium ] || echo ".$BROWSER").json"
           if [ -n "$ACCEPT" ] && [ -f "$accepted" ] && [ -d "$OUT" ]; then cp "$accepted" "$OUT/"; fi
         fi
         echo "exit-code=$code" >> "$GITHUB_OUTPUT"

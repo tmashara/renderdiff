@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Box decoration break</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for --browser webkit. The left side lost the -webkit- prefix to a lint autofix.
+   Chromium honours both spellings, so the pair is pixel parity there; WebKit honours only the
+   prefixed one, so on the left each wrapped line of the mark loses its own border and padding. */
+.mark { background: var(--fill); border: 2px solid var(--ink); border-radius: 6px; padding: 0 8px; box-decoration-break: clone; }
+.wrap { width: 288px; line-height: 32px; }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Box decoration break</h1>
+<p class="wrap"><span class="mark">A highlighted phrase that wraps onto several lines of text inside its narrow column</span></p>
+<section class="notes">
+<h2>Notes</h2>
+<p>Each line of a wrapped inline box gets its own border, padding and corners only when the browser reads the declaration; otherwise the box is sliced at each line break.</p>
+</section>
+</div>
+</body>
+</html>

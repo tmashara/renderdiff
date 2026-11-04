@@ -30,7 +30,7 @@ the agent needs a cheap, trustworthy loop: change → `renderdiff` → explain e
 **Don't use it for:**
 
 - intentional redesigns: when everything is meant to change, the score says nothing
-- cross-browser testing (Chromium only) or stored-baseline snapshot tests (both origins must be live)
+- cross-browser testing (each run shoots both sides in one engine, Chromium or WebKit, never one against the other) or stored-baseline snapshot tests (both origins must be live)
 - discovering routes: you list them, or `--sitemap` reads the reference's sitemap; there is no crawler
 - component libraries in isolation; Storybook-based tools fit that better
 
@@ -88,7 +88,8 @@ production on every pull request, with the result in the job summary:
 Node >= 22.18 and Chromium (`npx playwright install chromium`). `npm install -g renderdiff`
 installs it globally. If the bundled Chromium won't launch, renderdiff falls back to an
 installed Google Chrome on both sides and says so; `meta.browser` in `results.json` records
-which ran.
+which ran. `--browser webkit` needs WebKit too (`npx playwright install webkit`, with
+`--with-deps` on Linux).
 
 ## Usage
 
@@ -107,6 +108,7 @@ renderdiff <left-origin> <right-origin> <route…> [options]
 | `--out <dir>` | Output directory, wiped at the start of a run. Default `./renderdiff-out`. A directory holding files renderdiff didn't write is refused. |
 | `--concurrency <n>` | Parallel workers. Default half the CPU cores, between 2 and 8. Lower it when one side is someone's live site. |
 | `--config <path>` | Config file. Default: `renderdiff.config.{ts,mts,js,mjs}` in cwd. |
+| `--browser <name>` | `chromium` (default) or `webkit`: both sides are shot in it, for CSS that only Safari reads differently, such as a dropped `-webkit-` prefix Chromium no longer needs. WebKit writes to `./renderdiff-out-webkit` unless `--out` or `outDir` say otherwise and accepts into `renderdiff.accepted.webkit.json`, so a Chromium and a WebKit run keep separate results. On WebKit, animated GIFs keep playing (their pixels show as unstable and aren't measured) and `--computed` doesn't force `:hover`/`:focus-visible`. |
 | `--selector <sel>` | Compare the one element this Playwright selector matches, on both sides, instead of the whole page. Applies to every route without its own `@selector`, over the config's per-route `selector`. |
 | `--left-selector <sel>`, `--right-selector <sel>` | That side's selector, over `--selector`. One without the other side (or `--selector`) is an error. |
 | `--mask <sel>` | Paint this Playwright selector over on both sides, on every route; repeatable. Added to the config's masks and listed in the report as coverage given up. |

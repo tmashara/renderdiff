@@ -69,7 +69,7 @@ export async function probe(
   cfg: ResolvedConfig,
   loads: number,
 ): Promise<number> {
-  const { browser } = await launch();
+  const { browser } = await launch(cfg.browser);
   const now = Math.floor(Date.now() / 60_000) * 60_000;
   const done: { snap: Snapshot; row: Record<string, string[]> }[] = [];
   let next = 0;

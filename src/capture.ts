@@ -538,6 +538,8 @@ export async function capture(
         `at ${url} — likely a broken layout, not a real page`,
     );
   }
+  // WebKit holds fonts.ready, which its screenshot waits on, until the load event, which a stalled frame never fires.
+  if (webkit(page)) await page.evaluate(() => document.readyState === "complete" || window.stop());
   const tiled = area.height > MAX_CAPTURE_HEIGHT;
   // Read on both sides of the shot, so a box that moves while it is taken stays covered.
   const shoot = async () => {
@@ -722,8 +724,11 @@ async function captureTiled(page: Page, box: Box): Promise<Buffer> {
 
 const sessions = new WeakMap<Page, Promise<CDPSession>>();
 
-/** A PNG of `clip`, in page px, on the page's one CDP session. */
+export const webkit = (page: Page) => page.context().browser()?.browserType().name() === "webkit";
+
+/** A PNG of `clip`, in page px, on the page's one CDP session; WebKit has none, and renders it all offscreen. */
 async function grab(page: Page, clip: Box, beyond: boolean): Promise<Buffer> {
+  if (webkit(page)) return page.screenshot({ fullPage: true, clip });
   let s = sessions.get(page);
   if (!s) sessions.set(page, (s = page.context().newCDPSession(page)));
   const { data } = await (

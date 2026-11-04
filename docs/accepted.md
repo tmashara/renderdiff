@@ -19,6 +19,8 @@ It records every unaccepted change in that scope, not only the ones you meant, s
 unintended ones before accepting, or check `git diff renderdiff.accepted.json` afterwards and
 delete the lines you didn't mean.
 Commit the file; it is one entry per line, so its diff reads as what was accepted.
+A `--browser webkit` run reads and writes `renderdiff.accepted.webkit.json` instead: an
+entry's pixel hash only ever matches the engine it was taken in, so each engine keeps its own.
 
 A shot whose every difference matches an accepted one is `accepted`: it is listed on an
 `accepted:` line like `clean:`, doesn't count as differing or toward the exit code, and has

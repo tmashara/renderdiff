@@ -524,7 +524,7 @@ file, not each line), scores rounded down to four decimals (so a shot that diffe
     "clock": "…",                // the instant both sides' clocks start at
     "blockUrlPatterns": ["…"], "hideSelectors": ["…"],
     "masks": [{ "urlPath": "/pricing", "reason": "live star count" }],   // no urlPath: every route
-    "browser": { "name": "chromium", "version": "…" },   // "chrome" when it fell back
+    "browser": { "name": "chromium", "version": "…" },   // "chrome" when it fell back; "webkit" with --browser webkit
     "storageState": { "left": "auth.json", "right": null },   // file names only
     "config": "…",              // hash of what decides a shot; --rerun-failed needs it unchanged
     "rightReplayedFrom": null,  // --cache-right: when the replayed recording was made

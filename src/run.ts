@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { chromium, errors, type Browser, type BrowserContext, type Page } from "playwright";
+import { chromium, errors, webkit, type Browser, type BrowserContext, type Page } from "playwright";
 import sharp from "sharp";
 import { applyAccepted, readAccepted, unacceptable, updateAccepted } from "./accept.ts";
 import { CACHE_DIR, cacheFile, replayable, REPLAY_TTL, saveRecording, shotId } from "./cache.ts";
@@ -305,7 +305,7 @@ export async function run({
   const reused = new Set(results);
 
   const stems = slugs(routes);
-  const launched = jobs.length ? await launch() : null;
+  const launched = jobs.length ? await launch(cfg.browser) : null;
   const queue = [...jobs];
   let done = 0;
   let down = "";
@@ -715,6 +715,10 @@ export async function run({
   if (progress) {
     console.log(`Capturing ${jobs.length} pair(s) with ${cfg.concurrency} worker(s)...\n`);
   }
+  if (cfg.computed && cfg.browser && jobs.length)
+    console.log(
+      `--computed on ${cfg.browser}: links and controls aren't forced into :hover/:focus-visible (that needs Chromium)`,
+    );
   if (launched) {
     await Promise.all(
       Array.from({ length: cfg.concurrency }, (_, i) => worker(launched.browser, i)),
@@ -909,6 +913,12 @@ export async function merge(fullDir: string, partialDir: string, outDir: string)
         `${side} differs: ${full.meta[side]} in ${fullDir}, ${partial.meta[side]} in ${partialDir}`,
       );
   }
+  const engine = (r: Results) => (r.meta.browser.name === "webkit" ? "webkit" : "chromium");
+  if (engine(full) !== engine(partial))
+    throw new Error(
+      `browser differs: ${engine(full)} in ${fullDir}, ${engine(partial)} in ${partialDir}; ` +
+        `one engine's pixels never match the other's`,
+    );
   checkOut([fullDir, partialDir], outDir);
 
   const key = (r: RouteResult) => `${name(r)}@${r.width}`;
@@ -1065,7 +1075,17 @@ const ARGS = [
  * A missing browser binary is the likeliest first-run failure, so fall back to the system
  * Chrome (both sides share it, so the comparison stays symmetric), then name the fix.
  */
-export async function launch() {
+export async function launch(browser?: "webkit") {
+  if (browser === "webkit") {
+    try {
+      return { browser: await webkit.launch(), channel: "webkit" };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new Error(
+        `could not launch WebKit:\n  ${msg}\n\n  Install the browser with:  npx playwright install webkit`,
+      );
+    }
+  }
   try {
     return { browser: await chromium.launch({ args: ARGS }), channel: null };
   } catch (e) {

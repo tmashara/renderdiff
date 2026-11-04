@@ -463,7 +463,7 @@ commas: `JSON.parse` the whole file, not each line. Paths are relative to the ou
   (each rule group once with `matched` and `unmatched` `[{ url, widths }]`) and `prefixes`
   (each declaration once: `side`, `declaration`, `at`).
 - **`meta`:** origins, widths, threshold, `clock`, block patterns, hidden selectors, mask
-  reasons, `browser` (`chromium`, or `chrome` after a fallback), storage state file names,
+  reasons, `browser` (`chromium`, `chrome` after a fallback, or `webkit`), storage state file names,
   `config` hash, `rightReplayedFrom`, `freezeVideo`, `lottieFrame` (only when set), `platform`, `rerun` (`{ rerun, reused }` or
   null), with `--computed` `unreadableSheets` `{ left, right }`.
 
@@ -471,6 +471,10 @@ commas: `JSON.parse` the whole file, not each line. Paths are relative to the ou
 
 - **Browser:** if the bundled Chromium won't launch, the system Chrome is used on both sides
   and the run says so; otherwise it prints the `npx playwright install chromium` hint.
+  `--browser webkit` shoots both sides in WebKit (`npx playwright install webkit`) into
+  `renderdiff-out-webkit`, accepting into `renderdiff.accepted.webkit.json`: for CSS only
+  Safari reads differently. There animated GIFs aren't frozen (unstable, unmeasured), and
+  `--computed` forces no `:hover`/`:focus-visible`. `merge` refuses to mix engines.
 - **Pinned on both sides:** clock (one instant per run, floored to the minute), seeded
   `Math.random`, UTC, en-US, light scheme, reduced motion; animations and transitions stilled,
   animated images and SVG animations held on their first frame.

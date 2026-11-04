@@ -152,6 +152,9 @@ export const DEFAULT_WIDTHS = [1440, 1152, 896, 704, 375];
 /** Directory a run writes its screenshots and `report.html` into. Relative to cwd. */
 export const DEFAULT_OUT_DIR = "renderdiff-out";
 
+export const ENGINES = ["chromium", "webkit"] as const;
+export type Engine = (typeof ENGINES)[number];
+
 /**
  * Captures run in parallel: half the cores, between 2 and 8. A run is bound by waiting on
  * pages, not CPU, and each worker holds two. No extra rate limiting needed: each worker
@@ -326,6 +329,8 @@ export interface RenderdiffConfig {
   freezeVideo?: boolean;
   /** Hold every lottie-player on this frame once it loads. Unset: left playing. */
   lottieFrame?: number;
+  /** The engine both sides are shot in. Default `chromium`. */
+  browser?: Engine;
 }
 
 /** A fully merged config. Everything the run needs, nothing optional. */
@@ -350,6 +355,8 @@ export interface ResolvedConfig {
   lottieFrame?: number;
   /** Optional like `lottieFrame`. */
   aria?: true;
+  /** Optional like `lottieFrame`: unset is Chromium. */
+  browser?: "webkit";
 }
 
 /** package.json's version; the same relative path resolves from `src/` and `dist/`. */
@@ -412,6 +419,7 @@ const CONFIG_KEYS = Object.keys({
   maskMedia: 0,
   freezeVideo: 0,
   lottieFrame: 0,
+  browser: 0,
 } satisfies Record<keyof RenderdiffConfig, 0>);
 const MASK_KEYS = Object.keys({
   selector: 0,
@@ -612,6 +620,8 @@ function validate(c: Record<string, unknown>, file: string) {
     !(Number.isSafeInteger(c.lottieFrame) && (c.lottieFrame as number) >= 0)
   )
     bad("lottieFrame", "a whole number ≥ 0");
+  if (c.browser !== undefined && !ENGINES.includes(c.browser as Engine))
+    bad("browser", `one of ${ENGINES.map((e) => `"${e}"`).join(", ")}`);
 }
 
 /** CLI-supplied values. `undefined` means "not passed", so the config file wins. */
@@ -632,6 +642,7 @@ export interface CliOverrides {
   hideSelectors?: string[];
   maskMedia?: boolean;
   freezeVideo?: boolean;
+  browser?: Engine;
 }
 
 /** Merge built-in defaults, the config file, and CLI flags into one resolved config. */
@@ -664,13 +675,17 @@ export function resolveConfig(file: RenderdiffConfig, cli: CliOverrides): Resolv
     ...(cli.hideSelectors ?? []),
   ];
   const freezeVideo = cli.freezeVideo ?? file.freezeVideo ?? true;
+  const webkit = (cli.browser ?? file.browser) === "webkit";
 
   return {
     left: left.replace(/\/+$/, ""),
     right: right.replace(/\/+$/, ""),
     widths: cli.widths ?? file.widths ?? [...DEFAULT_WIDTHS],
     threshold: cli.threshold ?? file.threshold ?? null,
-    outDir: path.resolve(process.cwd(), cli.outDir ?? file.outDir ?? DEFAULT_OUT_DIR),
+    outDir: path.resolve(
+      process.cwd(),
+      cli.outDir ?? file.outDir ?? (webkit ? `${DEFAULT_OUT_DIR}-webkit` : DEFAULT_OUT_DIR),
+    ),
     concurrency: cli.concurrency ?? file.concurrency ?? DEFAULT_CONCURRENCY,
     blockUrlPatterns: [...DEFAULT_BLOCK_URL_PATTERNS, ...(file.blockUrlPatterns ?? [])],
     hideSelectors,
@@ -698,6 +713,7 @@ export function resolveConfig(file: RenderdiffConfig, cli: CliOverrides): Resolv
     freezeVideo,
     lottieFrame: file.lottieFrame,
     aria: (cli.aria ?? file.aria) || undefined,
+    ...(webkit ? { browser: "webkit" as const } : {}),
   };
 }
 

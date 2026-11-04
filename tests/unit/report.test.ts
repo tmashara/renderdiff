@@ -465,6 +465,11 @@ describe("renderdiff merge", () => {
     const [a, b] = [full(), partial()];
     const other = partial([], { right: "https://other.example" });
     assert.match((await merge(a, other, path.join(tempDir(), "o"))).stderr, /✗ right differs/);
+    const engine = partial([], { browser: { name: "webkit", version: "26.5" } });
+    assert.match(
+      (await merge(a, engine, path.join(tempDir(), "o"))).stderr,
+      /✗ browser differs: chromium in .*, webkit in /,
+    );
     const self = await merge(a, b, a);
     assert.equal(self.code, 2);
     assert.match(self.stderr, /is or is inside/);

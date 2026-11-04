@@ -71,6 +71,7 @@ export const GUARDRAILS = [
   "rules",
   "prefix",
   "prefix-same",
+  "box-decoration-break",
   "reflowing",
   "waapi",
   "geometry",

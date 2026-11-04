@@ -23,7 +23,10 @@ honestly. This is what renderdiff does to make sure of that.
 - **Kills animation, transitions, caret blink and smooth scrolling** (CSS `scroll-behavior` and
   `behavior: "smooth"` in script scrolls, from before any hook), and hides common consent banners and
   dev toolbars. Animated images (GIF, WebP, APNG) and SVG animations show their first frame;
-  it is a Blink setting, so cross-origin and CSS background images freeze too.
+  it is a Blink setting, so cross-origin and CSS background images freeze too. WebKit
+  (`--browser webkit`) has no such setting: there an animated image keeps playing, so its
+  pixels are caught as unstable, painted out of the score and can't be accepted. Mask one
+  that flips between the two sides.
 - **Settles the page** — makes native lazy images eager, scrolls every viewport-height
   slice a frame at a time, to the bottom even as the page grows, so script lazy loaders fire, waits for every image to decode,
   `document.fonts.ready` (at most 5s) and up to 3s for the network to go 250ms with nothing in flight
