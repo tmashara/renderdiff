@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layout parity</title>
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+/* GUARD RAIL for page-shot geometry. Every row has a fixed height, so the shot's size is
+   arithmetic, not font metrics: rows sum to 1,152px and html's padding makes it 1,200, past
+   body. overflow-x hides #edge's spill, and #tail hangs past the document's end. */
+html { padding-bottom: 48px; }
+body { overflow-x: hidden; position: relative; }
+.row { height: 288px; overflow: hidden; padding: 0 16px; }
+.short { height: 192px; }
+#box { width: 304px; height: 200px; background: var(--fill); border: 1px solid var(--line); }
+#edge { position: absolute; top: 32px; right: -160px; width: 300px; height: 100px; background: var(--fill); }
+.end { position: relative; height: 96px; overflow: hidden; }
+#tail { position: absolute; top: 0; left: 0; width: 200px; height: 400px; background: var(--fill); }
+</style>
+</head>
+<body>
+<div class="row">
+<h1>Geometry</h1>
+<p>A page whose size is fixed by construction, so the shot's width and height can be stated exactly.</p>
+</div>
+<div class="row"><div id="box"></div></div>
+<div class="row">
+<h2>Notes</h2>
+<p>Each row is a fixed height with its overflow hidden, so wrapping text never moves anything. The box on the right edge spills past the viewport, behind overflow-x on the body, and the tail is taller than the row that clips it.</p>
+</div>
+<div class="row short"></div>
+<div class="end"><div id="tail"></div></div>
+<div id="edge"></div>
+</body>
+</html>

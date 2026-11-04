@@ -1,5 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import type { Locator, Page, Request, Response } from "playwright";
+import type { CDPSession, Locator, Page, Request, Response } from "playwright";
 import sharp from "sharp";
 import { label, MASK_COLOR, masksFor, type ResolvedConfig, type Route } from "./config.ts";
 
@@ -502,14 +502,11 @@ export async function capture(
   // Read on both sides of the shot, so a box that moves while it is taken stays covered.
   const shoot = async () => {
     const before = await read();
-    const png = tiled
-      ? await captureTiled(page, area)
-      : await page.screenshot({
-          fullPage: true,
-          // Playwright trims the clip's height to the document's.
-          clip: clip ?? (hidesX ? { x: 0, y: 0, width, height: 1e6 } : undefined),
-          animations: "disabled",
-        });
+    const png = await stilled(page, () =>
+      tiled
+        ? captureTiled(page, area)
+        : pageShot(page, clip ?? (hidesX ? { x: 0, y: 0, width, height: 1e6 } : undefined)),
+    );
     return paintBoxes(png, [...before, ...(await read())]);
   };
 
@@ -520,13 +517,13 @@ export async function capture(
   for (let n = 2; ; n++) {
     await page.waitForTimeout(50);
     const png = await shoot();
-    if (png.equals(prev))
-      return { png, unstable: null, blank, text, origin, failed, fonts: loadedFonts, marked };
-    if (n === tries)
+    const stable = png.equals(prev);
+    if (stable || n === tries)
       return {
-        png,
-        prev,
-        unstable: await differing(prev, png),
+        // Chromium's fast encoder writes larger files than sharp's; tiles are sharp's already.
+        png: tiled ? png : await sharp(png).png().toBuffer(),
+        ...(stable ? {} : { prev }),
+        unstable: stable ? null : await differing(prev, png),
         blank,
         text,
         origin,
@@ -664,31 +661,146 @@ async function paintBoxes(png: Buffer, boxes: Box[]): Promise<Buffer> {
  * `deviceScaleFactor` is 1 (`CONTEXT_OPTIONS` in config.ts), so clip coords are CSS px.
  */
 async function captureTiled(page: Page, box: Box): Promise<Buffer> {
-  const client = await page.context().newCDPSession(page);
-  try {
-    const tiles: Buffer[] = [];
-    for (let y = 0; y < box.height; y += TILE_HEIGHT) {
-      const height = Math.min(TILE_HEIGHT, box.height - y);
-      const { data } = await client.send("Page.captureScreenshot", {
-        format: "png",
-        captureBeyondViewport: true,
-        clip: { x: box.x, y: box.y + y, width: box.width, height, scale: 1 },
-      });
-      tiles.push(Buffer.from(data, "base64"));
-    }
-
-    return sharp({
-      create: {
-        width: box.width,
-        height: box.height,
-        channels: 4,
-        background: MASK_COLOR,
-      },
-    })
-      .composite(tiles.map((input, i) => ({ input, left: 0, top: i * TILE_HEIGHT })))
-      .png()
-      .toBuffer();
-  } finally {
-    await client.detach();
+  const tiles: Buffer[] = [];
+  for (let y = 0; y < box.height; y += TILE_HEIGHT) {
+    const height = Math.min(TILE_HEIGHT, box.height - y);
+    tiles.push(await grab(page, { ...box, y: box.y + y, height }, true));
   }
+
+  return sharp({
+    create: {
+      width: box.width,
+      height: box.height,
+      channels: 4,
+      background: MASK_COLOR,
+    },
+  })
+    .composite(tiles.map((input, i) => ({ input, left: 0, top: i * TILE_HEIGHT })))
+    .png()
+    .toBuffer();
+}
+
+const sessions = new WeakMap<Page, Promise<CDPSession>>();
+
+/** A PNG of `clip`, in page px, on the page's one CDP session. */
+async function grab(page: Page, clip: Box, beyond: boolean): Promise<Buffer> {
+  let s = sessions.get(page);
+  if (!s) sessions.set(page, (s = page.context().newCDPSession(page)));
+  const { data } = await (
+    await s
+  ).send("Page.captureScreenshot", {
+    format: "png",
+    // Lossless either way, and sharp re-encodes every shot kept.
+    optimizeForSpeed: true,
+    captureBeyondViewport: beyond,
+    clip: { ...clip, scale: 1 },
+  });
+  return Buffer.from(data, "base64");
+}
+
+type Resumable = Window & { __renderdiffResume?: () => void };
+
+/** Runs in each frame: Playwright 1.62's screenshot animation and caret step, until `__renderdiffResume`. */
+function still() {
+  // A frame whose last prep lost the race to the deadline may still hold it.
+  (window as Resumable).__renderdiffResume?.();
+  const roots: (Document | ShadowRoot)[] = [];
+  const walk = (root: Document | ShadowRoot) => {
+    roots.push(root);
+    root.querySelectorAll("*").forEach((e) => e.shadowRoot && walk(e.shadowRoot));
+  };
+  walk(document);
+  const carets = new Map<HTMLElement, [string, string]>();
+  for (const root of roots)
+    root.querySelectorAll<HTMLElement>("input,textarea,[contenteditable]").forEach((e) => {
+      carets.set(e, [
+        e.style.getPropertyValue("caret-color"),
+        e.style.getPropertyPriority("caret-color"),
+      ]);
+      e.style.setProperty("caret-color", "transparent", "important");
+    });
+  const cancelled = new Set<Animation>();
+  const handle = (root: Document | ShadowRoot) => {
+    for (const a of root.getAnimations()) {
+      if (!a.effect || a.playbackRate === 0 || cancelled.has(a)) continue;
+      try {
+        if (Number.isFinite(a.effect.getComputedTiming().endTime)) a.finish();
+        else {
+          a.cancel();
+          cancelled.add(a);
+        }
+      } catch {}
+    }
+  };
+  const listening = roots.map((root) => {
+    const h = () => handle(root);
+    h();
+    root.addEventListener("transitionrun", h);
+    root.addEventListener("animationstart", h);
+    return () => {
+      root.removeEventListener("transitionrun", h);
+      root.removeEventListener("animationstart", h);
+    };
+  });
+  (window as Resumable).__renderdiffResume = () => {
+    carets.forEach(([v, p], e) => e.style.setProperty("caret-color", v, p));
+    listening.forEach((off) => off());
+    cancelled.forEach((a) => {
+      try {
+        a.play();
+      } catch {}
+    });
+    delete (window as Resumable).__renderdiffResume;
+  };
+}
+
+/** `shot`, with every frame `still` and fonts loaded, as `page.screenshot` prepares a page. */
+async function stilled<T>(page: Page, shot: () => Promise<T>): Promise<T> {
+  const frames = page.frames();
+  // A child frame whose document never commits would hold evaluate forever; Playwright skips it.
+  const each = (fn: () => void) =>
+    Promise.all(
+      frames.map((f) => {
+        const done = f.evaluate(fn).catch(() => {});
+        return f === page.mainFrame()
+          ? done
+          : Promise.race([done, sleep(1_000, undefined, { ref: false })]);
+      }),
+    );
+  await each(still);
+  try {
+    await page
+      .evaluate(() =>
+        Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 5_000))]).then(
+          () => {},
+        ),
+      )
+      .catch(() => {});
+    return await shot();
+  } finally {
+    await each(() => (window as Resumable).__renderdiffResume?.());
+  }
+}
+
+/** Runs in the page: its full size, as Playwright 1.62 measures it for `fullPage`. */
+function docSize() {
+  const els = [document.body ?? document.documentElement, document.documentElement];
+  return {
+    width: Math.max(...els.flatMap((e) => [e.scrollWidth, e.offsetWidth, e.clientWidth])),
+    height: Math.max(...els.flatMap((e) => [e.scrollHeight, e.offsetHeight, e.clientHeight])),
+  };
+}
+
+/** `page.screenshot({ fullPage: true, clip })` as Playwright 1.62 takes it on Chromium. */
+async function pageShot(page: Page, clip?: Box): Promise<Buffer> {
+  const size = await page.evaluate(docSize);
+  const c = clip ?? { x: 0, y: 0, ...size };
+  const [x, y] = [Math.max(0, Math.min(c.x, size.width)), Math.max(0, Math.min(c.y, size.height))];
+  const w = Math.max(0, Math.min(c.x + c.width, size.width)) - x;
+  const h = Math.max(0, Math.min(c.y + c.height, size.height)) - y;
+  if (w <= 0 || h <= 0)
+    throw new Error("Clipped area is either empty or outside the resulting image");
+  const view = page.viewportSize()!;
+  const fits = size.width <= view.width && size.height <= view.height;
+  return grab(page, { x, y, width: w, height: h }, !fits);
 }

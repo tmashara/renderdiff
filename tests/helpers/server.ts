@@ -120,6 +120,8 @@ function handler(side: Side, hits: Map<string, number>): http.RequestListener {
           return send(200, asset.type, asset.body);
         }
 
+        // Accepted and never answered, for a frame whose document never commits.
+        if (pathname === "/never") return;
         if (req.method === "GET") hits.set(pathname, (hits.get(pathname) ?? 0) + 1);
         const html = await pageHtml(pathname, side);
         if (html === null) return send(404, "text/html; charset=utf-8", "no such route");
