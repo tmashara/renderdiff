@@ -28,11 +28,11 @@ Pixels decide the score and the exit code in every mode.
 
 ## Loop
 
-1. **Serve both sides as production builds**: the base commit in a `git worktree` on one
-   port (right), your change on another (left), same data (static build:
-   `npx serve -l 3002 dist`). Production as the reference is a later second pass. Routes:
-   every page the change can reach (`--sitemap`); `--dry-run` prints the pairs.
-   § Reference and routes; moved page, component, sign-in, click state: § Scoping.
+1. **Serve both sides as production builds**: the base commit in a `git worktree` outside
+   the repo on a fixed port (right, 3002), your change on another (left, 3001), same data.
+   Production as the reference is a later second pass. Routes: every page the change can
+   reach (`--sitemap`); `--dry-run` prints the pairs. Recipe: § Reference and routes; moved
+   page, component, sign-in, click state: § Scoping.
    The project has a `renderdiff-<project>` skill: its build/serve commands, ports and config
    replace this step and step 2's masks. None, and the project will be run more than once:
    offer `/renderdiff init` ([init.md](init.md)) after this check.
