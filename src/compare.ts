@@ -1,11 +1,10 @@
 import pixelmatch from "pixelmatch";
 import sharp, { type OverlayOptions } from "sharp";
-import type { Shot } from "./capture.ts";
+import { decode, type Shot } from "./capture.ts";
 import type { ElementDiff } from "./locate.ts";
-import { MASK_COLOR } from "./config.ts";
 
 /**
- * Pixel diff between two shots. sharp decodes/pads/encodes, pixelmatch compares.
+ * Pixel diff between two shots. sharp decodes/encodes, pixelmatch compares.
  *
  * No pngjs: it exists to bridge PNG<->raw RGBA, and sharp already is that bridge.
  *
@@ -113,35 +112,37 @@ const CELL = 16;
 const MAGENTA = 0xffff00ff;
 
 /**
- * Pad a shot onto a common (w, h) canvas so both frames are the same size for
+ * A decoded shot on a common (w, h) canvas so both frames are the same size for
  * pixelmatch, with the image top-left and magenta everywhere else.
  *
- * Composited onto a created canvas rather than `sharp.extend()`, which rejects any
- * single edge past 10 000px. Two pages can easily differ by more than that — one long
- * scrolling page against a short one — and that is exactly the case worth diffing.
+ * Rows copied rather than `sharp.extend()`, which rejects any single edge past 10 000px.
+ * Two pages can easily differ by more than that — one long scrolling page against a short
+ * one — and that is exactly the case worth diffing.
  */
-const toRaw = (png: Buffer, w: number, h: number) =>
-  sharp({
-    create: { width: w, height: h, channels: 4, background: MASK_COLOR },
-  })
-    .composite([{ input: png, left: 0, top: 0 }])
-    .raw()
-    .ensureAlpha()
-    .toBuffer();
+function pad({ data, info }: Awaited<ReturnType<typeof decode>>, w: number, h: number): Buffer {
+  if (info.width === w && info.height === h) return data;
+  const out = Buffer.alloc(w * h * 4);
+  new Uint32Array(out.buffer, out.byteOffset, w * h).fill(MAGENTA);
+  const row = info.width * 4;
+  for (let y = 0; y < info.height; y++) data.copy(out, y * w * 4, y * row, y * row + row);
+  return out;
+}
 
 export async function compare(left: Shot, right: Shot): Promise<Diff> {
   // Real PNG dimensions, not the `scrollHeight` we measured: that can disagree with
   // what Chromium actually painted.
-  const [lm, rm] = await Promise.all([sharp(left.png).metadata(), sharp(right.png).metadata()]);
-  const lw = lm.width!,
-    lh = lm.height!,
-    rw = rm.width!,
-    rh = rm.height!;
+  const same = left.png.equals(right.png);
+  const [ld, rd] = await Promise.all([decode(left.png), same ? null : decode(right.png)]);
+  const lw = ld.info.width,
+    lh = ld.info.height,
+    rw = rd?.info.width ?? lw,
+    rh = rd?.info.height ?? lh;
 
   const w = Math.max(lw, rw);
   const h = Math.max(lh, rh);
 
-  const [l, r] = await Promise.all([toRaw(left.png, w, h), toRaw(right.png, w, h)]);
+  const l = pad(ld, w, h);
+  const r = rd ? pad(rd, w, h) : l;
 
   const text = textDiff(left.text, right.text);
   const out = Buffer.alloc(w * h * 4);

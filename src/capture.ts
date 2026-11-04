@@ -538,7 +538,7 @@ export async function capture(
   }
 }
 
-const decode = (png: Buffer) =>
+export const decode = (png: Buffer) =>
   sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
 
 /** Pixels that differ between two shots of the same load. Null if none, or if the size changed. */
