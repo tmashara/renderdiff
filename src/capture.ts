@@ -269,6 +269,63 @@ function adoptCss(css: string) {
   document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
 }
 
+/**
+ * `root`'s innerText lines (the body's when null), whitespace collapsed, empty lines dropped,
+ * read with `masks` hidden; visibility keeps layout. Also what the blank check needs.
+ */
+export async function readText(page: Page, root: Locator | null, masks: Locator[]) {
+  const hidden: (string | null)[][] = [];
+  try {
+    for (const l of masks) {
+      hidden.push(
+        await l.evaluateAll((els) =>
+          els.map((e) => {
+            const prev = e.getAttribute("style");
+            (e as HTMLElement).style.visibility = "hidden";
+            return prev;
+          }),
+        ),
+      );
+    }
+    const { innerText, ...rest } = await (root ?? page.locator(":root")).evaluate((root) => {
+      const body = document.body ?? document.documentElement;
+      return {
+        scrollHeight: document.documentElement.scrollHeight,
+        innerText:
+          ((root === document.documentElement ? body : root) as HTMLElement).innerText || "",
+        pageText: body.innerText?.length ?? 0,
+        media: Array.from(
+          document.querySelectorAll(
+            "img, svg, canvas, video, iframe, input, textarea, select, [data-renderdiff-rendered]",
+          ),
+        ).some((e) => {
+          const r = e.getBoundingClientRect();
+          return r.width * r.height >= 1024;
+        }),
+      };
+    });
+    const text = innerText
+      .split("\n")
+      .map((line) => line.replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+    return { text, ...rest };
+  } finally {
+    // Reverse order, so an element two masks share gets its original value back.
+    // The attribute itself: an emptied `style=""` would read as a markup change to --computed.
+    for (let i = hidden.length - 1; i >= 0; i--) {
+      await masks[i]!.evaluateAll(
+        (els, prev) =>
+          els.forEach((e, j) => {
+            const v = prev[j];
+            if (v === null || v === undefined) e.removeAttribute("style");
+            else e.setAttribute("style", v);
+          }),
+        hidden[i]!,
+      );
+    }
+  }
+}
+
 export async function capture(
   page: Page,
   url: string,
@@ -378,56 +435,14 @@ export async function capture(
     throw new Error(`selector "${selector}" matched ${n} elements ${where}, expected 1`);
   }
 
-  // Masks only paint the PNG, so hide them for the text read too; visibility keeps layout.
   const masks = masksFor(cfg, page, route);
-  const hidden: string[][] = [];
-  for (const l of masks) {
-    hidden.push(
-      await l.evaluateAll((els) =>
-        els.map((e) => {
-          const prev = (e as HTMLElement).style.visibility;
-          (e as HTMLElement).style.visibility = "hidden";
-          return prev;
-        }),
-      ),
-    );
-  }
   const marked = await page.locator("[data-renderdiff-mask]").evaluateAll((els) =>
     els.map((e) => {
       const v = e.getAttribute("data-renderdiff-mask");
       return v ? `${v} (data-renderdiff-mask)` : "data-renderdiff-mask";
     }),
   );
-  const { scrollHeight, innerText, pageText, media } = await (el ?? page.locator(":root")).evaluate(
-    (root) => {
-      const body = document.body ?? document.documentElement;
-      return {
-        scrollHeight: document.documentElement.scrollHeight,
-        innerText:
-          ((root === document.documentElement ? body : root) as HTMLElement).innerText || "",
-        pageText: body.innerText?.length ?? 0,
-        media: Array.from(
-          document.querySelectorAll(
-            "img, svg, canvas, video, iframe, input, textarea, select, [data-renderdiff-rendered]",
-          ),
-        ).some((e) => {
-          const r = e.getBoundingClientRect();
-          return r.width * r.height >= 1024;
-        }),
-      };
-    },
-  );
-  // Reverse order, so an element two masks share gets its original value back.
-  for (let i = masks.length - 1; i >= 0; i--) {
-    await masks[i]!.evaluateAll(
-      (els, prev) => els.forEach((e, j) => ((e as HTMLElement).style.visibility = prev[j] ?? "")),
-      hidden[i]!,
-    );
-  }
-  const text = innerText
-    .split("\n")
-    .map((line) => line.replace(/\s+/g, " ").trim())
-    .filter(Boolean);
+  const { scrollHeight, text, pageText, media } = await readText(page, el, masks);
   const blank = pageText < 200 && !media ? `height=${scrollHeight}, text=${pageText} chars` : null;
 
   step.set(page, "screenshot");

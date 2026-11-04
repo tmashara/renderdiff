@@ -531,6 +531,10 @@ const same = (a: Seen, b: Seen) =>
   !!(a.text || b.text) ||
   (a.tag === b.tag && Math.abs(a.box.w - b.box.w) <= 4 && Math.abs(a.box.h - b.box.h) <= 4);
 
+/** A change besides width and height, which are usually a consequence. */
+const own = (changed: ElementDiff["changed"]) =>
+  Object.keys(changed).some((p) => p !== "width" && p !== "height");
+
 const moved = (a: Box, b: Box) => a.x !== b.x || a.y !== b.y || a.w !== b.w || a.h !== b.h;
 
 const handles = async (ls: Locator[]) =>
@@ -709,8 +713,10 @@ export async function locate(
             el.reparented ? { ...p, reparented: el.reparented } : p,
           ),
         );
-      // ponytail: one level of cause; a deeper cascade search if agents ask for it
-      if (el.left && el.right && !Object.keys(el.changed).length && moved(el.left, el.right)) {
+      // ponytail: one level of cause; deeper than the parent, --computed names the rule
+      if (el.left && el.right && !own(el.changed) && moved(el.left, el.right)) {
+        // A pushed element's cause can be a parent that only resized; a resized one's can't.
+        const resized = Object.keys(el.changed).length > 0;
         for (const [p, q] of [
           [a!.prev, b!.prev],
           [a!.parent, b!.parent],
@@ -718,7 +724,7 @@ export async function locate(
           if (!p || !q || p.sel !== q.sel) continue;
           const cause = element([p, q], [shots[0].origin, shots[1].origin]);
           if (
-            Object.keys(cause.changed).length &&
+            (resized ? own(cause.changed) : Object.keys(cause.changed).length) &&
             !out.some((o) => o.selector === cause.selector)
           ) {
             out.push(cause);

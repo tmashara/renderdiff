@@ -622,6 +622,8 @@ describe("masks", () => {
     assert.equal(r.diffPixels, 0, context(run));
     assert.ok(r.variesPixels! > 0, context(run));
     assert.match(r.varies![0]!.elements![0]!.selector, /drift/, context(run));
+    assert.deepEqual(r.text, { added: [], removed: [] }, context(run));
+    assert.doesNotMatch(run.stdout, /text: |text [+-]"/, context(run));
     assert.match(run.stdout, /^varies \/drifting @1440  [\d,]+px painted out  /m);
     assert.match(run.stdout, /^ {2}--mask '/m);
     assert.match(run.stdout, /urlPath: "\/drifting", reason: "varies per load" \}\]$/m);
@@ -640,12 +642,17 @@ describe("masks", () => {
     const hook = path.join(dir, "hook.mjs");
     fs.writeFileSync(
       hook,
-      `export default { before: async (page, { side }) => { if (side === "left") await page.addStyleTag({ content: "h1 { color: red }" }); } };\n`,
+      `export default { before: async (page, { side }) => { if (side === "left") { await page.addStyleTag({ content: "h1 { color: red }" }); await page.evaluate(() => (document.querySelector("h1").textContent += " changed")); } } };\n`,
     );
     const run = await capture(["/drifting"], { config: hook, extra: ["--accept", "x"] });
     const r = result(results(run.outDir), "/drifting", 1440);
     assert.ok(r.diffPixels > 0, context(run));
     assert.ok(r.variesPixels! > 0, context(run));
+    assert.deepEqual(
+      r.text,
+      { added: ["Drifting value guard rail changed"], removed: ["Drifting value guard rail"] },
+      context(run),
+    );
     assert.match(
       run.stdout,
       /not accepted: 1 differing shot\(s\) can't be \(1 varies per load\)/,

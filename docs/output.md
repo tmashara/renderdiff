@@ -58,7 +58,7 @@ per-shot output when piped, `--no-progress` the summary on a terminal.
 | `text -"Pricing"` | A line of visible text only the reference has (`+`: only your change). Up to three, then `(+N more)`. |
 | `dom sel prop a→b` | Element on both sides whose computed `prop` differs, left value first. |
 | `dom +sel` / `-sel` | Element only on the left / only on the right. `+sel::before` / `-sel::after`: a pseudo-element only that side generates. |
-| `dom sel x+8` | It moved without its own style changing; the neighbour or parent listed after it is the cause. |
+| `dom sel x+8` | It moved or only resized (a width or height change alone is usually a consequence); a neighbour or parent that changed is listed after it. None listed: its own size rule or something higher up is the cause, so use `--computed`. |
 | `dom sel` | On both sides and unchanged in style or position, so its own pixels changed (an image or canvas). |
 | `(re-parented)` | After a `dom` entry: paired across a structure change, so its properties may not be the cause. |
 | `1 accepted` | That many of the shot's changes are accepted; the rest are new. |
@@ -152,8 +152,10 @@ right after the shot. Each is a CSS selector unique on its side, so `--selector`
 - `-sel "text"` exists only on the right, `+sel` only on the left.
 - `sel margin-left 24px→16px` is on both, with the computed properties that differ, left
   first. A computed value is a symptom: find the rule that set it.
-- `sel x+8` moved without a style of its own changing, so the cause is a neighbour or its
-  parent, which is listed after it when one of them changed.
+- `sel x+8` or `sel width 230px→254px` moved or only resized: a width or height change alone
+  is usually a consequence. A neighbour or parent that changed is listed after it; for an
+  element that resized, a parent whose only change is its width isn't. None listed, its own
+  size rule or something higher up is the cause, so use `--computed`.
 - `-sel::before` / `+sel::before` is a pseudo-element only the right / left generates, and
   `sel::after height 1px→2px` one on both whose `content`, size, background, top or bottom
   border, or `box-shadow` differ. It carries `(re-parented)` when its element does.
@@ -337,8 +339,9 @@ aria: identical on 2 of 3 route(s), differs /pricing
 A line diff of each side's visible text (`document.body.innerText`, or the element's with a
 selector). `+` / `text.added`: lines only your change (left) has. `-` / `text.removed`:
 lines only the reference (right) has. The card lists the first 20. Masked elements are left
-out. Unmasked text that changes per load (a ticker, a clock) shows up here whenever the two
-sides differed at capture time, even when its pixels were painted out as unstable.
+out, and so are the ones a `varies` recheck painted out when it located them. Text that changes within one
+load (a ticker) shows up here whenever the two sides differed at capture time, even when its
+pixels were painted out as unstable.
 
 ## Unstable pixels
 
