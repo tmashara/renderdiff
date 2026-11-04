@@ -291,6 +291,7 @@ export async function readText(page: Page, root: Locator | null, masks: Locator[
       const body = document.body ?? document.documentElement;
       return {
         scrollHeight: document.documentElement.scrollHeight,
+        scrollWidth: document.documentElement.scrollWidth,
         innerText:
           ((root === document.documentElement ? body : root) as HTMLElement).innerText || "",
         pageText: body.innerText?.length ?? 0,
@@ -442,7 +443,7 @@ export async function capture(
       return v ? `${v} (data-renderdiff-mask)` : "data-renderdiff-mask";
     }),
   );
-  const { scrollHeight, text, pageText, media } = await readText(page, el, masks);
+  const { scrollHeight, scrollWidth, text, pageText, media } = await readText(page, el, masks);
   const blank = pageText < 200 && !media ? `height=${scrollHeight}, text=${pageText} chars` : null;
 
   step.set(page, "screenshot");
@@ -482,15 +483,6 @@ export async function capture(
       .flat()
       .filter((b) => b !== null)
       .map((b) => (clip ? { ...b, x: b.x - clip.x, y: b.y - clip.y } : b));
-  const area = clip ?? { x: 0, y: 0, width, height: scrollHeight };
-  if (area.height > maxHeight) {
-    throw new Error(
-      `${el ? "element" : "page"} is ${area.height}px tall at ${width}px wide, past the ${maxHeight}px sanity ceiling ` +
-        `for that width (${MAX_PAGE_AREA.toLocaleString("en-US")} pixels) ` +
-        `at ${url} — likely a broken layout, not a real page`,
-    );
-  }
-  const tiled = area.height > MAX_CAPTURE_HEIGHT;
   // The viewport takes html's overflow, or body's when html's is visible.
   const hidesX = await page.evaluate(() =>
     ["hidden", "clip"].includes(
@@ -499,6 +491,17 @@ export async function capture(
         .find((v) => v !== "visible") ?? "visible",
     ),
   );
+  // A page that scrolls sideways keeps its full width, as a one-shot fullPage shot does.
+  const area = clip ?? { x: 0, y: 0, width: hidesX ? width : scrollWidth, height: scrollHeight };
+  const ceiling = Math.max(40_000, Math.floor(MAX_PAGE_AREA / area.width));
+  if (area.height > ceiling) {
+    throw new Error(
+      `${el ? "element" : "page"} is ${area.height}px tall at ${area.width}px wide, past the ${ceiling}px sanity ceiling ` +
+        `for that width (${MAX_PAGE_AREA.toLocaleString("en-US")} pixels) ` +
+        `at ${url} — likely a broken layout, not a real page`,
+    );
+  }
+  const tiled = area.height > MAX_CAPTURE_HEIGHT;
   // Read on both sides of the shot, so a box that moves while it is taken stays covered.
   const shoot = async () => {
     const before = await read();

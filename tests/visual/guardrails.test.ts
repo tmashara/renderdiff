@@ -524,6 +524,14 @@ describe("the tiled capture path", () => {
     }
   });
 
+  test("a tiled page that scrolls sideways keeps its full width", async () => {
+    const run = await capture(["/tall"], { config: path.join(CONFIGS, "tall-wide.mjs") });
+    assert.equal(run.code, 1, context(run));
+    const meta = await sharp(run.file("tall.1440.right.png")).metadata();
+    assert.deepEqual([meta.width, meta.height], [2000, EXPECT_HEIGHT], context(run));
+    assert.ok(cardFor(run, "/tall").diffPixels > 0, context(run));
+  });
+
   test("an element taller than the cap is tiled too, down to its own last row", async () => {
     const el = await runCli([
       ...renderdiffArgs({ left: site.left, right: site.right, routes: ["/tall"], widths: [1440] }),
