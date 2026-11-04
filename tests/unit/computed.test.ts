@@ -13,6 +13,8 @@ import {
   groupFindings,
   normalizeAssets,
   pageError,
+  prefixDiff,
+  prefixed,
   type Snapshot,
 } from "../../src/computed.ts";
 import { SNAP_PROPS } from "../../src/locate.ts";
@@ -414,6 +416,32 @@ describe("groupFindings", () => {
     );
   });
 
+  test("fmtComputed lists each side's prefixed declarations, capped, with where", () => {
+    const none = { dom: 0, changes: [], truncated: 0, unmatched: { left: [], right: [] } };
+    const many = Array.from({ length: 12 }, (_, i) => `-webkit-x${String(i).padStart(2, "0")}: 1`);
+    assert.deepEqual(
+      fmtComputed(
+        [
+          shot("/a", 1440, { computed: { ...none, prefixes: { left: many, right: [] } } }),
+          shot("/a", 375, { computed: { ...none, prefixes: { left: [], right: ["-moz-y: 2"] } } }),
+        ],
+        ["/a"],
+      ).filter((l) => /^(prefixes|  only)/.test(l)),
+      [
+        "prefixes: 13 prefixed declarations only one side has",
+        `  only left has: ${many.slice(0, 10).join("; ")} (+2 more)  /a@1440`,
+        "  only right has: -moz-y: 2  /a@375",
+      ],
+    );
+    assert.deepEqual(
+      fmtComputed(
+        [shot("/a", 1440, { computed: { ...none, prefixes: { left: [], right: [] } } })],
+        ["/a"],
+      ).at(-1),
+      "prefixes: no prefixed declaration differs between the sides",
+    );
+  });
+
   test("without --computed there is no block", () => {
     assert.deepEqual(fmtComputed([shot("/a", 1440, {})], ["/a"]), []);
   });
@@ -430,6 +458,78 @@ test("a snapshot error keeps the page's message, not page.evaluate's prefix or s
   const timeout =
     "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator('.x')";
   assert.equal(pageError(new Error(timeout)), timeout);
+});
+
+describe("prefixed", () => {
+  test("reads declarations as written, comments dropped, whitespace and importance normalised", () => {
+    assert.deepEqual(
+      prefixed(`html{-webkit-text-size-adjust:100%}/* -moz-x: y; */
+        .a { -webkit-mask : linear-gradient( red , blue )  !important ; -MS-filter: none }`),
+      [
+        "-webkit-text-size-adjust: 100%",
+        "-webkit-mask: linear-gradient( red , blue ) !important",
+        "-ms-filter: none",
+      ],
+    );
+  });
+
+  test("a /* in url() or a string is no comment, and a data URI's ; stays in its value", () => {
+    assert.deepEqual(prefixed(".a{background:url(/img/*.png)} .b{-webkit-user-select:none}"), [
+      "-webkit-user-select: none",
+    ]);
+    assert.deepEqual(
+      prefixed('.a{content:"/*"} .b{-webkit-user-select:none} /* .c{-webkit-x:1} */'),
+      ["-webkit-user-select: none"],
+    );
+    assert.deepEqual(
+      prefixed(
+        '.a{-webkit-mask:url("data:image/svg+xml;utf8,<svg/>") center;-webkit-x:1 !IMPORTANT}',
+      ),
+      ['-webkit-mask: url("data:image/svg+xml;utf8,<svg/>") center', "-webkit-x: 1 !important"],
+    );
+  });
+
+  test("leaves out selectors, media features, values and unprefixed names", () => {
+    assert.deepEqual(
+      prefixed(`::-webkit-scrollbar:hover { width: 0 }
+        input::-webkit-inner-spin-button, a:focus { display: none }
+        @media (-webkit-min-device-pixel-ratio: 2) { .b { transition: -webkit-transform 1s } }
+        .c { user-select: none; x-webkit-y: 1 }`),
+      [],
+    );
+  });
+
+  test("a minifier's rewrite of a value is no finding; a dropped prefix still is", () => {
+    const none = { left: [], right: [] };
+    assert.deepEqual(
+      prefixDiff(
+        [".a { -webkit-transition: opacity 0.3s ease; }"],
+        [".a{-webkit-transition:opacity .3s ease}"],
+      ),
+      none,
+    );
+    assert.deepEqual(
+      prefixDiff(
+        [
+          ".a{-webkit-transition:opacity 0.3s;-webkit-user-select:none} .b{-webkit-user-select:none}",
+        ],
+        [".a{-webkit-transition:opacity .3s;user-select:none} .b{-webkit-user-select:none}"],
+      ),
+      { left: ["-webkit-user-select: none"], right: [] },
+    );
+  });
+
+  test("a side's extra copy is a finding; which file or rule holds it is not", () => {
+    const decl = "-webkit-user-select: none";
+    assert.deepEqual(prefixDiff([`.a{${decl}}`, `.b{${decl}}`], [`.z { ${decl}; }`]), {
+      left: [decl],
+      right: [],
+    });
+    assert.deepEqual(prefixDiff([`.a{${decl}}`, ".b{}"], [".b{}", `.c{${decl}}`]), {
+      left: [],
+      right: [],
+    });
+  });
 });
 
 describe("diffAria", () => {

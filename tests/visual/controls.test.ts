@@ -729,6 +729,7 @@ test("--computed names the changed rule's property, once across widths, and the 
       (f) => /swatch/.test(f.key) && f.prop === "background-color" && f.at[0]!.url === "/color",
     ),
   );
+  assert.deepEqual(summary.prefixes, [], context(r));
   // /margin's Contact chip only moved, so it is no finding of its own.
   assert.ok(!summary.computed!.some((f) => /#contact/.test(f.key)), context(r));
   const inserted = rows.find((x) => x.url === "/inserted" && x.status === "compared");

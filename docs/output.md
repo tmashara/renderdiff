@@ -65,6 +65,7 @@ per-shot output when piped, `--no-progress` the summary on a terminal.
 | `findings: N repeated on 2+ routes` | After the routes: the same `dom` entry, text line, `fonts` face or element-less band delta (`band -24px`) on two or more routes, once per line with `×N routes` and where (`/a@1440,375`, then `+N routes`), most widespread first, accepted ones aside. Text lines seen on exactly the same routes and widths share one line, `text -"Users" -"Billing" -"Docs" (+9 more)` (a nav folded into a menu button), and N counts lines as printed. Top 20; `summary.findings` in results.json has every finding, one per text line. One cause behind many rows: fix it once. A selector names an element per page, so the same path may be a different element on another route: check one crop. |
 | `computed: N findings` | With `--computed`: each `key prop left→right` once, with the routes and widths it was seen at; `dom identical`: the markup matches apart from asset hashes and generated class names, so look at CSS or script. See [below](#computed-styles---computed). |
 | `rules: N changed groups` | With `--computed`: style rules only one side has, by stylesheet and `@media`, and whether any shot had an element they could style. `matched nothing`: the run proved nothing about those rules. See [below](#rule-coverage). |
+| `prefixes: N prefixed declarations only one side has` | With `--computed`: `-webkit-`, `-moz-`, `-ms-` and `-o-` declarations in one side's CSS source only, which Chrome's parsed rules can't show. See [below](#vendor-prefixes). |
 | `aria: identical on N of M route(s)` | With `--aria`: routes whose accessibility tree matches at every width, then each differing route's lines, `+` left only, `-` right only. See [below](#aria-snapshots---aria). |
 | `crops …` | Up to 3 PNGs per comparison, worst first, relative to `results.json`. Left is on top or on the left, and the change is boxed in red. |
 | `ERROR …` | Unmeasured, which is neither a pass nor a fail. Exits 3. |
@@ -317,6 +318,34 @@ rules: 3 changed groups, 1 never matched, 2 matched on some shots
   rules then show as one side's. renderdiff's own CSS (hidden selectors, stilled animations,
   `extraCss`) isn't read.
 
+### Vendor prefixes
+
+Chrome parses `-webkit-user-select: none` and `user-select: none` into the same rule, so a lint
+autofix that drops a prefix Safari still needs is no pixel change and no rule change. So
+`--computed` also reads each side's CSS as written and counts its prefixed properties:
+
+```
+prefixes: 3 prefixed declarations only one side has
+  only left has: -webkit-background-clip: text; -webkit-text-size-adjust: 100%; -webkit-user-select: none  /a@1440,375
+```
+
+- The source is every stylesheet the page loaded, as served (cross-origin and `@import`ed ones
+  too), and the text of every `<style>`, open shadow roots included. Frames aren't read.
+- What counts is how many declarations of each prefixed property a side has; which selector,
+  rule or file holds them, and their values, don't. So a dropped prefix is one fewer
+  `-webkit-user-select` on that side, while minifying (`0.3s` → `.3s`), reordering, moving a
+  declaration between files or a new asset hash is no change. The value is shown as context:
+  that side's declarations of the property, ones the other side lacks as written first.
+- Prefixed selectors (`::-webkit-scrollbar`), media features and values (`-webkit-box`) aren't
+  read.
+- Up to 10 declarations per side shown; results.json has them all. `prefixes: no prefixed
+  declaration differs between the sides`: the sources hold the same ones.
+- Informational, like `rules:`: it never changes the exit code.
+- CSS with no source text isn't seen: rules a script adds with `insertRule`, constructed
+  (adopted) stylesheets, and `style` attributes.
+- A third-party sheet that changes between loads (an ad or chat widget) shows as prefixes
+  either side has; block it with `blockUrlPatterns` in the config.
+
 ## ARIA snapshots (`--aria`)
 
 With `--aria`, after the shot (and `--computed`) renderdiff takes Playwright's ARIA snapshot
@@ -531,7 +560,8 @@ file, not each line), scores rounded down to four decimals (so a shot that diffe
       "fonts": { "added": [], "removed": ["Inter 600"] },   // web font faces one side loaded; absent when equal
       "masked": ["rotating quote (data-renderdiff-mask)"],   // absent unless a side marked elements data-renderdiff-mask
       "computed": { "dom": 1, "changes": [], "truncated": 0, "unmatched": { "left": [], "right": ["body > nav > a[href=\"/pricing\"]"] },
-        "rules": [{ "side": "left", "sheet": "docs.css", "conditions": ["@media (width >= 60em)"], "rules": 5, "elements": 67 }] },   // --computed only; null: snapshot failed, "computedError" says why; rules: one-sided rule groups, elements they could style here
+        "rules": [{ "side": "left", "sheet": "docs.css", "conditions": ["@media (width >= 60em)"], "rules": 5, "elements": 67 }],
+        "prefixes": { "left": ["-webkit-user-select: none"], "right": [] } },   // --computed only; null: snapshot failed, "computedError" says why; rules: one-sided rule groups, elements they could style here; prefixes: { left, right }, prefixed declarations only that side's CSS source has
       "aria": { "added": ["- text: Buy now"], "removed": ["- button \"Buy now\""], "truncated": 0 },   // --aria only; both empty: identical; null: snapshot failed, "ariaError" says why
       "images": { "left": "about.1440.left.png", "right": "about.1440.right.png", "diff": "about.1440.diff.png" },   // packed: .webp, right may name left's file, no diff when diffPixels is 0
       "crops": [{
@@ -552,7 +582,8 @@ file, not each line), scores rounded down to four decimals (so a shot that diffe
     "stale": [],                  // accepted entries the run measured but didn't see
     "findings": [],               // { finding, selector?, at: [{ url, widths }] }, seen on 2+ routes
     "computed": [],               // --computed: { key, prop, values: [left, right], at: [{ url, widths }] }
-    "rules": []                   // --computed: { side, sheet, conditions, rules, matched: [{ url, widths }], unmatched: [{ url, widths }] }
+    "rules": [],                  // --computed: { side, sheet, conditions, rules, matched: [{ url, widths }], unmatched: [{ url, widths }] }
+    "prefixes": []                // --computed: { side, declaration, at: [{ url, widths }] }
   }
 }
 ```

@@ -69,6 +69,8 @@ export const GUARDRAILS = [
   "appshell",
   "smooth-scroll",
   "rules",
+  "prefix",
+  "prefix-same",
   "reflowing",
   "waapi",
   "geometry",

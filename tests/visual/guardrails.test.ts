@@ -459,6 +459,36 @@ test("--computed shows whether a rewritten breakpoint, and a rule nothing has, e
   );
 });
 
+test("--computed lists the prefixed declarations only one side's CSS source has, where pixels match", async () => {
+  const run = await capture(["/prefix", "/prefix-same"], {
+    widths: [1440, 375],
+    extra: ["--computed"],
+  });
+  assert.equal(run.code, 0, context(run));
+  const out = results(run.outDir);
+  for (const route of ["/prefix", "/prefix-same"])
+    for (const width of [1440, 375]) assert.equal(result(out, route, width).diffPixels, 0);
+  // One in the <style>, one in the linked sheet, one it @imports, one in a sheet the CSSOM can't read.
+  assert.deepEqual(result(out, "/prefix", 1440).computed?.prefixes, {
+    left: [
+      "-webkit-appearance: none",
+      "-webkit-background-clip: text",
+      "-webkit-text-size-adjust: 100%",
+      "-webkit-user-select: none",
+    ],
+    right: [],
+  });
+  assert.ok(
+    out.meta.unreadableSheets?.left.some((s) => s.includes("cross.left.css")),
+    `the cross-origin sheet was readable${context(run)}`,
+  );
+  assert.deepEqual(result(out, "/prefix-same", 375).computed?.prefixes, { left: [], right: [] });
+  assert.deepEqual(parseSummary(run.stdout).prefixes, [
+    "prefixes: 4 prefixed declarations only one side has",
+    "  only left has: -webkit-appearance: none; -webkit-background-clip: text; -webkit-text-size-adjust: 100%; -webkit-user-select: none  /prefix@1440,375",
+  ]);
+});
+
 test("a page whose CSP refuses inline styles still gets renderdiff's CSS", async () => {
   const run = await capture(["/csp"]);
   assert.equal(run.code, 0, context(run));

@@ -153,6 +153,8 @@ const MAX_PAGE_AREA = 1440 * 40_000;
 const network = new WeakMap<Page, { open: Set<Request>; last: number; failed: Set<string> }>();
 /** Each page's last main-frame document response; redirect hops come first, so it is the final one. */
 const doc = new WeakMap<Page, Response>();
+/** With `--computed`: the bodies of this load's main-frame stylesheets, as served. */
+const sources = new WeakMap<Page, Promise<string>[]>();
 
 const html = (r: Response) => {
   const type = r.headers()["content-type"];
@@ -201,9 +203,17 @@ export async function prepare(page: Page, cfg: ResolvedConfig, now: number): Pro
     // Aborted: cancelled by the page or by the next navigation, not a load that failed.
     if (r.failure()?.errorText !== "net::ERR_ABORTED") sheet(r);
   });
+  if (cfg.computed) sources.set(page, []);
   page.on("response", (r) => {
     if (r.status() >= 400) sheet(r.request());
-    if (r.request().isNavigationRequest() && r.frame() === page.mainFrame()) doc.set(page, r);
+    if (r.request().isNavigationRequest() && r.frame() === page.mainFrame()) {
+      doc.set(page, r);
+      // A new document, from the load, a hook or a redirect; a pushState has no response.
+      sources.get(page)?.splice(0);
+    }
+    // Routing is always on, so the HTTP cache is off and no sheet is a bodiless 304; read now, before navigating drops it.
+    if (r.ok() && r.request().resourceType() === "stylesheet" && r.frame() === page.mainFrame())
+      sources.get(page)?.push(r.text().catch(() => ""));
   });
   // A request the old document left open never finishes or fails, so it can't hold the next load.
   page.on("framenavigated", (f) => {
@@ -260,6 +270,21 @@ export async function prepare(page: Page, cfg: ResolvedConfig, now: number): Pro
       }
     }
   });
+}
+
+/** `--computed`: this document's CSS as written, which Chromium's CSSOM isn't: stylesheet bodies and `<style>` text. */
+export async function sheetSources(page: Page): Promise<string[]> {
+  const inline = await page.evaluate(() => {
+    const out: string[] = [];
+    const walk = (root: Document | ShadowRoot) =>
+      root.querySelectorAll("*").forEach((e) => {
+        if (e.localName === "style") out.push(e.textContent ?? "");
+        if (e.shadowRoot) walk(e.shadowRoot);
+      });
+    walk(document);
+    return out;
+  });
+  return [...(await Promise.all(sources.get(page) ?? [])), ...inline];
 }
 
 /** Not addStyleTag: it fails on any CSP violation logged meanwhile, and a <style> is subject to style-src. */

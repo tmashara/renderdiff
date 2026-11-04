@@ -8,11 +8,13 @@ import {
   fmtAria,
   fmtComputed,
   groupFindings,
+  groupPrefixes,
   groupRules,
   SHOWN,
   type AriaDiff,
   type ComputedDiff,
   type Finding,
+  type PrefixFinding,
   type RuleFinding,
 } from "./computed.ts";
 import type { Band, Box, Region, TextDiff } from "./compare.ts";
@@ -175,6 +177,8 @@ export interface Summary {
   computed?: Finding[];
   /** With `--computed`: each one-sided rule group once, with where it matched an element and where none. */
   rules?: RuleFinding[];
+  /** With `--computed`: each prefixed declaration in the CSS source only one side has, once, with where. */
+  prefixes?: PrefixFinding[];
 }
 
 /** An element change, text line or element-less band delta, as the summary prints it. */
@@ -294,7 +298,11 @@ export function writeResults(
       stale,
       findings: pixelFindings(results),
       ...(compared.some((r) => "computed" in r)
-        ? { computed: groupFindings(results), rules: groupRules(results) }
+        ? {
+            computed: groupFindings(results),
+            rules: groupRules(results),
+            prefixes: groupPrefixes(results),
+          }
         : {}),
     },
   };

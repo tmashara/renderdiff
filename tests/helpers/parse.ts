@@ -53,6 +53,8 @@ export interface Summary {
   stale: string[];
   /** With `--computed`: the `rules:` line and the group lines under it; empty without one. */
   rules: string[];
+  /** With `--computed`: the `prefixes:` line and the side lines under it; empty without one. */
+  prefixes: string[];
   /** The `rerun:` line of a `--rerun-failed` run, else null. */
   rerun: { shots: number; routes: number; reused: number; untouched: number } | null;
   /** Each differing route: widths that were clean or accepted, then one row per collapsed width group. */
@@ -144,6 +146,7 @@ export function parseSummary(stdout: string): Summary {
     unstable: listed("unstable ≤100px"),
     stale,
     rules: /^rules: .*(?:\n  .*)*/m.exec(stdout)?.[0].split("\n") ?? [],
+    prefixes: /^prefixes: .*(?:\n  .*)*/m.exec(stdout)?.[0].split("\n") ?? [],
     rerun: rerun && {
       shots: Number(rerun[1]),
       routes: Number(rerun[2]),

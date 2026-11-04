@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vendor prefixes</title>
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/prefix/link.left.css">
+<style>
+/* GUARD RAIL for --computed's prefix check. The left side writes four declarations with a
+   -webkit- prefix and the right without, as a lint autofix would: one here, one in the linked
+   sheet, one in the sheet it @imports, one in a sheet from another origin. Chromium renders both alike and its CSSOM reads
+   both as the unprefixed name, so only the CSS source tells them apart. */
+html { -webkit-text-size-adjust: 100%; }
+.clip { display: inline-block; font-size: 48px; color: transparent; background-image: linear-gradient(90deg, #0b5, #05b); }
+</style>
+<script>
+// localhost, not 127.0.0.1: the same fixture server on another origin.
+const cross = document.createElement("link");
+cross.rel = "stylesheet";
+cross.href = location.origin.replace("127.0.0.1", "localhost") + "/shared/prefix/cross.left.css";
+document.head.append(cross);
+</script>
+</head>
+<body>
+<div class="page">
+<h1>Vendor prefixes</h1>
+<p class="lede">Three declarations lost their -webkit- prefix on one side. Chromium honours both spellings, so the pixels match; Safari honours only the prefixed one.</p>
+<p class="clip">Gradient text</p>
+<p class="pick">This line is not selectable.</p>
+<section class="notes">
+<h2>Notes</h2>
+<p>The prefix check reads every stylesheet as served and every style element's text, so a declaration counts wherever it is written.</p>
+</section>
+</div>
+</body>
+</html>
