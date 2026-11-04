@@ -56,6 +56,8 @@ export interface ComparedResult extends BaseResult {
   widthDelta: number;
   /** Pixels that changed between shots of the same load, painted out on both sides. */
   unstablePixels: number;
+  /** The box holding them; absent when there are none and in older results.json files. */
+  unstableBox?: { x: number; y: number; w: number; h: number };
   /** Regions where a second, fresh load of the right side differed from the first. Absent when none did or it wasn't rechecked. */
   varies?: Region[];
   /** Pixels painted out for them on both sides, like unstable ones, and left out of the score. */

@@ -88,6 +88,7 @@ on stderr: `✗ 2 routes differ (10 shots).` (`below 97.00%` with `--threshold`)
 | --- | --- |
 | `clean: /a /b` | Not one pixel differs, none unstable, no asset failed. Suspect it until you confirm both sides rendered: two identical error pages diff as clean. |
 | `accepted: /a` | Every difference on every width matches `renderdiff.accepted.json`. Known, not re-verified: say so. |
+| `unstable ≤100px: /a` | Every width clean or with no differing pixel and at most 100 unstable (anti-aliased corners), no failed asset, no `varies`. No row. Not clean: list under Not verified. |
 | `/a  clean @… accepted @…` | A route with something to read; the widths that are clean or accepted. |
 | `  @1440,896  <row>` | Widths agreeing on height and width delta, bands (side and height), aligned score and text; score and region count become ranges, `unstable` the largest. |
 | `    failed left: …` | Stylesheets (`stylesheet <url>`) and font faces (`font Inter 700`) that side didn't load (404, CORS, a CDN refusing localhost); one side only: it failed again on a reload. Fix first: a fallback font reflows every line. |
@@ -109,7 +110,7 @@ on stderr: `✗ 2 routes differ (10 shots).` (`below 97.00%` with `--threshold`)
 | `aligned 100.00%` | Score with the bands cut out; 100% = the bands are the whole difference. Only with bands. |
 | `line -1px@y812` | A 1–2px line across at least half the page that only the right draws (`+`: only the left; no sign: both, differently). Barely moves the score, large visually: a lost border or divider. Look for a `::before`/`::after` in `dom`. Past three: `(+N more)`. Not counted in `reg`. |
 | `3 reg` / `2–3 reg` | Regions: connected patches of differing pixels on a 16px grid. With bands, from the realigned rows, so content a band merely pushed isn't one. |
-| `unstable 1,204px` | Pixels that kept changing between shots of the same load on one origin (ticker, carousel, video with `--no-freeze-video`). Painted out on both sides, excluded from the score; the route is never clean. Large: a big area went unmeasured, look at the magenta in the full shots. |
+| `unstable 1,204px within 928×160 at (256,168)` | Pixels that kept changing between shots of the same load on one origin (ticker, carousel, video with `--no-freeze-video`), and the one box holding them all (`@w`: from that width). Painted out on both sides, excluded from the score; the route is never clean. `unstableBox` in results.json; don't search the PNG's magenta, masks are magenta too. |
 | `1 accepted` | That many of the shot's bands and regions are accepted; the rest are new. `dom` names only the new. |
 | `text +"x" -"y"` | Lines of visible text only on the left (`+`) / right (`-`), added first. Up to three, then `(+N more)`. Masked elements are left out. |
 | `findings: N repeated on 2+ routes` | After the routes: each `dom` entry, text line or element-less `band -24px` seen on 2+ routes once, `×N routes  /a@1440,375 …`, most widespread first, accepted aside; text lines on exactly the same shots share one line (`text -"Users" -"Docs" (+9 more)`), N counts printed lines; top 20, all in `summary.findings`, one per text line. One cause: fix it once. The same selector can be a different element per route: check one crop. |

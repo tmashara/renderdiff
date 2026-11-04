@@ -223,7 +223,7 @@ describe("determinism", () => {
 
 describe("the stability check", () => {
   test("a ticking element is reported as unstable and does not cost the score", async () => {
-    const run = await capture(["/ticker"]);
+    const run = await capture(["/ticker", "/animated"]);
     assert.equal(run.code, 0, context(run));
     const c = cardFor(run, "/ticker");
     assert.equal(c.diffPixels, 0, `unstable pixels counted against the score${context(run)}`);
@@ -234,12 +234,33 @@ describe("the stability check", () => {
       928 * 160,
       context(run),
     );
+    const box = result(results(run.outDir), "/ticker", 1440).unstableBox;
+    assert.deepEqual(box && [box.x, box.w, box.h], [256, 928, 160], context(run));
+    assert.equal(result(results(run.outDir), "/animated", 1440).unstableBox, undefined);
     // Unmeasured is not clean: the summary gives it a row that names the unstable pixels.
-    const { clean, routes, verdict } = parseSummary(run.stdout);
-    assert.deepEqual(clean, [], context(run));
-    assert.match(routes.get("/ticker")!.rows[0]!.text, /unstable 148,480px/);
+    const { clean, unstable, routes, verdict } = parseSummary(run.stdout);
+    assert.deepEqual([clean, unstable], [["/animated"], []], context(run));
+    assert.match(
+      routes.get("/ticker")!.rows[0]!.text,
+      new RegExp(`unstable 148,480px within 928×160 at \\(256,${box!.y}\\)$`),
+    );
     assert.equal(verdict.differ, 0, "no pixel differs");
     assert.deepEqual(verdict.unstable, { shots: 1, max: 928 * 160 }, context(run));
+  });
+
+  test("a route with only a few unstable pixels is listed on one line, not as clean", async () => {
+    const file = path.join(tempDir(), "tiny.mjs");
+    fs.writeFileSync(
+      file,
+      `export default { before: async (page) => { await page.addStyleTag({ content: ".tick { width: 8px !important; height: 8px !important }" }); } };\n`,
+    );
+    const run = await capture(["/ticker", "/animated"], { widths: [375], config: file });
+    assert.equal(run.code, 0, context(run));
+    assert.equal(result(results(run.outDir), "/ticker", 375).unstablePixels, 64, context(run));
+    const { clean, unstable, routes, verdict } = parseSummary(run.stdout);
+    assert.deepEqual([clean, unstable], [["/animated"], ["/ticker"]], context(run));
+    assert.equal(routes.size, 0, context(run));
+    assert.deepEqual(verdict.unstable, { shots: 1, max: 64 }, context(run));
   });
 
   test("a page that is mostly unstable is an error, not a score", async () => {

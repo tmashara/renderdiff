@@ -47,6 +47,8 @@ export interface Summary {
   clean: string[];
   /** Routes on the `accepted:` line: every width clean or accepted. */
   accepted: string[];
+  /** Routes on the `unstable ≤100px:` line: every width clean or with only a few unstable px. */
+  unstable: string[];
   /** `route@width` of each stale accepted difference, from the `stale accepted:` line. */
   stale: string[];
   /** With `--computed`: the `rules:` line and the group lines under it; empty without one. */
@@ -139,6 +141,7 @@ export function parseSummary(stdout: string): Summary {
   return {
     clean: listed("clean"),
     accepted: listed("accepted"),
+    unstable: listed("unstable ≤100px"),
     stale,
     rules: /^rules: .*(?:\n  .*)*/m.exec(stdout)?.[0].split("\n") ?? [],
     rerun: rerun && {
