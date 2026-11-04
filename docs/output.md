@@ -373,7 +373,8 @@ any difference fails, so there is no amber. The summary on top counts routes, sh
 differing shots, errors, accepted and stale accepted; gives the mean and the worst score,
 linked to its card; and lists only the differing shots, by route. Findings repeated on two
 or more routes, and with `--computed` the style findings, sit collapsed under it. Then a
-card per shot, lowest score first, showing left, right and diff side by side; the sidebar's
+card per shot, lowest score first, showing left, right and diff side by side (a note in place
+of the diff when no pixel differs); the sidebar's
 **Slider view** toggle swaps those for both shots stacked, tops aligned, with a divider you
 drag anywhere on the shot to reveal left on one side and right on the other.
 
@@ -401,13 +402,14 @@ anywhere, then pass its URL so the images render in a PR description. `evidence.
 self-contained and can go anywhere on its own.
 
 Never upload `<out>/.cache/`: it holds `--cache-right`'s recorded traffic, cookies and auth
-headers included. Cloudflare Pages gives `report.html` a per-PR URL:
+headers included. Upload a [pack](#pack) of the out dir instead, which leaves it out and is
+a fraction of the size. Cloudflare Pages gives `report.html` a per-PR URL:
 
 ```bash
 npx wrangler pages project create <p> --production-branch main   # once
-rm -rf renderdiff-out/.cache   # wrangler has no exclude; the next --cache-right run loads live
-npx wrangler pages deploy renderdiff-out --project-name <p> --branch pr-123
-renderdiff report renderdiff-out --markdown pr.md --base-url https://pr-123.<p>.pages.dev
+renderdiff pack renderdiff-out --out renderdiff-site
+npx wrangler pages deploy renderdiff-site --project-name <p> --branch pr-123
+renderdiff report renderdiff-site --markdown pr.md --base-url https://pr-123.<p>.pages.dev
 ```
 
 In CI, wrangler needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. Keep branch names
@@ -417,10 +419,9 @@ images through its anonymous camo proxy. For private inline images, use a report
 
 ```bash
 git clone --depth 1 https://github.com/<owner>/<repo> reports
-mkdir -p reports/pr-123 && cp -R renderdiff-out/. reports/pr-123/
-rm -rf reports/pr-123/.cache
+renderdiff pack renderdiff-out --out reports/pr-123
 git -C reports add . && git -C reports commit -m pr-123 && git -C reports push
-renderdiff report renderdiff-out --markdown pr.md \
+renderdiff report reports/pr-123 --markdown pr.md \
   --base-url https://github.com/<owner>/<repo>/raw/main/pr-123
 ```
 
@@ -428,6 +429,20 @@ Those links render for viewers signed in with read access to the reports repo. D
 `raw.githubusercontent.com/...?token=` URLs instead: the token expires. Use a separate repo,
 not a branch of the main one: every clone of the main repo would download the screenshots, and
 its history keeps them after the branch is deleted.
+
+## pack
+
+`renderdiff pack <out-dir> --out <dir>` writes a copy to publish: `report.html`,
+`results.json`, `evidence.html` (the out dir's own, verdict included, or a new one) and only
+the images `results.json` names, never `.cache/`. No browser. Each image is re-encoded as
+lossless WebP, so every pixel is kept, at about a quarter of the PNG's size; one with a side
+over 16,383px, WebP's limit, stays PNG. A shot whose two sides are byte-identical keeps one
+image that both `left` and `right` name, and a shot with no differing pixel keeps no diff
+image (its `images` has no `diff`). Sides under the comparison threshold aren't
+byte-identical, so they keep both. `meta.packed` says when it was packed. Exits 2 when
+`--out` is or is inside the out dir or holds files renderdiff didn't write, or a referenced
+image is missing, before `--out` is touched. A packed dir is for publishing: `merge` and
+`--rerun-failed` refuse it; `renderdiff report` works on it.
 
 ## merge
 
@@ -467,7 +482,8 @@ file, not each line), scores rounded down to four decimals (so a shot that diffe
     "rightReplayedFrom": null,  // --cache-right: when the replayed recording was made
     "freezeVideo": true, "platform": "darwin",   // process.platform: pixels and accepts are OS-specific
     "rerun": null,              // --rerun-failed: { "rerun": 3, "reused": 12 }
-    "unreadableSheets": { "left": [], "right": [] }   // --computed: stylesheets left out of rule coverage
+    "unreadableSheets": { "left": [], "right": [] },  // --computed: stylesheets left out of rule coverage
+    "packed": "…"               // renderdiff pack: when this copy was packed; absent otherwise
   },
   "results": [
     {
@@ -498,7 +514,7 @@ file, not each line), scores rounded down to four decimals (so a shot that diffe
       "computed": { "dom": 1, "changes": [], "truncated": 0, "unmatched": { "left": [], "right": ["body > nav > a[href=\"/pricing\"]"] },
         "rules": [{ "side": "left", "sheet": "docs.css", "conditions": ["@media (width >= 60em)"], "rules": 5, "elements": 67 }] },   // --computed only; null: snapshot failed, "computedError" says why; rules: one-sided rule groups, elements they could style here
       "aria": { "added": ["- text: Buy now"], "removed": ["- button \"Buy now\""], "truncated": 0 },   // --aria only; both empty: identical; null: snapshot failed, "ariaError" says why
-      "images": { "left": "about.1440.left.png", "right": "about.1440.right.png", "diff": "about.1440.diff.png" },
+      "images": { "left": "about.1440.left.png", "right": "about.1440.right.png", "diff": "about.1440.diff.png" },   // packed: .webp, right may name left's file, no diff when diffPixels is 0
       "crops": [{
         "path": "about.1440.c1.png", "kind": "band",          // or "region"
         "left": { "x": 256, "y": 196, "w": 68, "h": 0 },      // h 0: where the rows would go

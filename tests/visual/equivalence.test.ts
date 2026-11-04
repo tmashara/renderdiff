@@ -137,10 +137,10 @@ for (const dir of EQUIVALENCE) {
     });
 
     test(`${dir} @${width} writes all three images`, () => {
-      const c = card(report, route, width);
-      assert.equal(c.images.length, 3, "expected left, right and diff");
-      for (const name of c.images) {
-        assert.ok(fs.existsSync(run.file(name)), `${name} was linked but not written`);
+      const names = Object.values(result(results(run.outDir), route, width).images);
+      assert.equal(names.length, 3, "expected left, right and diff");
+      for (const name of names) {
+        assert.ok(fs.existsSync(run.file(name)), `${name} was named but not written`);
         assert.ok(fs.statSync(run.file(name)).size > 0, `${name} is empty`);
       }
     });
@@ -148,9 +148,8 @@ for (const dir of EQUIVALENCE) {
 }
 
 test("a pixel-identical pair writes a fully transparent diff", async () => {
-  const c = card(report, toPath(EQUIVALENCE[0]!), WIDTHS[0]!);
-  const diff = c.images.find((n) => n.endsWith(".diff.png"));
-  assert.ok(diff, `no diff image linked${context(run)}`);
+  const { diff } = result(results(run.outDir), toPath(EQUIVALENCE[0]!), WIDTHS[0]!).images;
+  assert.ok(diff, `no diff image${context(run)}`);
   assert.equal((await sharp(run.file(diff)).stats()).channels[3]!.max, 0);
 });
 

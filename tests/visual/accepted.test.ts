@@ -232,7 +232,8 @@ describe("--rerun-failed", () => {
     assert.equal(fs.statSync(index).mtimeMs, mtime, "a reused shot's files are not rewritten");
     assert.equal(parseReport(run.report()!).cards.length, 6);
     for (const r of now.results) {
-      if (r.status === "compared") assert.ok(fs.existsSync(run.file(r.images.diff)), r.url);
+      if (r.status === "compared")
+        for (const f of Object.values(r.images)) assert.ok(fs.existsSync(run.file(f)), r.url);
     }
   });
 
@@ -294,6 +295,13 @@ describe("--rerun-failed", () => {
       assert.match(r.stderr, needle);
     }
     assert.ok(first.report(), "a refused rerun leaves the out dir alone");
+
+    const packed = path.join(tempDir(), "packed");
+    const p = await runCli(["pack", first.outDir, "--out", packed], { noOut: true });
+    assert.equal(p.code, 0, context(p));
+    const onPacked = await runCli(args(["/color"], ["--rerun-failed"]), { outDir: packed });
+    assert.equal(onPacked.code, 2, context(onPacked));
+    assert.match(onPacked.stderr, /--rerun-failed: .* was written by renderdiff pack/);
 
     const fresh = await runCli(args(["/color"], ["--rerun-failed"]));
     assert.equal(fresh.code, 2, context(fresh));

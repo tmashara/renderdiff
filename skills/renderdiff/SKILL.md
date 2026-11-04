@@ -94,7 +94,8 @@ recorded them.
 
 For an intended change (a redesign), run with `--threshold 0 --no-recheck` and
 `report <out> --markdown pr.md` for the PR description's before/after tables; add
-`--base-url <url>` once the out dir is uploaded, so the images render in the PR.
+`--base-url <url>` once the out dir is uploaded, so the images render in the PR. Upload
+`renderdiff pack <out> --out <dir>` (lossless WebP, no `.cache/`), not the out dir itself.
 
 ## Feedback
 

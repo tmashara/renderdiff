@@ -108,6 +108,31 @@ access: it runs the PR's code with the base repo's token and secrets. The step n
 on the runner (preinstalled on GitHub-hosted ones). The comment is cut at 60 000 bytes,
 with a link to the full job summary.
 
+### Publish the report to a reports repo
+
+Pack the out dir, push it to a separate repo, and print before/after Markdown with links into
+it. `GITHUB_TOKEN` can't push to another repo, so `REPORTS_TOKEN` is a fine-grained token
+with contents write on the reports repo only:
+
+```yaml
+      - uses: tmashara/renderdiff@v0
+        with: { left: http://localhost:3000, right: https://example.com }
+      - if: ${{ !cancelled() }}
+        env:
+          TOKEN: ${{ secrets.REPORTS_TOKEN }}
+          REPO: <owner>/<reports>
+          DIR: pr-${{ github.event.pull_request.number }}
+        run: |
+          git clone --depth 1 "https://x-access-token:$TOKEN@github.com/$REPO" reports
+          npx -y renderdiff@0 pack renderdiff-out --out "reports/$DIR"
+          git -C reports add . && git -C reports -c user.name=renderdiff -c user.email=renderdiff@users.noreply.github.com commit -qm "$DIR" && git -C reports push -q
+          npx -y renderdiff@0 report "reports/$DIR" --markdown pr.md --base-url "https://github.com/$REPO/raw/main/$DIR"
+          cat pr.md >> "$GITHUB_STEP_SUMMARY"
+```
+
+The images render for viewers with read access to the reports repo; see
+[output.md](output.md#markdown) for why it should be a separate repo.
+
 ### Dependency upgrades from Renovate or Dependabot
 
 A dependency bump should change nothing. That's the default without `threshold`: any

@@ -300,7 +300,7 @@ describe("writeReport", () => {
   });
 
   test("a sidebar toggle swaps each card's three images for a left/right slider", async () => {
-    const html = await report([at("/a", 1440)]);
+    const html = await report([at("/a", 1440, { score: 0.9, diffPixels: 9 })]);
     assert.match(html, /<input id="slide" type="checkbox">/);
     const card = html.match(/<article class="card"[\s\S]*?<\/article>/)![0];
     assert.match(
@@ -311,6 +311,13 @@ describe("writeReport", () => {
       [...card.matchAll(/<a href="([^"]+)"/g)].map((m) => m[1]),
       ["a.1440.left.png", "a.1440.right.png", "a.1440.diff.png"],
     );
+  });
+
+  test("a zero-diff card says so in place of the diff image", async () => {
+    const html = await report([at("/a", 1440)]);
+    const card = html.match(/<article class="card"[\s\S]*?<\/article>/)![0];
+    assert.match(card, /<figcaption>diff<\/figcaption><p class="nodiff">no differing pixels<\/p>/);
+    assert.doesNotMatch(card, /diff\.png/);
   });
 
   test("the filter box filters lowercased route names, client-side", async () => {
@@ -484,5 +491,181 @@ describe("renderdiff merge", () => {
     assert.equal(r.code, 2);
     assert.match(r.stderr, /\/a@1440 and \/A@1440 both write a\.1440\.left\.png/);
     assert.equal(fs.existsSync(out), false);
+  });
+});
+
+describe("renderdiff pack", () => {
+  const png = (color: string, height = 20) =>
+    sharp({ create: { width: 30, height, channels: 3, background: color } })
+      .png()
+      .toBuffer();
+  const raw = async (file: string) =>
+    (await sharp(file).ensureAlpha().raw().toBuffer()).toString("hex");
+  const imgs = (stem: string) => ({
+    left: `${stem}.left.png`,
+    right: `${stem}.right.png`,
+    diff: `${stem}.diff.png`,
+  });
+  const crop = (p: string) => ({ ...(differs("/") as ComparedResult).crops[0]!, path: p });
+
+  async function source() {
+    const d = path.join(tempDir(), "out");
+    fs.mkdirSync(path.join(d, ".cache"), { recursive: true });
+    fs.writeFileSync(path.join(d, ".cache", "right.har"), "secret");
+    const files: Record<string, Buffer> = {
+      "index.1440.left.png": await png("#fff"),
+      "index.1440.right.png": await png("#fff"),
+      "index.1440.diff.png": await png("#eee"),
+      "index.375.left.png": await png("#fff"),
+      "index.375.right.png": await png("#fefefe"),
+      "index.375.diff.png": await png("#eee"),
+      "a.1440.left.png": await sharp({
+        create: {
+          width: 30,
+          height: 20,
+          channels: 3,
+          background: "#000",
+          noise: { type: "gaussian", mean: 128, sigma: 60 },
+        },
+      })
+        .png()
+        .toBuffer(),
+      "a.1440.right.png": await png("#00c"),
+      "a.1440.diff.png": await png("#f00"),
+      "a.1440.c1.png": await png("#0c0"),
+      "b.1440.left.unsettled-a.png": await png("#111"),
+      "t.1440.left.png": await png("#fff", 16_384),
+      "t.1440.right.png": await png("#fff", 16_384),
+      "t.1440.diff.png": await png("#eee", 16_384),
+    };
+    for (const [f, b] of Object.entries(files)) fs.writeFileSync(path.join(d, f), b);
+    const results = [
+      shot("/", { images: imgs("index.1440") }),
+      shot("/", { width: 375, images: imgs("index.375") }),
+      shot("/a", {
+        score: 0.9,
+        diffPixels: 9,
+        images: imgs("a.1440"),
+        crops: [crop("a.1440.c1.png")],
+      }),
+      {
+        ...shot("/b"),
+        status: "error",
+        error: "unsettled",
+        frames: ["b.1440.left.unsettled-a.png"],
+      } as RouteResult,
+      shot("/t", { images: imgs("t.1440") }),
+    ];
+    writeResults(results, meta({ widths: [1440, 375] }), d, []);
+    return d;
+  }
+  const pack = (src: string, out: string) => runCli(["pack", src, "--out", out], { noOut: true });
+
+  test("lossless WebP of only the named images, one for byte-equal sides, no diff when zero-diff", async () => {
+    const src = await source();
+    const out = path.join(tempDir(), "packed");
+    const r = await pack(src, out);
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(r.stdout, /packed 5 shot\(s\) into .*: 9 images, [\d.]+ MB → [\d.]+ MB/);
+    assert.match(r.stderr, /renderdiff pack: 9\/9 images/);
+    assert.deepEqual(fs.readdirSync(out).sort(), [
+      "a.1440.c1.webp",
+      "a.1440.diff.webp",
+      "a.1440.left.webp",
+      "a.1440.right.webp",
+      "b.1440.left.unsettled-a.webp",
+      "evidence.html",
+      "index.1440.left.webp",
+      "index.375.left.webp",
+      "index.375.right.webp",
+      "report.html",
+      "results.json",
+      "t.1440.left.png",
+    ]);
+    const got: Results = JSON.parse(fs.readFileSync(path.join(out, "results.json"), "utf8"));
+    assert.ok(got.meta.packed);
+    const images = got.results.map((x) => (x.status === "compared" ? x.images : x.frames));
+    assert.deepEqual(images, [
+      { left: "index.1440.left.webp", right: "index.1440.left.webp" },
+      { left: "index.375.left.webp", right: "index.375.right.webp" },
+      { left: "a.1440.left.webp", right: "a.1440.right.webp", diff: "a.1440.diff.webp" },
+      ["b.1440.left.unsettled-a.webp"],
+      { left: "t.1440.left.png", right: "t.1440.left.png" },
+    ]);
+    assert.equal((got.results[2] as ComparedResult).crops[0]!.path, "a.1440.c1.webp");
+    for (const [webp, src0] of [
+      ["a.1440.left.webp", "a.1440.left.png"],
+      ["index.375.right.webp", "index.375.right.png"],
+    ]) {
+      assert.equal(await raw(path.join(out, webp!)), await raw(path.join(src, src0!)), webp);
+    }
+
+    const html = fs.readFileSync(path.join(out, "report.html"), "utf8");
+    for (const [, f] of html.matchAll(/(?:src|href)="([^"#:]+)"/g))
+      assert.ok(fs.existsSync(path.join(out, f!)), `${f} is linked but not packed`);
+    assert.match(
+      html,
+      /<img[^>]*src="index\.1440\.left\.webp">\s*<div class="l"><img[^>]*src="index\.1440\.left\.webp">/,
+    );
+    assert.match(html, /<article class="card" id="index\.1440">/);
+    assert.match(fs.readFileSync(path.join(out, "evidence.html"), "utf8"), /data:image\/webp/);
+  });
+
+  test("report --markdown --base-url and evidence.html work on a packed dir", async () => {
+    const out = path.join(tempDir(), "packed");
+    assert.equal((await pack(await source(), out)).code, 0);
+    const md = path.join(tempDir(), "pr.md");
+    const r = await runCli(
+      ["report", out, "--markdown", md, "--base-url", "https://r.example/pr-1"],
+      {
+        noOut: true,
+      },
+    );
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(
+      fs.readFileSync(md, "utf8"),
+      /\| 1440 \| !\[before\]\(https:\/\/r\.example\/pr-1\/a\.1440\.right\.webp\) \| !\[after\]\(https:\/\/r\.example\/pr-1\/a\.1440\.left\.webp\) \|/,
+    );
+    const evidence = fs.readFileSync(path.join(out, "evidence.html"), "utf8");
+    assert.equal(banner(evidence), "Differs");
+    assert.match(evidence, /src="data:image\/webp;base64,/);
+    assert.doesNotMatch(evidence, /crop omitted/);
+  });
+
+  test("keeps the source's evidence.html, and packs a packed dir again", async () => {
+    const src = await source();
+    fs.writeFileSync(path.join(src, "evidence.html"), "verdict kept");
+    const out = path.join(tempDir(), "packed");
+    assert.equal((await pack(src, out)).code, 0);
+    assert.equal(fs.readFileSync(path.join(out, "evidence.html"), "utf8"), "verdict kept");
+    const again = path.join(tempDir(), "again");
+    const r = await pack(out, again);
+    assert.equal(r.code, 0, r.stderr);
+    assert.equal((await pack(out, again)).code, 0, "a packed --out is ours to wipe");
+  });
+
+  test("refuses a missing image before touching --out, an --out inside the source, and bad usage", async () => {
+    const src = await source();
+    const out = path.join(tempDir(), "packed");
+    fs.rmSync(path.join(src, "a.1440.c1.png"));
+    const r = await pack(src, out);
+    assert.equal(r.code, 2);
+    assert.match(r.stderr, /a\.1440\.c1\.png is missing/);
+    assert.equal(fs.existsSync(out), false);
+    assert.match((await pack(src, path.join(src, "p"))).stderr, /is or is inside/);
+    const usage = await runCli(["pack", src], { noOut: true });
+    assert.equal(usage.code, 2);
+    assert.match(usage.stderr, /usage: renderdiff pack <out-dir> --out <dir>/);
+  });
+
+  test("merge refuses a packed dir", async () => {
+    const src = await source();
+    const out = path.join(tempDir(), "packed");
+    assert.equal((await pack(src, out)).code, 0);
+    const r = await runCli(["merge", src, out, "--out", path.join(tempDir(), "m")], {
+      noOut: true,
+    });
+    assert.equal(r.code, 2);
+    assert.match(r.stderr, /packed\b.* was written by renderdiff pack, for publishing/);
   });
 });
