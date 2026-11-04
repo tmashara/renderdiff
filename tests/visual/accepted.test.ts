@@ -13,7 +13,14 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { after, before, describe, test } from "node:test";
-import { cleanupTempDirs, context, renderdiffArgs, runCli, tempDir } from "../helpers/cli.ts";
+import {
+  cleanupTempDirs,
+  context,
+  leftCss,
+  renderdiffArgs,
+  runCli,
+  tempDir,
+} from "../helpers/cli.ts";
 import { card, parseReport, parseSummary, result, results } from "../helpers/parse.ts";
 import { startFixtureSite, type FixtureSite } from "../helpers/server.ts";
 
@@ -32,16 +39,6 @@ const args = (routes: string[], extra: string[] = [], widths = [1440]) => [
   ...renderdiffArgs({ left: site.left, right: site.right, routes, widths, concurrency: 2 }),
   ...extra,
 ];
-
-/** A config in `dir` whose hook restyles one side, so the accepted file is found beside it. */
-function leftCss(dir: string, css: string, side = "left") {
-  const file = path.join(dir, "hook.mjs");
-  fs.writeFileSync(
-    file,
-    `export default { before: async (page, { side }) => { if (side === "${side}") await page.addStyleTag({ content: ${JSON.stringify(css)} }); } };\n`,
-  );
-  return ["--config", file];
-}
 
 const THIRD = ".strip:first-of-type > .swatch:nth-child(3)";
 

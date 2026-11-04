@@ -134,6 +134,16 @@ export function renderdiffArgs(opts: {
   return args;
 }
 
+/** A config in `dir` whose hook restyles one side, so the accepted file is found beside it. */
+export function leftCss(dir: string, css: string, side = "left") {
+  const file = path.join(dir, "hook.mjs");
+  fs.writeFileSync(
+    file,
+    `export default { before: async (page, { side }) => { if (side === "${side}") await page.addStyleTag({ content: ${JSON.stringify(css)} }); } };\n`,
+  );
+  return ["--config", file];
+}
+
 /** Attach to a failing assertion so a red visual test is debuggable, not just red. */
 export const context = (r: CliResult) =>
   `\nexit ${r.code}\nreport: ${path.join(r.outDir, "report.html")}\n` +

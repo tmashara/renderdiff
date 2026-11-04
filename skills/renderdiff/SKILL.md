@@ -66,6 +66,9 @@ Pixels decide the score and the exit code in every mode.
    | Varying per load (base vs base shows it) | Mask it, with a `reason`. |
    | `unstable`, a width change, or `unaligned` with a height change | Can't be accepted (§ Masks, accepts and thresholds): fix or report. |
 
+   `--accept` records every unaccepted change in its routes and widths, not only the one you
+   opened: fix the unintended ones first, or check `git diff renderdiff.accepted.json` after
+   and delete the lines you didn't mean.
    Before you mask, accept, set `--threshold`, drop a route or skip a width: § Rationalizations.
 5. **Iterate** with `--rerun-failed` (same arguments) and optionally `--cache-right`
    (§ Iterating). **Finish** with a fresh full run: the same routes, default widths, neither flag.

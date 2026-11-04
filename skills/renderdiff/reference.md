@@ -114,8 +114,8 @@ on stderr: `✗ 2 routes differ (10 shots).` (`below 97.00%` with `--threshold`)
 | `  @1440,896  <row>` | Widths agreeing on height and width delta, bands (side and height), aligned score and text; score and region count become ranges, `unstable` the largest. |
 | `    failed left: …` | Stylesheets (`stylesheet <url>`) and font faces (`font Inter 700`) that side didn't load (404, CORS, a CDN refusing localhost); one side only: it failed again on a reload. Fix first: a fallback font reflows every line. |
 | `    fonts -"Inter 600" +"X"` | Web font faces (`@font-face`, `FontFace`) only one side requested: `-` the reference, `+` your change. System fallbacks aren't listed. Not a reason a shot isn't clean; pixels decide. |
-| `    dom …` | Up to three elements behind the changes, two properties each. `dom @1440 …`: from the first width of the row. |
-| `    crops …` | At most three crop PNGs per shot (bands first, tallest first, then largest regions), relative to `results.json`. |
+| `    dom …` | Up to three elements behind the changes, two properties each, one-sided or text changes first, then property changes, then shifts; `(+N more)` when there are more. `dom @1440 …`: from the first width of the row. |
+| `    crops …` | At most three crop PNGs per shot, worst first (one-sided or text changes, then property changes, then shifts; one crop per named element), relative to `results.json`. |
 | `  @w  ERROR …` | Unmeasured. Grouped across widths sharing a message. See Errors. |
 | `varies /a @1440  Npx  sel` | A differing shot's right side, reloaded in a fresh context, differed from its first load there. Painted out on both sides like a mask, its text left out of `text` like masked text when the element was located, left out of the score (clean if nothing else differs), never accepted. Then `  --mask '…'` and `  masks: [{ …, reason: "varies per load" }]`: confirm it with a base-vs-base baseline before you use either. Ends in `layout moved` (a named element was pushed elsewhere, same text): no suggestion, the page itself shifts per load. Off with `--no-recheck` and under `--cache-right`. |
 | `renderdiff: D of R routes differ (S of T shots), E errors, worst …` | `S` counts unaccepted shots with any differing pixel; `worst` leaves accepted shots out. With unstable pixels: `, U unstable (max Npx)` after the errors. With `--threshold`: `, K below 97.00%`. |
@@ -147,7 +147,7 @@ on stderr: `✗ 2 routes differ (10 shots).` (`below 97.00%` with `--threshold`)
 | `sel x+8 y-4` | It moved or only resized: a width or height change alone is usually a consequence. A neighbour or parent that changed is listed after it (for one that resized, not a parent that only changed width). None listed: its own size rule or something higher up is the cause, so use `--computed`. |
 | `sel` (nothing after) | On both, unchanged and unmoved: its own pixels changed (image source, canvas, SVG). Open the crop. |
 | `… (re-parented)` | Paired across a structure change (grandparent/parent tags differ); its properties may not be the cause. Open the crop. |
-| no `dom` line | Nothing named: a band holds nothing only one side has, past the first five bands and regions, fixed chrome covering it, shadow DOM or iframe, or the 5s probe timed out. Open the crop. |
+| no `dom` line | Nothing named: a band holds nothing only one side has and nothing that grew, past the first 20 bands and regions, fixed chrome covering it, shadow DOM or iframe, or the 5s probe timed out. Open the crop. |
 
 Each selector is unique on its side, so `--selector` takes it.
 
