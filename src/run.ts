@@ -17,7 +17,7 @@ import {
   step,
   type Shot,
 } from "./capture.ts";
-import { compare, crops, type Band, type Box, type Region } from "./compare.ts";
+import { compare, crops, type Band, type Box, type Region, type Spot } from "./compare.ts";
 import {
   diffAria,
   diffSnapshots,
@@ -26,7 +26,7 @@ import {
   pageError,
   ruleCoverage,
 } from "./computed.ts";
-import { locate, snapshotStates, type ElementDiff } from "./locate.ts";
+import { locate, MAX_SPOTS, severity, snapshotStates, type ElementDiff } from "./locate.ts";
 import {
   alive,
   CONTEXT_OPTIONS,
@@ -40,6 +40,7 @@ import {
 } from "./config.ts";
 import {
   fmtBand,
+  andMore,
   fmtElements,
   fmtFailed,
   fmtText,
@@ -64,6 +65,8 @@ import {
 
 /** A busy main thread can stall the probe; the elements are a hint, so give up rather than wait. */
 const LOCATE_TIMEOUT = 5_000;
+/** Located on their own first: as many as before the cap rose to `MAX_SPOTS`. */
+const FIRST_SPOTS = 5;
 /** A full-page walk reads every element's style; past this, report the snapshot as failed. */
 export const COMPUTED_TIMEOUT = 15_000;
 /** Rule coverage after it: past this, the shot keeps its `computed` without `rules`. */
@@ -542,17 +545,20 @@ export async function run({
           diff: `${base}.diff.png`,
         };
         // Both pages still hold this job's document: the next load waits for the loop.
-        const [made, named] = await Promise.all([
-          crops(leftShot.png, rightShot.png, spots),
+        const t0 = Date.now();
+        const probe = (some: Spot[]) =>
           Promise.race([
-            locate([pages.left, pages.right], [leftShot, rightShot], spots, [
+            locate([pages.left, pages.right], [leftShot, rightShot], some, [
               masksFor(cfg, pages.left, route),
               masksFor(cfg, pages.right, route),
             ]).catch(() => null),
-            sleep(LOCATE_TIMEOUT, null, { ref: false }),
-          ]),
-        ]);
-        named?.forEach((els, i) => (spots[i]!.target.elements = els));
+            sleep(LOCATE_TIMEOUT - (Date.now() - t0), null, { ref: false }),
+          ]);
+        // The first few alone, so a slow page that times out on the rest still names those.
+        const first = await probe(spots.slice(0, FIRST_SPOTS));
+        const rest = first && (await probe(spots.slice(FIRST_SPOTS, MAX_SPOTS)));
+        [...(first ?? []), ...(rest ?? [])].forEach((els, i) => (spots[i]!.target.elements = els));
+        const made = await crops(leftShot.png, rightShot.png, worstFirst(spots));
         const snap = (page: Page, side: "left" | "right") =>
           snapshotStates(
             page,
@@ -645,7 +651,7 @@ export async function run({
           ...(replayedAt ? { rightReplayedFrom: new Date(replayedAt).toISOString() } : {}),
         });
         const { regions, bands, alignedScore, text } = metrics;
-        const dom = elementsOf(metrics);
+        const dom = fmtDom(metrics);
         const assets = fmtFailed({ left: leftShot.failed, right: rightShot.failed });
         const details = [
           sel,
@@ -661,7 +667,7 @@ export async function run({
           text.added.length || text.removed.length
             ? `text: ${text.added.length} added, ${text.removed.length} removed`
             : "",
-          dom.length ? `dom ${fmtElements(dom)}` : "",
+          dom ? `dom ${dom}` : "",
           computed && !computed.computed
             ? `computed: snapshot failed, ${computed.computedError}`
             : "",
@@ -1228,20 +1234,42 @@ function summarize(
   console.log(`Results: ${resultsPath}`);
 }
 
+const rank = (s: Spot) => {
+  const els = s.target.elements ?? [];
+  return els.length ? Math.min(...els.map(severity)) : s.kind === "band" ? 0 : 1;
+};
+
+/** Spots by `rank`, each whose elements an earlier one already names moved after the rest. */
+function worstFirst(spots: Spot[]): Spot[] {
+  const seen = new Set<string>();
+  const fresh: Spot[] = [],
+    named: Spot[] = [];
+  for (const s of [...spots].sort((a, b) => rank(a) - rank(b))) {
+    const sels = (s.target.elements ?? []).map((e) => e.selector);
+    (sels.length && sels.every((x) => seen.has(x)) ? named : fresh).push(s);
+    sels.forEach((x) => seen.add(x));
+  }
+  return [...fresh, ...named];
+}
+
 /** At most this many elements per summary line. */
 const DOM_ELEMENTS = 3;
 
-/** Located elements in crop order, bands tallest first then regions, one per selector; none accepted. */
-function elementsOf(r: {
+/**
+ * `a; b; c (+2 more)`: located elements by `severity`, then bands tallest first then regions,
+ * one per selector, none accepted; the first `DOM_ELEMENTS` and how many more.
+ */
+function fmtDom(r: {
   regions: { elements?: ElementDiff[]; accepted?: string }[];
   bands: Band[] | null;
-}): ElementDiff[] {
+}): string {
   const all = [...[...(r.bands ?? [])].sort((a, b) => b.h - a.h), ...r.regions].flatMap((g) =>
     g.accepted ? [] : (g.elements ?? []),
   );
-  return all
+  const els = all
     .filter((e, i) => all.findIndex((o) => o.selector === e.selector) === i)
-    .slice(0, DOM_ELEMENTS);
+    .sort((a, b) => severity(a) - severity(b));
+  return fmtElements(els.slice(0, DOM_ELEMENTS)) + andMore(els.length, DOM_ELEMENTS);
 }
 
 /**
@@ -1312,9 +1340,8 @@ export function compact(
         removed: [...new Set(g.flatMap((r) => r.fonts?.removed ?? []))],
       });
       if (fonts) out.push(`    fonts ${fonts}`);
-      const dom = elementsOf(g[0]!);
-      if (dom.length)
-        out.push(`    dom ${g.length > 1 ? `@${g[0]!.width} ` : ""}${fmtElements(dom)}`);
+      const dom = fmtDom(g[0]!);
+      if (dom) out.push(`    dom ${g.length > 1 ? `@${g[0]!.width} ` : ""}${dom}`);
       const paths = g.flatMap((r) => r.crops.map((c) => c.path));
       if (paths.length) out.push(`    crops ${paths.join(" ")}`);
     }
