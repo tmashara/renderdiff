@@ -341,6 +341,21 @@ describe("motion", () => {
     }
   });
 
+  test("a frame that never loads is skipped, not waited on", async () => {
+    // A 20s deadline, so a shot that waits on the frame errors here instead of passing late.
+    const run = await runCli(
+      renderdiffArgs({
+        left: site.left,
+        right: site.right,
+        routes: ["/stalled-frame"],
+        widths: [1440],
+      }),
+      { env: { RENDERDIFF_SHOT_TIMEOUT: "20" } },
+    );
+    assert.equal(run.code, 0, context(run));
+    assert.equal(cardFor(run, "/stalled-frame").diffPixels, 0, context(run));
+  });
+
   test("Web Animations hold still on the tiled path too", async () => {
     const run = await capture(["/waapi"], { config: path.join(CONFIGS, "waapi-tall.mjs") });
     assert.equal(run.code, 0, context(run));

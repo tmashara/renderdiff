@@ -661,18 +661,10 @@ async function paintBoxes(png: Buffer, boxes: Box[]): Promise<Buffer> {
  * `deviceScaleFactor` is 1 (`CONTEXT_OPTIONS` in config.ts), so clip coords are CSS px.
  */
 async function captureTiled(page: Page, box: Box): Promise<Buffer> {
-  const client = await cdp(page);
   const tiles: Buffer[] = [];
   for (let y = 0; y < box.height; y += TILE_HEIGHT) {
     const height = Math.min(TILE_HEIGHT, box.height - y);
-    const { data } = await client.send("Page.captureScreenshot", {
-      format: "png",
-      captureBeyondViewport: true,
-      // Lossless either way, and sharp re-encodes the stitch.
-      optimizeForSpeed: true,
-      clip: { x: box.x, y: box.y + y, width: box.width, height, scale: 1 },
-    });
-    tiles.push(Buffer.from(data, "base64"));
+    tiles.push(await grab(page, { ...box, y: box.y + y, height }, true));
   }
 
   return sharp({
@@ -690,22 +682,28 @@ async function captureTiled(page: Page, box: Box): Promise<Buffer> {
 
 const sessions = new WeakMap<Page, Promise<CDPSession>>();
 
-/** One CDP session per page, for the life of the page. */
-function cdp(page: Page): Promise<CDPSession> {
+/** A PNG of `clip`, in page px, on the page's one CDP session. */
+async function grab(page: Page, clip: Box, beyond: boolean): Promise<Buffer> {
   let s = sessions.get(page);
   if (!s) sessions.set(page, (s = page.context().newCDPSession(page)));
-  return s;
+  const { data } = await (
+    await s
+  ).send("Page.captureScreenshot", {
+    format: "png",
+    // Lossless either way, and sharp re-encodes every shot kept.
+    optimizeForSpeed: true,
+    captureBeyondViewport: beyond,
+    clip: { ...clip, scale: 1 },
+  });
+  return Buffer.from(data, "base64");
 }
 
 type Resumable = Window & { __renderdiffResume?: () => void };
 
-/**
- * Runs in each frame: what Playwright 1.62's `page.screenshot` does for `animations: "disabled"`
- * and its default `caret: "hide"`, open shadow roots included, until `__renderdiffResume`.
- * Finite animations finish, infinite ones cancel, and carets go transparent; STILL_CSS reaches
- * neither `element.animate()`, shadow roots nor frames.
- */
+/** Runs in each frame: Playwright 1.62's screenshot animation and caret step, until `__renderdiffResume`. */
 function still() {
+  // A frame whose last prep lost the race to the deadline may still hold it.
+  (window as Resumable).__renderdiffResume?.();
   const roots: (Document | ShadowRoot)[] = [];
   const walk = (root: Document | ShadowRoot) => {
     roots.push(root);
@@ -759,61 +757,50 @@ function still() {
 /** `shot`, with every frame `still` and fonts loaded, as `page.screenshot` prepares a page. */
 async function stilled<T>(page: Page, shot: () => Promise<T>): Promise<T> {
   const frames = page.frames();
-  await Promise.all(frames.map((f) => f.evaluate(still).catch(() => {})));
+  // A child frame whose document never commits would hold evaluate forever; Playwright skips it.
+  const each = (fn: () => void) =>
+    Promise.all(
+      frames.map((f) => {
+        const done = f.evaluate(fn).catch(() => {});
+        return f === page.mainFrame()
+          ? done
+          : Promise.race([done, sleep(1_000, undefined, { ref: false })]);
+      }),
+    );
+  await each(still);
   try {
-    await page.evaluate(async () => void (await document.fonts.ready)).catch(() => {});
+    await page
+      .evaluate(() =>
+        Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 5_000))]).then(
+          () => {},
+        ),
+      )
+      .catch(() => {});
     return await shot();
   } finally {
-    await Promise.all(
-      frames.map((f) =>
-        f.evaluate(() => (window as Resumable).__renderdiffResume?.()).catch(() => {}),
-      ),
-    );
+    await each(() => (window as Resumable).__renderdiffResume?.());
   }
 }
 
-/**
- * `page.screenshot({ fullPage: true, clip })` as Playwright 1.62 takes it on Chromium, through
- * CDP for `optimizeForSpeed`, which it can't pass: the clip, page px, trimmed to the document.
- */
+/** Runs in the page: its full size, as Playwright 1.62 measures it for `fullPage`. */
+function docSize() {
+  const els = [document.body ?? document.documentElement, document.documentElement];
+  return {
+    width: Math.max(...els.flatMap((e) => [e.scrollWidth, e.offsetWidth, e.clientWidth])),
+    height: Math.max(...els.flatMap((e) => [e.scrollHeight, e.offsetHeight, e.clientHeight])),
+  };
+}
+
+/** `page.screenshot({ fullPage: true, clip })` as Playwright 1.62 takes it on Chromium. */
 async function pageShot(page: Page, clip?: Box): Promise<Buffer> {
-  const size = await page.evaluate(() => {
-    const [b, d] = [document.body ?? document.documentElement, document.documentElement];
-    return {
-      width: Math.max(
-        b.scrollWidth,
-        d.scrollWidth,
-        b.offsetWidth,
-        d.offsetWidth,
-        b.clientWidth,
-        d.clientWidth,
-      ),
-      height: Math.max(
-        b.scrollHeight,
-        d.scrollHeight,
-        b.offsetHeight,
-        d.offsetHeight,
-        b.clientHeight,
-        d.clientHeight,
-      ),
-    };
-  });
+  const size = await page.evaluate(docSize);
   const c = clip ?? { x: 0, y: 0, ...size };
   const [x, y] = [Math.max(0, Math.min(c.x, size.width)), Math.max(0, Math.min(c.y, size.height))];
+  const w = Math.max(0, Math.min(c.x + c.width, size.width)) - x;
+  const h = Math.max(0, Math.min(c.y + c.height, size.height)) - y;
+  if (w <= 0 || h <= 0)
+    throw new Error("Clipped area is either empty or outside the resulting image");
   const view = page.viewportSize()!;
-  const { data } = await (
-    await cdp(page)
-  ).send("Page.captureScreenshot", {
-    format: "png",
-    optimizeForSpeed: true,
-    captureBeyondViewport: !(size.width <= view.width && size.height <= view.height),
-    clip: {
-      x,
-      y,
-      width: Math.max(0, Math.min(c.x + c.width, size.width)) - x,
-      height: Math.max(0, Math.min(c.y + c.height, size.height)) - y,
-      scale: 1,
-    },
-  });
-  return Buffer.from(data, "base64");
+  const fits = size.width <= view.width && size.height <= view.height;
+  return grab(page, { x, y, width: w, height: h }, !fits);
 }
