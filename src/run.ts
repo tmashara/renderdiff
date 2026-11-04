@@ -17,7 +17,7 @@ import {
   step,
   type Shot,
 } from "./capture.ts";
-import { compare, crops, type Band, type Box, type Region } from "./compare.ts";
+import { compare, crops, type Band, type Box, type Region, type Spot } from "./compare.ts";
 import {
   diffAria,
   diffSnapshots,
@@ -26,7 +26,7 @@ import {
   pageError,
   ruleCoverage,
 } from "./computed.ts";
-import { locate, snapshotStates, type ElementDiff } from "./locate.ts";
+import { locate, severity, snapshotStates, type ElementDiff } from "./locate.ts";
 import {
   alive,
   CONTEXT_OPTIONS,
@@ -542,17 +542,15 @@ export async function run({
           diff: `${base}.diff.png`,
         };
         // Both pages still hold this job's document: the next load waits for the loop.
-        const [made, named] = await Promise.all([
-          crops(leftShot.png, rightShot.png, spots),
-          Promise.race([
-            locate([pages.left, pages.right], [leftShot, rightShot], spots, [
-              masksFor(cfg, pages.left, route),
-              masksFor(cfg, pages.right, route),
-            ]).catch(() => null),
-            sleep(LOCATE_TIMEOUT, null, { ref: false }),
-          ]),
+        const named = await Promise.race([
+          locate([pages.left, pages.right], [leftShot, rightShot], spots, [
+            masksFor(cfg, pages.left, route),
+            masksFor(cfg, pages.right, route),
+          ]).catch(() => null),
+          sleep(LOCATE_TIMEOUT, null, { ref: false }),
         ]);
         named?.forEach((els, i) => (spots[i]!.target.elements = els));
+        const made = await crops(leftShot.png, rightShot.png, worstFirst(spots));
         const snap = (page: Page, side: "left" | "right") =>
           snapshotStates(
             page,
@@ -645,7 +643,7 @@ export async function run({
           ...(replayedAt ? { rightReplayedFrom: new Date(replayedAt).toISOString() } : {}),
         });
         const { regions, bands, alignedScore, text } = metrics;
-        const dom = elementsOf(metrics);
+        const dom = fmtDom(metrics);
         const assets = fmtFailed({ left: leftShot.failed, right: rightShot.failed });
         const details = [
           sel,
@@ -661,7 +659,7 @@ export async function run({
           text.added.length || text.removed.length
             ? `text: ${text.added.length} added, ${text.removed.length} removed`
             : "",
-          dom.length ? `dom ${fmtElements(dom)}` : "",
+          dom ? `dom ${dom}` : "",
           computed && !computed.computed
             ? `computed: snapshot failed, ${computed.computedError}`
             : "",
@@ -1228,10 +1226,35 @@ function summarize(
   console.log(`Results: ${resultsPath}`);
 }
 
+const rank = (s: Spot) => {
+  const els = s.target.elements ?? [];
+  return els.length ? Math.min(...els.map(severity)) : s.kind === "band" ? 0 : 1;
+};
+
+/** Spots by `severity`, skipping one whose elements an earlier one already names. */
+function worstFirst(spots: Spot[]): Spot[] {
+  const seen = new Set<string>();
+  return [...spots]
+    .sort((a, b) => rank(a) - rank(b))
+    .filter((s) => {
+      const sels = (s.target.elements ?? []).map((e) => e.selector);
+      if (sels.length && sels.every((x) => seen.has(x))) return false;
+      sels.forEach((x) => seen.add(x));
+      return true;
+    });
+}
+
 /** At most this many elements per summary line. */
 const DOM_ELEMENTS = 3;
 
-/** Located elements in crop order, bands tallest first then regions, one per selector; none accepted. */
+/** `a; b; c (+2 more)`: the first `DOM_ELEMENTS` of `elementsOf` and how many more. */
+function fmtDom(r: Parameters<typeof elementsOf>[0]): string {
+  const els = elementsOf(r);
+  const more = els.length - DOM_ELEMENTS;
+  return fmtElements(els.slice(0, DOM_ELEMENTS)) + (more > 0 ? ` (+${more} more)` : "");
+}
+
+/** Located elements by `severity`, then bands tallest first then regions, one per selector; none accepted. */
 function elementsOf(r: {
   regions: { elements?: ElementDiff[]; accepted?: string }[];
   bands: Band[] | null;
@@ -1241,7 +1264,7 @@ function elementsOf(r: {
   );
   return all
     .filter((e, i) => all.findIndex((o) => o.selector === e.selector) === i)
-    .slice(0, DOM_ELEMENTS);
+    .sort((a, b) => severity(a) - severity(b));
 }
 
 /**
@@ -1312,9 +1335,8 @@ export function compact(
         removed: [...new Set(g.flatMap((r) => r.fonts?.removed ?? []))],
       });
       if (fonts) out.push(`    fonts ${fonts}`);
-      const dom = elementsOf(g[0]!);
-      if (dom.length)
-        out.push(`    dom ${g.length > 1 ? `@${g[0]!.width} ` : ""}${fmtElements(dom)}`);
+      const dom = fmtDom(g[0]!);
+      if (dom) out.push(`    dom ${g.length > 1 ? `@${g[0]!.width} ` : ""}${dom}`);
       const paths = g.flatMap((r) => r.crops.map((c) => c.path));
       if (paths.length) out.push(`    crops ${paths.join(" ")}`);
     }

@@ -23,7 +23,7 @@ export interface ElementDiff {
   reparented?: true;
 }
 
-const MAX_SPOTS = 5;
+const MAX_SPOTS = 20;
 const PER_SPOT = 3;
 const MAX_CHANGED = 6;
 
@@ -537,6 +537,10 @@ const own = (changed: ElementDiff["changed"]) =>
 
 const moved = (a: Box, b: Box) => a.x !== b.x || a.y !== b.y || a.w !== b.w || a.h !== b.h;
 
+/** 0: on one side only or its text changed; 1: its own style or pixels changed; 2: it only moved or resized. */
+export const severity = (e: ElementDiff) =>
+  e.side !== "both" || e.changed.text ? 0 : own(e.changed) || !moved(e.left!, e.right!) ? 1 : 2;
+
 const handles = async (ls: Locator[]) =>
   (await Promise.all(ls.map((l) => l.elementHandles()))).flat();
 
@@ -734,8 +738,11 @@ export async function locate(
       }
     }
     const unique = out.filter((e, j) => out.findIndex((o) => o.selector === e.selector) === j);
-    // A band's rows are what one side added; an element on both sides there was only pushed.
-    if (spot.kind === "band") return unique.filter((e) => e.side !== "both");
+    // A band's rows are what one side added, else what grew there; an element only pushed is neither.
+    if (spot.kind === "band") {
+      const one = unique.filter((e) => e.side !== "both");
+      return one.length ? one : unique.filter((e) => own(e.changed));
+    }
     // Unchanged and unmoved, e.g. covered by what changed: noise beside anything that explains.
     const telling = unique.filter(
       (e) => e.side !== "both" || Object.keys(e.changed).length || moved(e.left!, e.right!),
