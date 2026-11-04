@@ -373,8 +373,7 @@ any difference fails, so there is no amber. The summary on top counts routes, sh
 differing shots, errors, accepted and stale accepted; gives the mean and the worst score,
 linked to its card; and lists only the differing shots, by route. Findings repeated on two
 or more routes, and with `--computed` the style findings, sit collapsed under it. Then a
-card per shot, lowest score first, showing left, right and diff side by side (a note in place
-of the diff when no pixel differs); the sidebar's
+card per shot, lowest score first, showing left, right and diff side by side; the sidebar's
 **Slider view** toggle swaps those for both shots stacked, tops aligned, with a divider you
 drag anywhere on the shot to reveal left on one side and right on the other.
 
@@ -403,7 +402,7 @@ self-contained and can go anywhere on its own.
 
 Never upload `<out>/.cache/`: it holds `--cache-right`'s recorded traffic, cookies and auth
 headers included. Upload a [pack](#pack) of the out dir instead, which leaves it out and is
-a fraction of the size. Cloudflare Pages gives `report.html` a per-PR URL:
+smaller. Cloudflare Pages gives `report.html` a per-PR URL:
 
 ```bash
 npx wrangler pages project create <p> --production-branch main   # once
@@ -433,13 +432,16 @@ its history keeps them after the branch is deleted.
 ## pack
 
 `renderdiff pack <out-dir> --out <dir>` writes a copy to publish: `report.html`,
-`results.json`, `evidence.html` (the out dir's own, verdict included, or a new one) and only
-the images `results.json` names, never `.cache/`. No browser. Each image is re-encoded as
-lossless WebP, so every pixel is kept, at about a quarter of the PNG's size; one with a side
-over 16,383px, WebP's limit, stays PNG. A shot whose two sides are byte-identical keeps one
-image that both `left` and `right` name, and a shot with no differing pixel keeps no diff
-image (its `images` has no `diff`). Sides under the comparison threshold aren't
-byte-identical, so they keep both. `meta.packed` says when it was packed. Exits 2 when
+`results.json`, `evidence.html` and only the images `results.json` names, never `.cache/`.
+No browser. `evidence.html` is the out dir's own, verdict included, unless it is older than
+`results.json` (a later `--rerun-failed`): then a new one is written without the verdict, and
+pack says so. Each image is re-encoded as lossless WebP, so every pixel is kept; one with a
+side over 16,383px, WebP's limit, stays PNG. A shot whose two sides are byte-identical keeps
+one image that both `left` and `right` name, and a shot with no differing pixel keeps no diff
+image (its `images` has no `diff`; its card says so). On the test fixtures, WebP alone was
+27% of the PNG size (10.9 MB to 3.0 MB over 195 images); with the shared and dropped images,
+the run's 27.4 MB of images packed to 8.7 MB, 5.8 MB of it shots too tall for WebP.
+`meta.packed` says when it was packed. Exits 2 when
 `--out` is or is inside the out dir or holds files renderdiff didn't write, or a referenced
 image is missing, before `--out` is touched. A packed dir is for publishing: `merge` and
 `--rerun-failed` refuse it; `renderdiff report` works on it.

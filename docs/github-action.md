@@ -131,7 +131,9 @@ with contents write on the reports repo only:
 ```
 
 The images render for viewers with read access to the reports repo; see
-[output.md](output.md#markdown) for why it should be a separate repo.
+[output.md](output.md#markdown) for why it should be a separate repo. Put the job in a
+`concurrency:` group so two PRs don't race on the push, expect fork PRs to get no secret, and
+pin `renderdiff@` to the version of the action you use.
 
 ### Dependency upgrades from Renovate or Dependabot
 

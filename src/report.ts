@@ -492,7 +492,7 @@ function card(r: ComparedResult): string {
   <div class="grid">
     <figure><figcaption>left</figcaption><a href="${imgs.left}" target="_blank"><img loading="lazy" src="${imgs.left}"></a></figure>
     <figure><figcaption>right</figcaption><a href="${imgs.right}" target="_blank"><img loading="lazy" src="${imgs.right}"></a></figure>
-    <figure><figcaption>diff</figcaption>${r.diffPixels ? `<a href="${imgs.diff}" target="_blank"><img loading="lazy" src="${imgs.diff}"></a>` : `<p class="nodiff">no differing pixels</p>`}</figure>
+    <figure><figcaption>diff</figcaption>${imgs.diff ? `<a href="${imgs.diff}" target="_blank"><img loading="lazy" src="${imgs.diff}"></a>` : `<p class="nodiff">no differing pixels</p>`}</figure>
   </div>
   <div class="slider" style="--x:50%">
     <img loading="lazy" src="${imgs.right}">

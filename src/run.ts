@@ -1,7 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { chromium, errors, type Browser, type BrowserContext, type Page } from "playwright";
@@ -853,15 +852,11 @@ function wipe(outDir: string) {
 export async function merge(fullDir: string, partialDir: string, outDir: string): Promise<void> {
   const full = readResults(fullDir);
   const partial = readResults(partialDir);
-  for (const [dir, r] of [
-    [fullDir, full],
-    [partialDir, partial],
-  ] as const) {
-    if (r.meta.packed)
-      throw new Error(
-        `${dir} was written by renderdiff pack, for publishing; merge the out dirs it was packed from`,
-      );
-  }
+  const packed = [fullDir, partialDir].find((_, i) => [full, partial][i]!.meta.packed);
+  if (packed)
+    throw new Error(
+      `${packed} was written by renderdiff pack, for publishing; merge the out dirs it was packed from`,
+    );
   for (const side of ["left", "right"] as const) {
     if (full.meta[side] !== partial.meta[side])
       throw new Error(
@@ -927,24 +922,18 @@ export async function merge(fullDir: string, partialDir: string, outDir: string)
   console.log(compact(results, [...new Set(results.map(name))], resultsPath, meta.threshold));
 }
 
-/** The most either side of a WebP can be. */
-const WEBP_MAX = 16_383;
-
 /** `renderdiff pack`: a copy to publish, holding only what results.json names, as lossless WebP. */
 export async function pack(srcDir: string, outDir: string): Promise<void> {
   const data = readResults(srcDir);
   checkOut([srcDir], outDir);
   const plan = new Map<string, string>();
   const to = async (f: string) => {
-    let out = plan.get(f);
-    if (out === undefined) {
-      const file = path.join(srcDir, f);
-      if (!fs.existsSync(file)) throw new Error(`${file} is missing`);
-      const { width = 0, height = 0 } = await sharp(file).metadata();
-      // ponytail: past WebP's limit a shot stays PNG; tile it if tall pages come to dominate the size.
-      out = Math.max(width, height) > WEBP_MAX ? f : f.replace(/\.png$/, ".webp");
-      plan.set(f, out);
-    }
+    const file = path.join(srcDir, f);
+    if (!fs.existsSync(file)) throw new Error(`${file} is missing`);
+    const { width = 0, height = 0 } = await sharp(file).metadata();
+    // ponytail: past WebP's 16,383px limit a shot stays PNG; tile it if tall pages come to dominate the size.
+    const out = Math.max(width, height) > 16_383 ? f : f.replace(/\.png$/, ".webp");
+    plan.set(f, out);
     return out;
   };
   const same = (a: string, b: string) => {
@@ -958,9 +947,7 @@ export async function pack(srcDir: string, outDir: string): Promise<void> {
   const results: RouteResult[] = [];
   for (const r of data.results) {
     if (r.status === "error") {
-      const frames = [];
-      for (const f of r.frames ?? []) frames.push(await to(f));
-      results.push(r.frames ? { ...r, frames } : r);
+      results.push(r.frames ? { ...r, frames: await Promise.all(r.frames.map(to)) } : r);
       continue;
     }
     const { left, right, diff } = r.images;
@@ -971,32 +958,27 @@ export async function pack(srcDir: string, outDir: string): Promise<void> {
       right: same(left, right) ? l : await to(right),
       ...(diff && r.diffPixels ? { diff: await to(diff) } : {}),
     };
-    const crops = [];
-    for (const c of r.crops) crops.push({ ...c, path: await to(c.path) });
+    const crops = await Promise.all(r.crops.map(async (c) => ({ ...c, path: await to(c.path) })));
     results.push({ ...r, images, crops });
   }
   const size = (f: string) => fs.statSync(f).size;
-  const before = data.results
-    .flatMap(files)
+  const before = [...new Set(data.results.flatMap(files))]
     .map((f) => path.join(srcDir, f))
     .filter((f) => fs.existsSync(f))
     .reduce((n, f) => n + size(f), 0);
 
   wipe(outDir);
-  const todo = [...plan];
-  const every = Math.ceil(todo.length / 10);
+  const every = Math.ceil(plan.size / 10);
   let done = 0;
   let after = 0;
   await Promise.all(
-    Array.from({ length: os.availableParallelism() }, async () => {
-      for (let job = todo.shift(); job; job = todo.shift()) {
-        const [src, dst] = [path.join(srcDir, job[0]), path.join(outDir, job[1])];
-        if (job[0] === job[1]) fs.copyFileSync(src, dst);
-        else await sharp(src).webp({ lossless: true }).toFile(dst);
-        after += size(dst);
-        if (++done % every === 0 || done === plan.size)
-          console.error(`renderdiff pack: ${done}/${plan.size} images`);
-      }
+    [...plan].map(async ([f, out]) => {
+      const [src, dst] = [path.join(srcDir, f), path.join(outDir, out)];
+      if (f === out) fs.copyFileSync(src, dst);
+      else await sharp(src).webp({ lossless: true }).toFile(dst);
+      after += size(dst);
+      if (++done % every === 0 || done === plan.size)
+        console.error(`renderdiff pack: ${done}/${plan.size} images`);
     }),
   );
 
@@ -1005,8 +987,18 @@ export async function pack(srcDir: string, outDir: string): Promise<void> {
   await writeReport(results, meta, outDir, stale);
   writeResults(results, meta, outDir, stale);
   const evidence = path.join(srcDir, "evidence.html");
-  if (fs.existsSync(evidence)) fs.copyFileSync(evidence, path.join(outDir, "evidence.html"));
-  else await writeEvidence(readResults(outDir), outDir, null);
+  const fresh =
+    fs.existsSync(evidence) &&
+    fs.statSync(evidence).mtimeMs >= fs.statSync(path.join(srcDir, "results.json")).mtimeMs;
+  if (fresh) fs.copyFileSync(evidence, path.join(outDir, "evidence.html"));
+  else {
+    if (fs.existsSync(evidence))
+      console.error(
+        `renderdiff pack: ${evidence} is older than results.json, so its verdict was dropped; ` +
+          `run renderdiff report --verdict on ${srcDir} first to keep one`,
+      );
+    await writeEvidence(readResults(outDir), outDir, null);
+  }
   const mb = (n: number) => `${(n / 1e6).toFixed(1)} MB`;
   console.log(
     `packed ${results.length} shot(s) into ${outDir}: ${plan.size} images, ${mb(before)} → ${mb(after)}`,

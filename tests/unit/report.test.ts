@@ -300,7 +300,7 @@ describe("writeReport", () => {
   });
 
   test("a sidebar toggle swaps each card's three images for a left/right slider", async () => {
-    const html = await report([at("/a", 1440, { score: 0.9, diffPixels: 9 })]);
+    const html = await report([at("/a", 1440)]);
     assert.match(html, /<input id="slide" type="checkbox">/);
     const card = html.match(/<article class="card"[\s\S]*?<\/article>/)![0];
     assert.match(
@@ -313,11 +313,12 @@ describe("writeReport", () => {
     );
   });
 
-  test("a zero-diff card says so in place of the diff image", async () => {
-    const html = await report([at("/a", 1440)]);
+  test("a packed zero-diff card says so in place of the diff image", async () => {
+    const images = { left: "a.1440.left.webp", right: "a.1440.left.webp" };
+    const html = await report([at("/a", 1440, { images })]);
     const card = html.match(/<article class="card"[\s\S]*?<\/article>/)![0];
     assert.match(card, /<figcaption>diff<\/figcaption><p class="nodiff">no differing pixels<\/p>/);
-    assert.doesNotMatch(card, /diff\.png/);
+    assert.doesNotMatch(card, /diff\.|undefined/);
   });
 
   test("the filter box filters lowercased route names, client-side", async () => {
@@ -608,7 +609,6 @@ describe("renderdiff pack", () => {
       /<img[^>]*src="index\.1440\.left\.webp">\s*<div class="l"><img[^>]*src="index\.1440\.left\.webp">/,
     );
     assert.match(html, /<article class="card" id="index\.1440">/);
-    assert.match(fs.readFileSync(path.join(out, "evidence.html"), "utf8"), /data:image\/webp/);
   });
 
   test("report --markdown --base-url and evidence.html work on a packed dir", async () => {
@@ -642,6 +642,21 @@ describe("renderdiff pack", () => {
     const r = await pack(out, again);
     assert.equal(r.code, 0, r.stderr);
     assert.equal((await pack(out, again)).code, 0, "a packed --out is ours to wipe");
+  });
+
+  test("an evidence.html older than results.json is rebuilt, and says its verdict was dropped", async () => {
+    const src = await source();
+    const evidence = path.join(src, "evidence.html");
+    fs.writeFileSync(evidence, "old verdict");
+    fs.utimesSync(evidence, new Date(0), new Date(0));
+    const out = path.join(tempDir(), "packed");
+    const r = await pack(src, out);
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(
+      r.stderr,
+      /evidence\.html is older than results\.json, so its verdict was dropped/,
+    );
+    assert.equal(banner(fs.readFileSync(path.join(out, "evidence.html"), "utf8")), "Differs");
   });
 
   test("refuses a missing image before touching --out, an --out inside the source, and bad usage", async () => {

@@ -251,9 +251,7 @@ For an intended change, run with `--threshold 0 --no-recheck`, then
 description, with `--base-url <url>` for absolute image links once the out dir is uploaded
 ([docs/output.md](https://github.com/tmashara/renderdiff/blob/main/docs/output.md#markdown)).
 
-`renderdiff pack <out> --out <dir>` writes a copy to publish: only the images `results.json`
-names, as lossless WebP at about a quarter of the size, one image for byte-identical sides,
-no diff for a zero-diff shot, never `.cache/`
+`renderdiff pack <out> --out <dir>` writes a smaller copy to publish, without `.cache/`
 ([docs/output.md](https://github.com/tmashara/renderdiff/blob/main/docs/output.md#pack)).
 
 `renderdiff merge <full-out> <partial-out> --out <dir>` writes the full run's results to a new

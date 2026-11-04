@@ -441,13 +441,10 @@ async function outCommand(command: "merge" | "pack", argv: string[]): Promise<ne
     }
     if (dirs.length !== n || !out)
       throw new Error(
-        command === "merge"
-          ? "usage: renderdiff merge <full-out> <partial-out> --out <dir>"
-          : "usage: renderdiff pack <out-dir> --out <dir>",
+        `usage: renderdiff ${command} ${n === 2 ? "<full-out> <partial-out>" : "<out-dir>"} --out <dir>`,
       );
     const run = await import("./run.ts");
-    if (command === "merge") await run.merge(dirs[0]!, dirs[1]!, out);
-    else await run.pack(dirs[0]!, out);
+    await (n === 2 ? run.merge(dirs[0]!, dirs[1]!, out) : run.pack(dirs[0]!, out));
     process.exit(0);
   } catch (e) {
     console.error(`✗ ${e instanceof Error ? e.message : String(e)}`);
