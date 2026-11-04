@@ -1,11 +1,10 @@
 import pixelmatch from "pixelmatch";
 import sharp, { type OverlayOptions } from "sharp";
-import type { Shot } from "./capture.ts";
+import { decode, type Shot } from "./capture.ts";
 import type { ElementDiff } from "./locate.ts";
-import { MASK_COLOR } from "./config.ts";
 
 /**
- * Pixel diff between two shots. sharp decodes/pads/encodes, pixelmatch compares.
+ * Pixel diff between two shots. sharp decodes/encodes, pixelmatch compares.
  *
  * No pngjs: it exists to bridge PNG<->raw RGBA, and sharp already is that bridge.
  *
@@ -112,42 +111,35 @@ const CELL = 16;
 /** `MASK_COLOR` (#FF00FF, opaque) as one little-endian RGBA word. */
 const MAGENTA = 0xffff00ff;
 
-/**
- * Pad a shot onto a common (w, h) canvas so both frames are the same size for
- * pixelmatch, with the image top-left and magenta everywhere else.
- *
- * Composited onto a created canvas rather than `sharp.extend()`, which rejects any
- * single edge past 10 000px. Two pages can easily differ by more than that — one long
- * scrolling page against a short one — and that is exactly the case worth diffing.
- */
-const toRaw = (png: Buffer, w: number, h: number) =>
-  sharp({
-    create: { width: w, height: h, channels: 4, background: MASK_COLOR },
-  })
-    .composite([{ input: png, left: 0, top: 0 }])
-    .raw()
-    .ensureAlpha()
-    .toBuffer();
+/** Rows copied by hand: `sharp.extend()` rejects edges past 10 000px. Assumes opaque shots. */
+function pad({ data, info }: Awaited<ReturnType<typeof decode>>, w: number, h: number): Buffer {
+  if (info.width === w && info.height === h) return data;
+  const out = Buffer.alloc(w * h * 4);
+  new Uint32Array(out.buffer, out.byteOffset, w * h).fill(MAGENTA);
+  const row = info.width * 4;
+  for (let y = 0; y < info.height; y++) data.copy(out, y * w * 4, y * row, y * row + row);
+  return out;
+}
 
 export async function compare(left: Shot, right: Shot): Promise<Diff> {
   // Real PNG dimensions, not the `scrollHeight` we measured: that can disagree with
   // what Chromium actually painted.
-  const [lm, rm] = await Promise.all([sharp(left.png).metadata(), sharp(right.png).metadata()]);
-  const lw = lm.width!,
-    lh = lm.height!,
-    rw = rm.width!,
-    rh = rm.height!;
+  const lp = decode(left.png);
+  const [ld, rd] = await Promise.all([lp, left.png.equals(right.png) ? lp : decode(right.png)]);
+  const { width: lw, height: lh } = ld.info,
+    { width: rw, height: rh } = rd.info;
 
   const w = Math.max(lw, rw);
   const h = Math.max(lh, rh);
 
-  const [l, r] = await Promise.all([toRaw(left.png, w, h), toRaw(right.png, w, h)]);
+  const l = pad(ld, w, h);
+  const r = pad(rd, w, h);
 
   const text = textDiff(left.text, right.text);
   const out = Buffer.alloc(w * h * 4);
   // Identical shots skip pixelmatch's grey drawing and leave the diff PNG fully transparent.
   // `l`/`r`/`out` are Buffers, i.e. Uint8Arrays — pixelmatch takes them directly.
-  const diffPixels = l.equals(r) ? 0 : pixelmatch(l, r, out, w, h, PIXELMATCH);
+  const diffPixels = l === r || l.equals(r) ? 0 : pixelmatch(l, r, out, w, h, PIXELMATCH);
 
   // Default zlib level: the diff PNG is a local intermediate (mostly transparent with
   // sparse red), so max compression buys little size for noticeably more CPU per job.

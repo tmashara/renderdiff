@@ -59,3 +59,16 @@ test("a divider lost above a dark footer is still the right side's", async () =>
   );
   assert.deepEqual(d.regions[0]!.line, { y: 100, h: 1, side: "right" });
 });
+
+test("a smaller shot is padded with magenta at its right and bottom", async () => {
+  const white = async (w: number, h: number) => ({
+    ...(await shot(() => {})),
+    png: await sharp({ create: { width: w, height: h, channels: 3, background: "#fff" } })
+      .png()
+      .toBuffer(),
+  });
+  const d = await compare(await white(300, 150), await white(400, 200));
+  assert.equal(d.diffPixels, 400 * 200 - 300 * 150);
+  assert.equal(d.widthDelta, -100);
+  assert.equal(d.heightDelta, -50);
+});
