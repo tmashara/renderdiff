@@ -580,6 +580,25 @@ describe("the tiled capture path", () => {
     }
   });
 
+  test("a tiled page that scrolls sideways keeps its full width", async () => {
+    const run = await capture(["/tall"], { config: path.join(CONFIGS, "tall-wide.mjs") });
+    assert.equal(run.code, 1, context(run));
+    const meta = await sharp(run.file("tall.1440.right.png")).metadata();
+    assert.deepEqual([meta.width, meta.height], [2000, EXPECT_HEIGHT], context(run));
+    assert.ok(cardFor(run, "/tall").diffPixels > 0, context(run));
+  });
+
+  test("a stray box far to the right is refused by area, not stitched", async () => {
+    const run = await capture(["/tall"], { config: path.join(CONFIGS, "tall-far.mjs") });
+    assert.equal(run.code, 3, context(run));
+    const r = results(run.outDir).results.find((x) => x.url === "/tall");
+    assert.ok(r?.status === "error", context(run));
+    assert.match(
+      r.error,
+      /is 20200×18000px at 1440px wide, past the 57,600,000-pixel sanity ceiling/,
+    );
+  });
+
   test("an element taller than the cap is tiled too, down to its own last row", async () => {
     const el = await runCli([
       ...renderdiffArgs({ left: site.left, right: site.right, routes: ["/tall"], widths: [1440] }),
