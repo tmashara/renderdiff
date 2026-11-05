@@ -298,8 +298,9 @@ rules: 3 changed groups, 1 never matched, 2 matched on some shots
   `rgb(0, 0, 0)`, hex case, `0` and `0px`, merged shorthands) is no change, and neither is
   declaration order or `@media (min-width: 60em)` against `(width >= 60em)`, or `max-width:`
   against `<=`. A shorthand and longhand that swap order are a change, since that changes
-  what the rule does. A rule with a logical property (`margin-inline-start`) keeps its order,
-  so reordering one is a change even where it does nothing. The reversed
+  what the rule does. A rule with a logical (`margin-inline-start`) or `-webkit-` property
+  keeps its order, since `-webkit-border-image` and `border-image` set the same thing and the
+  later wins, so reordering one is a change even where it does nothing. The reversed
   `(60em <= width)` and the two-sided `(60em <= width <= 80em)` aren't read as `min-width:`.
   Asset hashes in `url()` and the left origin are read as on the other side. A rule moved to
   another file is no change. Only style rules count: not `@font-face`, `@keyframes` or

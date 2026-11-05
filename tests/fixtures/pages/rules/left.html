@@ -8,7 +8,7 @@
 /* GUARD RAIL for --computed's rule coverage. This side writes breakpoints as ranges and adds a rule for a .bubble no page has and two
    state-only rules, which any element could take. The colour, the url() hash, .toc's declaration order, .data's and the two
    .toc li breakpoints differ only in notation, so they are no change. The .toc breakpoint's value is one. So are .swap, .swap-var and
-   .logical, which keep their declarations in another order that changes what they mean, and .split, whose `;` are inside strings. */
+   .logical, .corner and .autoprefixed, which keep their declarations in another order that changes what they mean, and .split, whose `;` are inside strings. */
 .toc { margin: 0 0 32px; padding: 0; list-style: none; color: rgb(0 0 0); }
 .toc li { height: 24px; }
 @media (width >= 960px) { .toc li { padding-left: 8px; } }
@@ -20,6 +20,8 @@
 .swap { margin: 0; margin-top: 4px; }
 .swap-var { margin: var(--gap); margin-top: 4px; }
 .logical { margin-left: 1px; margin-inline-start: 2px; }
+.corner { corner-top-left-shape: bevel; corner-start-start-shape: notch; }
+.autoprefixed { -webkit-border-image: url(a.png) 30 round; border-image: url(a.png) 30 round; }
 .split { --v: "a;b"; --w: "c;d"; }
 @media screen { ::selection { color: rgb(255 255 255); } :focus-visible { outline-offset: 2px; } }
 </style>
