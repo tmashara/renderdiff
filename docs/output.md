@@ -289,15 +289,21 @@ style rule in each side's stylesheets and lists the groups of rules only one sid
 ```
 rules: 3 changed groups, 1 never matched, 2 matched on some shots
   +chat.css (1 rule)  matched nothing: /help@1440,375
-  +docs.css @media (width >= 60em) (5 rules)  matched /a@960,1440 /b@960; nothing /a@959,375
+  +docs.css @media (min-width: 60em) (5 rules)  matched /a@960,1440 /b@960; nothing /a@959,375
   -docs.css @media (min-width: 60em) (5 rules)  matched /a@960,1440 /b@960; nothing /a@959,375
 ```
 
 - A rule is its enclosing at-rules, selector (nesting resolved) and declarations, as Chrome
-  serializes them. So pure notation changes Chrome normalizes (`rgb(0 0 0)` and
-  `rgb(0, 0, 0)`) are no change, while `min-width:` against `width >=` is. Asset hashes in
-  `url()` and the left origin are read as on the other side. A rule moved to another file is
-  no change. Only style rules count: not `@font-face`, `@keyframes` or `@property`.
+  serializes them, compared by meaning. So notation Chrome normalizes (`rgb(0 0 0)` and
+  `rgb(0, 0, 0)`, hex case, `0` and `0px`, merged shorthands) is no change, and neither is
+  declaration order or `@media (min-width: 60em)` against `(width >= 60em)`, or `max-width:`
+  against `<=`. A shorthand and longhand that swap order are a change, since that changes
+  what the rule does. A rule with a logical property (`margin-inline-start`) keeps its order,
+  so reordering one is a change even where it does nothing. The reversed
+  `(60em <= width)` and the two-sided `(60em <= width <= 80em)` aren't read as `min-width:`.
+  Asset hashes in `url()` and the left origin are read as on the other side. A rule moved to
+  another file is no change. Only style rules count: not `@font-face`, `@keyframes` or
+  `@property`.
 - `+` rules only the left (your change) has, `-` only the right. A group is a stylesheet's file
   name (asset hash as `#`; a `<style>` is `inline#` and a hash of its text, so one block
   inlined into every page is one group) and its enclosing at-rules.
@@ -560,7 +566,7 @@ file, not each line), scores rounded down to four decimals (so a shot that diffe
       "fonts": { "added": [], "removed": ["Inter 600"] },   // web font faces one side loaded; absent when equal
       "masked": ["rotating quote (data-renderdiff-mask)"],   // absent unless a side marked elements data-renderdiff-mask
       "computed": { "dom": 1, "changes": [], "truncated": 0, "unmatched": { "left": [], "right": ["body > nav > a[href=\"/pricing\"]"] },
-        "rules": [{ "side": "left", "sheet": "docs.css", "conditions": ["@media (width >= 60em)"], "rules": 5, "elements": 67 }],
+        "rules": [{ "side": "left", "sheet": "docs.css", "conditions": ["@media (min-width: 60em)"], "rules": 5, "elements": 67 }],
         "prefixes": { "left": ["-webkit-user-select: none"], "right": [] } },   // --computed only; null: snapshot failed, "computedError" says why; rules: one-sided rule groups, elements they could style here; prefixes: { left, right }, prefixed declarations only that side's CSS source has
       "aria": { "added": ["- text: Buy now"], "removed": ["- button \"Buy now\""], "truncated": 0 },   // --aria only; both empty: identical; null: snapshot failed, "ariaError" says why
       "images": { "left": "about.1440.left.png", "right": "about.1440.right.png", "diff": "about.1440.diff.png" },   // packed: .webp, right may name left's file, no diff when diffPixels is 0

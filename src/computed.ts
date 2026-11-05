@@ -438,9 +438,53 @@ function matching(groups: string[][]) {
   });
 }
 
-/** A row compared across sides: the left origin read as the right's, asset hashes in `url()` as `#`. */
+/** `cssText`'s declarations; a `;` in a string or brackets (`url("data:…;base64,…")`) ends none. */
+function declarations(css: string): string[] {
+  const out: string[] = [];
+  let [from, quote, depth] = [0, "", 0];
+  for (let i = 0; i < css.length; i++) {
+    const c = css[i]!;
+    if (c === "\\") i++;
+    else if (quote) quote = c === quote ? "" : quote;
+    else if (c === '"' || c === "'") quote = c;
+    else if ("([{".includes(c)) depth++;
+    else if (")]}".includes(c)) depth--;
+    else if (c === ";" && !depth) {
+      out.push(css.slice(from, i).trim());
+      from = i + 1;
+    }
+  }
+  return [...out, css.slice(from).trim()];
+}
+
+const LOGICAL = /^(?!--)(?:[a-z-]+-)?(?:inline|block)[-:]|^border-(?:start|end)-(?:start|end)-/;
+
+/**
+ * Declarations in an order that doesn't count. Chrome's `cssText` already holds one value per
+ * longhand, so a shorthand and longhand that swap read differently; a logical property and
+ * its physical twin are two longhands whose order decides, so such a rule keeps its order.
+ */
+function unordered(css: string): string {
+  const all = declarations(css);
+  return (all.some((d) => LOGICAL.test(d)) ? all : all.sort()).join("; ");
+}
+
+/** `@media (min-width: 1px)` as `(width >= 1px)`; in `@supports` that's a property, so left alone. */
+const ranged = (cond: string) =>
+  cond.startsWith("@media ")
+    ? cond.replace(
+        /\((min|max)-([a-z-]+): ((?:[^()]|\([^()]*\))+)\)/g,
+        (_, m: string, feature: string, v: string) =>
+          `(${feature} ${m === "min" ? ">=" : "<="} ${v})`,
+      )
+    : cond;
+
+/**
+ * A row compared across sides, by meaning: see `unordered` and `ranged`. The left origin is
+ * read as the right's, asset hashes in `url()` as `#`.
+ */
 const ruleKey = ([, conds, sel, css]: RuleRow, origins?: [string, string]) => {
-  const k = `${conds.join(" ")}\0${sel}\0${css}`;
+  const k = `${conds.map(ranged).join(" ")}\0${sel}\0${unordered(css)}`;
   return (origins ? rebaseText(k, ...origins) : k).replace(
     /url\("([^"]*)"\)/g,
     (_, u: string) => `url("${normalizeUrl(u)}")`,

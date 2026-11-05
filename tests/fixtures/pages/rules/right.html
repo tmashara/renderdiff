@@ -5,17 +5,24 @@
 <title>Rule coverage</title>
 <link rel="stylesheet" href="/shared/base.css">
 <style>
-/* GUARD RAIL for --computed's rule coverage. This side keeps `min-width`, and has no .bubble rule. */
-.toc { margin: 0 0 32px; padding: 0; list-style: none; color: rgb(0, 0, 0); }
+/* GUARD RAIL for --computed's rule coverage. This side keeps `min-width` and `max-width`, and has no .bubble rule. */
+.toc { color: rgb(0, 0, 0); list-style: none; padding: 0; margin: 0 0 32px; }
 .toc li { height: 24px; }
 @media (min-width: 960px) { .toc li { padding-left: 8px; } }
+@media (max-width: 959px) { .toc li { padding-left: 0; } }
+@media (min-width: 960px) { .toc { outline-offset: 2px; } }
 .ghost { background-image: url(/shared/img/ghost.9b8c7d6e.png); }
+.data { content: "a;b"; color: red; background: url("data:image/gif;base64,R0lGODlhAQABAAAAACw=") no-repeat; }
+.swap { margin-top: 4px; margin: 0; }
+.swap-var { margin-top: 4px; margin: var(--gap); }
+.logical { margin-inline-start: 2px; margin-left: 1px; }
+.split { --v: "a;d"; --w: "c;b"; }
 </style>
 </head>
 <body>
 <div class="page">
 <h1>Rule coverage guard rail</h1>
-<p class="lede">The two sides write one breakpoint in different notation and render the same, so only rule coverage tells the rewritten rule apart, and whether any shot reached it.</p>
+<p class="lede">The two sides write their breakpoints in different notation and render the same, so only rule coverage tells a rule that really changed from one rewritten, and whether any shot reached it.</p>
 
 <ul class="toc">
   <li>Install</li>

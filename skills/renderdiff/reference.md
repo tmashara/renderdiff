@@ -225,9 +225,9 @@ computed: 2 findings; dom identical on 2 of 3 route(s), differs /pricing (1), so
 - `rules: N changed groups, X never matched, Y matched on some shots`: style rules only one
   side has (`+` left, `-` right), by stylesheet and `@media`. `matched nothing`: no shot had an
   element they could style, so the run proved nothing about them; add a route, width or hook
-  that reaches them. Rules compare as Chrome parses them: `rgb()` notation is no change,
-  `min-width:` → `width >=` is. Details and limits: docs/output.md § Rule coverage in the
-  renderdiff repo.
+  that reaches them. Rules compare by meaning, as Chrome parses them: `rgb()` notation,
+  declaration order and `min-width:` → `width >=` are no change; a shorthand and longhand
+  swapping order is. Details and limits: docs/output.md § Rule coverage in the renderdiff repo.
 - `prefixes: N prefixed declarations only one side has`: `-webkit-`/`-moz-`/`-ms-`/`-o-`
   properties one side's CSS source declares more often. Details and limits: docs/output.md
   § Vendor prefixes in the renderdiff repo.
