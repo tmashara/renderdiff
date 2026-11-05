@@ -12,7 +12,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { ACCEPTED_FILE } from "./accept.ts";
+import { engineOf, type Engine } from "./engine.ts";
 import type { Results } from "./report.ts";
 import {
   alive,
@@ -27,7 +27,6 @@ import {
   selectorText,
   version,
   type CliOverrides,
-  type Engine,
   type ResolvedConfig,
   type Route,
   type Sides,
@@ -124,9 +123,9 @@ function parseArgs(argv: string[]): Args {
     else if (v === "--config") a.config = value();
     else if (v === "--browser") {
       const b = value();
-      if (!ENGINES.includes(b as Engine))
+      if (!ENGINES.includes(b as Engine["name"]))
         throw new Error(`--browser expects ${ENGINES.join(" or ")}, got ${b}`);
-      a.browser = b as Engine;
+      a.browser = b as Engine["name"];
     } else if (v === "--mask") (a.masks ??= []).push(value());
     else if (v === "--only") (a.only ??= []).push(value());
     else if (v === "--hide") (a.hideSelectors ??= []).push(value());
@@ -685,8 +684,7 @@ try {
       recheck: args.recheck,
       acceptedFile: path.join(
         configPath ? path.dirname(configPath) : process.cwd(),
-        // An engine's pixels never match the other's, so neither may prune the other's entries.
-        cfg.browser ? ACCEPTED_FILE.replace(/\.json$/, `.${cfg.browser}.json`) : ACCEPTED_FILE,
+        engineOf(cfg).acceptedFile,
       ),
     }),
   );

@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { chromium, errors, webkit, type Browser, type BrowserContext, type Page } from "playwright";
+import { errors, type Browser, type BrowserContext, type Page } from "playwright";
 import sharp from "sharp";
 import { applyAccepted, readAccepted, unacceptable, updateAccepted } from "./accept.ts";
 import { CACHE_DIR, cacheFile, replayable, REPLAY_TTL, saveRecording, shotId } from "./cache.ts";
@@ -28,6 +28,7 @@ import {
   prefixDiff,
   ruleCoverage,
 } from "./computed.ts";
+import { engineOf } from "./engine.ts";
 import { locate, MAX_SPOTS, severity, snapshotStates, type ElementDiff } from "./locate.ts";
 import {
   alive,
@@ -305,7 +306,9 @@ export async function run({
   const reused = new Set(results);
 
   const stems = slugs(routes);
-  const launched = jobs.length ? await launch(cfg.browser) : null;
+  const engine = engineOf(cfg);
+  const launched = jobs.length ? await engine.launch() : null;
+  const launchedMeta = launched && { name: launched.name, version: launched.browser.version() };
   const queue = [...jobs];
   let done = 0;
   let down = "";
@@ -321,7 +324,7 @@ export async function run({
   };
   // Whole minute, so an HH:MM display reads the same on both sides.
   const now = Math.floor(Date.now() / 60_000) * 60_000;
-  const har = launched && cacheRight ? cacheFile(cfg, browserOf(launched)) : null;
+  const har = launchedMeta && cacheRight ? cacheFile(cfg, launchedMeta) : null;
   const replayedAt =
     har &&
     replayable(
@@ -563,6 +566,7 @@ export async function run({
         const made = await crops(leftShot.png, rightShot.png, worstFirst(spots));
         const snap = (page: Page, side: "left" | "right") =>
           snapshotStates(
+            engine,
             page,
             masksFor(cfg, page, route),
             COMPUTED_TIMEOUT,
@@ -720,10 +724,7 @@ export async function run({
   if (progress) {
     console.log(`Capturing ${jobs.length} pair(s) with ${cfg.concurrency} worker(s)...\n`);
   }
-  if (cfg.computed && cfg.browser && jobs.length)
-    console.log(
-      `--computed on ${cfg.browser}: links and controls aren't forced into :hover/:focus-visible (that needs Chromium)`,
-    );
+  if (cfg.computed && engine.statesNote && jobs.length) console.log(engine.statesNote);
   if (launched) {
     await Promise.all(
       Array.from({ length: cfg.concurrency }, (_, i) => worker(launched.browser, i)),
@@ -734,7 +735,7 @@ export async function run({
     console.error(`✗ ${down} stopped responding mid-run. Start it again and rerun.`);
     return 2;
   }
-  const browserMeta = launched ? browserOf(launched) : prev!.meta.browser;
+  const browserMeta = launchedMeta ?? prev!.meta.browser;
   let unsaved = "";
   if (har && !replayedAt) {
     try {
@@ -1064,50 +1065,6 @@ export async function pack(srcDir: string, outDir: string): Promise<void> {
   console.log(
     `packed ${results.length} shot(s) into ${outDir}: ${plan.size} images, ${mb(before)} → ${mb(after)}`,
   );
-}
-
-const browserOf = (l: { browser: Browser; channel: string | null }) => ({
-  name: l.channel ?? "chromium",
-  version: l.browser.version(),
-});
-
-// Replaces Playwright's own headless --blink-settings, so its hover/pointer values are repeated.
-const ARGS = [
-  "--blink-settings=imageAnimationPolicy=2,primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4",
-];
-
-/**
- * A missing browser binary is the likeliest first-run failure, so fall back to the system
- * Chrome (both sides share it, so the comparison stays symmetric), then name the fix.
- */
-export async function launch(browser?: "webkit") {
-  if (browser === "webkit") {
-    try {
-      return { browser: await webkit.launch(), channel: "webkit" };
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      throw new Error(
-        `could not launch WebKit:\n  ${msg}\n\n  Install the browser with:  npx playwright install webkit  (--with-deps on Linux)`,
-      );
-    }
-  }
-  try {
-    return { browser: await chromium.launch({ args: ARGS }), channel: null };
-  } catch (e) {
-    try {
-      const browser = await chromium.launch({ channel: "chrome", args: ARGS });
-      console.log(
-        `Bundled Chromium failed to launch; using the system Chrome ${browser.version()}.`,
-      );
-      return { browser, channel: "chrome" };
-    } catch {
-      const msg = e instanceof Error ? e.message : String(e);
-      throw new Error(
-        `could not launch Chromium, or the system Chrome:\n  ${msg}\n\n` +
-          `  Install the browser with:  npx playwright install chromium`,
-      );
-    }
-  }
 }
 
 const transient = (e: unknown) =>

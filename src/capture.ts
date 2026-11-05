@@ -1,14 +1,8 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import {
-  errors,
-  type CDPSession,
-  type Locator,
-  type Page,
-  type Request,
-  type Response,
-} from "playwright";
+import type { Locator, Page, Request, Response } from "playwright";
 import sharp from "sharp";
 import { label, MASK_COLOR, masksFor, type ResolvedConfig, type Route } from "./config.ts";
+import { engineOf, type Engine } from "./engine.ts";
 
 /** Loads a page, settles it, and screenshots it. */
 
@@ -369,13 +363,13 @@ export async function capture(
   cfg: ResolvedConfig,
   now: number,
 ): Promise<Shot> {
+  const engine = engineOf(cfg);
   step.set(page, "load");
   await page.setViewportSize({ width, height: 900 });
   const maxHeight = Math.max(40_000, Math.floor(MAX_PAGE_AREA / width));
   await page.clock.setSystemTime(now);
   // Here, not on framenavigated, which a pushState during hydration fires too.
   network.get(page)!.failed.clear();
-  stopped.delete(page);
   doc.delete(page);
   const res = await page
     .goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 })
@@ -549,15 +543,18 @@ export async function capture(
     );
   }
   const tiled = area.height > MAX_CAPTURE_HEIGHT;
+  const target = clip ?? (hidesX ? { x: 0, y: 0, width, height: 1e6 } : undefined);
+  let stopped = false;
   // Read on both sides of the shot, so a box that moves while it is taken stays covered.
   const shoot = async () => {
     const before = await read();
-    const png = await stilled(page, () =>
-      tiled
-        ? captureTiled(page, area)
-        : pageShot(page, clip ?? (hidesX ? { x: 0, y: 0, width, height: 1e6 } : undefined)),
+    const shot = await stilled(page, () =>
+      engine.shot(page, () =>
+        tiled ? captureTiled(engine, page, area) : pageShot(engine, page, target),
+      ),
     );
-    return paintBoxes(png, [...before, ...(await read())]);
+    stopped ||= shot.stopped;
+    return paintBoxes(shot.png, [...before, ...(await read())]);
   };
 
   // A tiled shot is expensive, so it gets one comparison.
@@ -580,7 +577,7 @@ export async function capture(
         failed,
         fonts: loadedFonts,
         marked,
-        ...(stopped.has(page) ? { stopped: true as const } : {}),
+        ...(stopped ? { stopped: true as const } : {}),
       };
     prev = png;
   }
@@ -678,7 +675,7 @@ export function bbox(mask: Uint8Array, width: number) {
   return { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
 }
 
-type Box = { x: number; y: number; width: number; height: number };
+export type Box = { x: number; y: number; width: number; height: number };
 
 async function paintBoxes(png: Buffer, boxes: Box[]): Promise<Buffer> {
   if (!boxes.length) return png;
@@ -711,11 +708,11 @@ async function paintBoxes(png: Buffer, boxes: Box[]): Promise<Buffer> {
  *
  * `deviceScaleFactor` is 1 (`CONTEXT_OPTIONS` in config.ts), so clip coords are CSS px.
  */
-async function captureTiled(page: Page, box: Box): Promise<Buffer> {
+async function captureTiled(engine: Engine, page: Page, box: Box): Promise<Buffer> {
   const tiles: Buffer[] = [];
   for (let y = 0; y < box.height; y += TILE_HEIGHT) {
     const height = Math.min(TILE_HEIGHT, box.height - y);
-    tiles.push(await grab(page, { ...box, y: box.y + y, height }, true));
+    tiles.push(await engine.grab(page, { ...box, y: box.y + y, height }, true));
   }
 
   return sharp({
@@ -729,35 +726,6 @@ async function captureTiled(page: Page, box: Box): Promise<Buffer> {
     .composite(tiles.map((input, i) => ({ input, left: 0, top: i * TILE_HEIGHT })))
     .png()
     .toBuffer();
-}
-
-const sessions = new WeakMap<Page, Promise<CDPSession>>();
-
-export const isWebKit = (page: Page) => page.context().browser()?.browserType().name() === "webkit";
-const stopped = new WeakSet<Page>();
-
-/** A PNG of `clip`, in page px, on the page's one CDP session; WebKit has none, and renders it all offscreen. */
-async function grab(page: Page, clip: Box, beyond: boolean): Promise<Buffer> {
-  if (isWebKit(page))
-    return page.screenshot({ fullPage: true, clip, timeout: 5_000 }).catch(async (e) => {
-      if (!(e instanceof errors.TimeoutError) || stopped.has(page)) throw e;
-      // WebKit's fonts.ready, which its screenshot waits on, holds until the load event; a stalled frame never fires it.
-      await page.evaluate(() => window.stop());
-      stopped.add(page);
-      return page.screenshot({ fullPage: true, clip });
-    });
-  let s = sessions.get(page);
-  if (!s) sessions.set(page, (s = page.context().newCDPSession(page)));
-  const { data } = await (
-    await s
-  ).send("Page.captureScreenshot", {
-    format: "png",
-    // Lossless either way, and sharp re-encodes every shot kept.
-    optimizeForSpeed: true,
-    captureBeyondViewport: beyond,
-    clip: { ...clip, scale: 1 },
-  });
-  return Buffer.from(data, "base64");
 }
 
 type Resumable = Window & { __renderdiffResume?: () => void };
@@ -854,7 +822,7 @@ function docSize() {
 }
 
 /** `page.screenshot({ fullPage: true, clip })` as Playwright 1.62 takes it on Chromium. */
-async function pageShot(page: Page, clip?: Box): Promise<Buffer> {
+async function pageShot(engine: Engine, page: Page, clip?: Box): Promise<Buffer> {
   const size = await page.evaluate(docSize);
   const c = clip ?? { x: 0, y: 0, ...size };
   const [x, y] = [Math.max(0, Math.min(c.x, size.width)), Math.max(0, Math.min(c.y, size.height))];
@@ -864,5 +832,5 @@ async function pageShot(page: Page, clip?: Box): Promise<Buffer> {
     throw new Error("Clipped area is either empty or outside the resulting image");
   const view = page.viewportSize()!;
   const fits = size.width <= view.width && size.height <= view.height;
-  return grab(page, { x, y, width: w, height: h }, !fits);
+  return engine.grab(page, { x, y, width: w, height: h }, !fits);
 }

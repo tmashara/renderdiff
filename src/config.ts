@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { Locator, Page } from "playwright";
+import { engines, type Engine } from "./engine.ts";
 
 /**
  * Configuration: built-in defaults, the user-facing `RenderdiffConfig` shape, and the
@@ -150,10 +151,9 @@ export function parseRoutes(
 export const DEFAULT_WIDTHS = [1440, 1152, 896, 704, 375];
 
 /** Directory a run writes its screenshots and `report.html` into. Relative to cwd. */
-export const DEFAULT_OUT_DIR = "renderdiff-out";
+export const DEFAULT_OUT_DIR = engines.chromium.outDir;
 
-export const ENGINES = ["chromium", "webkit"] as const;
-export type Engine = (typeof ENGINES)[number];
+export const ENGINES = Object.keys(engines) as Engine["name"][];
 
 /**
  * Captures run in parallel: half the cores, between 2 and 8. A run is bound by waiting on
@@ -330,7 +330,7 @@ export interface RenderdiffConfig {
   /** Hold every lottie-player on this frame once it loads. Unset: left playing. */
   lottieFrame?: number;
   /** The engine both sides are shot in. Default `chromium`. */
-  browser?: Engine;
+  browser?: Engine["name"];
 }
 
 /** A fully merged config. Everything the run needs, nothing optional. */
@@ -620,7 +620,7 @@ function validate(c: Record<string, unknown>, file: string) {
     !(Number.isSafeInteger(c.lottieFrame) && (c.lottieFrame as number) >= 0)
   )
     bad("lottieFrame", "a whole number ≥ 0");
-  if (c.browser !== undefined && !ENGINES.includes(c.browser as Engine))
+  if (c.browser !== undefined && !ENGINES.includes(c.browser as Engine["name"]))
     bad("browser", `one of ${ENGINES.map((e) => `"${e}"`).join(", ")}`);
 }
 
@@ -642,7 +642,7 @@ export interface CliOverrides {
   hideSelectors?: string[];
   maskMedia?: boolean;
   freezeVideo?: boolean;
-  browser?: Engine;
+  browser?: Engine["name"];
 }
 
 /** Merge built-in defaults, the config file, and CLI flags into one resolved config. */
@@ -675,17 +675,14 @@ export function resolveConfig(file: RenderdiffConfig, cli: CliOverrides): Resolv
     ...(cli.hideSelectors ?? []),
   ];
   const freezeVideo = cli.freezeVideo ?? file.freezeVideo ?? true;
-  const webkit = (cli.browser ?? file.browser) === "webkit";
+  const engine = engines[cli.browser ?? file.browser ?? "chromium"];
 
   return {
     left: left.replace(/\/+$/, ""),
     right: right.replace(/\/+$/, ""),
     widths: cli.widths ?? file.widths ?? [...DEFAULT_WIDTHS],
     threshold: cli.threshold ?? file.threshold ?? null,
-    outDir: path.resolve(
-      process.cwd(),
-      cli.outDir ?? file.outDir ?? (webkit ? `${DEFAULT_OUT_DIR}-webkit` : DEFAULT_OUT_DIR),
-    ),
+    outDir: path.resolve(process.cwd(), cli.outDir ?? file.outDir ?? engine.outDir),
     concurrency: cli.concurrency ?? file.concurrency ?? DEFAULT_CONCURRENCY,
     blockUrlPatterns: [...DEFAULT_BLOCK_URL_PATTERNS, ...(file.blockUrlPatterns ?? [])],
     hideSelectors,
@@ -713,7 +710,7 @@ export function resolveConfig(file: RenderdiffConfig, cli: CliOverrides): Resolv
     freezeVideo,
     lottieFrame: file.lottieFrame,
     aria: (cli.aria ?? file.aria) || undefined,
-    ...(webkit ? { browser: "webkit" as const } : {}),
+    ...(engine.name === "chromium" ? {} : { browser: engine.name }),
   };
 }
 

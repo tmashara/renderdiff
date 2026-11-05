@@ -1,9 +1,10 @@
-import type { Page } from "playwright";
+import type { Browser, Page } from "playwright";
 import { prepare } from "./capture.ts";
 import { collapseInherited, pageError, SHOWN, type Snapshot } from "./computed.ts";
 import { CONTEXT_OPTIONS, masksFor, type ResolvedConfig, type Route } from "./config.ts";
+import { engineOf } from "./engine.ts";
 import { SNAP_PROPS, snapshot } from "./locate.ts";
-import { BLANK_HINT, COMPUTED_TIMEOUT, launch, shoot } from "./run.ts";
+import { BLANK_HINT, COMPUTED_TIMEOUT, shoot } from "./run.ts";
 
 // ponytail: x/y also list the siblings a grown box pushes down; drop a y a previous sibling's height explains if it gets noisy
 const FIELDS = [...SNAP_PROPS, "x", "y"];
@@ -16,7 +17,7 @@ interface Change {
 
 /** One load in a fresh context, as a run loads a side: every element's styles, then its position in its parent. */
 async function load(
-  browser: Awaited<ReturnType<typeof launch>>["browser"],
+  browser: Browser,
   url: string,
   route: Route,
   width: number,
@@ -69,7 +70,7 @@ export async function probe(
   cfg: ResolvedConfig,
   loads: number,
 ): Promise<number> {
-  const { browser } = await launch(cfg.browser);
+  const { browser } = await engineOf(cfg).launch();
   const now = Math.floor(Date.now() / 60_000) * 60_000;
   const done: { snap: Snapshot; row: Record<string, string[]> }[] = [];
   let next = 0;

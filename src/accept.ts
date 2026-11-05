@@ -4,8 +4,6 @@ import { name } from "./config.ts";
 import { fmtElements } from "./format.ts";
 import type { ComparedResult, RouteResult } from "./report.ts";
 
-export const ACCEPTED_FILE = "renderdiff.accepted.json";
-
 /**
  * One band or region, without its `y`: a change above it moves it down the page without
  * changing it. `hash` and `elements` tell a new change in the same spot from the accepted one.

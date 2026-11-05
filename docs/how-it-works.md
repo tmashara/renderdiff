@@ -30,8 +30,8 @@ honestly. This is what renderdiff does to make sure of that.
   it flips.
 - **On WebKit, stops a load that never ends**, as a last resort. WebKit's `fonts.ready`,
   which its screenshot waits on, holds until the load event, so a frame that never loads
-  would hang the shot. When a shot takes over 5s, renderdiff calls `window.stop()` and
-  shoots again. That fails the page's open requests (a pending `fetch` rejects, images
+  would hang the shot. When a shot takes over 5s, renderdiff calls `window.stop()`, which
+  lets it finish. That fails the page's open requests (a pending `fetch` rejects, images
   break), which can show as a difference, so the shot records it: `stopped loading on right`
   in the row, `stopped` in results.json.
 - **Settles the page** — makes native lazy images eager, scrolls every viewport-height
