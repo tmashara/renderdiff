@@ -414,15 +414,21 @@ describe("consent chrome", () => {
   });
 });
 
-test("--computed shows whether a rewritten breakpoint, and a rule nothing has, ever applied", async () => {
+test("--computed lists rules that changed meaning, not ones reordered or rewritten as ranges, and whether each applied", async () => {
   const run = await capture(["/rules"], { widths: [960, 959], extra: ["--computed"] });
   assert.equal(run.code, 0, context(run));
   const at = (widths: number[]) => (widths.length ? [{ url: "/rules", widths }] : []);
-  const group = (side: string, conditions: string[], matched: number[], unmatched: number[]) => ({
+  const group = (
+    side: string,
+    conditions: string[],
+    matched: number[],
+    unmatched: number[],
+    rules = 1,
+  ) => ({
     side,
     sheet: "inline#",
     conditions,
-    rules: conditions[0] === "@media screen" ? 2 : 1,
+    rules,
     matched: at(matched),
     unmatched: at(unmatched),
   });
@@ -433,26 +439,28 @@ test("--computed shows whether a rewritten breakpoint, and a rule nothing has, e
     rules.every((g) => /^inline#[0-9a-f]{6}$/.test(g.sheet)),
     context(run),
   );
-  // The rgb() and url() hash rewrites mean the same, so they are no group; state-only rules match.
+  // Rewrites that mean the same are no group; state-only rules match.
   assert.deepEqual(
     rules.map((g) => ({ ...g, sheet: g.sheet.replace(hash, "inline#") })),
     [
-      group("left", [], [], [960, 959]),
+      group("left", [], [], [960, 959], 7),
+      group("right", [], [], [960, 959], 6),
       group("left", ["@media (width >= 960px)"], [960], [959]),
       group("right", ["@media (min-width: 960px)"], [960], [959]),
-      group("left", ["@media screen"], [960, 959], []),
+      group("left", ["@media screen"], [960, 959], [], 2),
     ],
     context(run),
   );
   assert.deepEqual(
     result(results(run.outDir), "/rules", 960).computed?.rules?.map((g) => g.elements > 0),
-    [true, false, true, true],
+    [true, false, true, true, false],
   );
   assert.deepEqual(
     parseSummary(run.stdout).rules.map((l) => l.replace(hash, "inline#")),
     [
-      "rules: 4 changed groups, 1 never matched, 2 matched on some shots",
-      "  +inline# (1 rule)  matched nothing: /rules@960,959",
+      "rules: 5 changed groups, 2 never matched, 2 matched on some shots",
+      "  +inline# (7 rules)  matched nothing: /rules@960,959",
+      "  -inline# (6 rules)  matched nothing: /rules@960,959",
       "  +inline# @media (width >= 960px) (1 rule)  matched /rules@960; nothing /rules@959",
       "  -inline# @media (min-width: 960px) (1 rule)  matched /rules@960; nothing /rules@959",
     ],

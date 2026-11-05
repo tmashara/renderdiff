@@ -103,20 +103,24 @@ const POSITION = FIELDS.indexOf("position");
 const CLIP = FIELDS.indexOf("clip");
 const CLIP_PATH = FIELDS.indexOf("clip-path");
 
-const splitTop = (s: string) => {
+/** `s` split at `sep`; one in a string or brackets (`url("data:…;base64,…")`) splits nothing. */
+function splitTop(s: string, sep = ","): string[] {
   const out: string[] = [];
-  let depth = 0;
-  let start = 0;
+  let [from, quote, depth] = [0, "", 0];
   for (let i = 0; i < s.length; i++) {
-    if (s[i] === "(") depth++;
-    else if (s[i] === ")") depth--;
-    else if (s[i] === "," && !depth) {
-      out.push(s.slice(start, i).trim());
-      start = i + 1;
+    const c = s[i]!;
+    if (c === "\\") i++;
+    else if (quote) quote = c === quote ? "" : quote;
+    else if (c === '"' || c === "'") quote = c;
+    else if ("([{".includes(c)) depth++;
+    else if (")]}".includes(c)) depth--;
+    else if (c === sep && !depth) {
+      out.push(s.slice(from, i).trim());
+      from = i + 1;
     }
   }
-  return [...out, s.slice(start).trim()];
-};
+  return [...out, s.slice(from).trim()];
+}
 
 const SIDES: Record<string, number> = { top: 0, right: 90, bottom: 180, left: 270 };
 const FLIP: Record<string, string> = { top: "bottom", bottom: "top", left: "right", right: "left" };
@@ -438,9 +442,27 @@ function matching(groups: string[][]) {
   });
 }
 
+const ORDERED =
+  /^(?!--)(?:[a-z-]+-)?(?:inline|block)[-:]|^(?:border|corner)-(?:start|end)-(?:start|end)-|^-webkit-/;
+
+/** Declarations sorted, unless one is `ORDERED`: it and its twin are two longhands, and the later wins. */
+function unordered(css: string): string {
+  const all = splitTop(css, ";");
+  return (all.some((d) => ORDERED.test(d)) ? all : all.sort()).join("; ");
+}
+
+/** `@media (min-width: 1px)` as `(width >= 1px)`; in `@supports` that's a property, so left alone. */
+const ranged = (cond: string) =>
+  cond.startsWith("@media ")
+    ? cond.replace(
+        /\((min|max)-([a-z-]+): ((?:[^()]|\([^()]*\))+)\)/g,
+        (_, m: string, f: string, v: string) => `(${f} ${m === "min" ? ">=" : "<="} ${v})`,
+      )
+    : cond;
+
 /** A row compared across sides: the left origin read as the right's, asset hashes in `url()` as `#`. */
 const ruleKey = ([, conds, sel, css]: RuleRow, origins?: [string, string]) => {
-  const k = `${conds.join(" ")}\0${sel}\0${css}`;
+  const k = `${conds.map(ranged).join(" ")}\0${sel}\0${unordered(css)}`;
   return (origins ? rebaseText(k, ...origins) : k).replace(
     /url\("([^"]*)"\)/g,
     (_, u: string) => `url("${normalizeUrl(u)}")`,
