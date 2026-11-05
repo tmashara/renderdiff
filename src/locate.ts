@@ -2,6 +2,7 @@ import type { Locator, Page } from "playwright";
 import type { Shot } from "./capture.ts";
 import type { Box, Spot } from "./compare.ts";
 import type { Snapshot } from "./computed.ts";
+import type { Engine } from "./engine.ts";
 
 /** Names the DOM elements behind each change, from the pages still holding the shot's document. */
 
@@ -587,6 +588,7 @@ export async function snapshot(
  * rules relating two of them, and never puts an ancestor in `:hover`. Leaves the page resting.
  */
 export async function snapshotStates(
+  engine: Engine,
   page: Page,
   masks: Locator[],
   budget: number,
@@ -595,40 +597,17 @@ export async function snapshotStates(
 ): Promise<{ snap: Snapshot; unchecked: number }> {
   const t0 = Date.now();
   const run = await walker(page, masks, budget, root, hide);
-  const client = await page.context().newCDPSession(page);
+  const forcer = await engine.states(page);
+  if (!forcer) return { snap: (await run()).snap!, unchecked: 0 };
   try {
     const { snap, states, unchecked } = await run({ collect: MAX_STATES });
-    await Promise.all([client.send("DOM.enable"), client.send("CSS.enable")]);
-    await client.send("DOM.getDocument", { depth: 0 });
-    const { result } = await client.send("Runtime.evaluate", {
-      expression: "globalThis.__renderdiffStates",
-    });
-    const { result: own } = await client.send("Runtime.getProperties", {
-      objectId: result.objectId!,
-      ownProperties: true,
-    });
-    const nodeIds = await Promise.all(
-      own
-        .filter((p) => /^\d+$/.test(p.name))
-        .map((p) =>
-          client.send("DOM.requestNode", { objectId: p.value!.objectId! }).then((r) => r.nodeId),
-        ),
-    );
     for (const [state, forced] of STATES) {
-      // A new force replaces the last; detaching clears them all.
-      await Promise.all(
-        nodeIds.map((nodeId) =>
-          client.send("CSS.forcePseudoState", { nodeId, forcedPseudoClasses: [...forced] }),
-        ),
-      );
+      await forcer.force(forced);
       Object.assign(snap!, (await run({ spent: Date.now() - t0, state, states })).snap);
     }
     return { snap: snap!, unchecked: unchecked! };
   } finally {
-    await client
-      .send("Runtime.evaluate", { expression: "delete globalThis.__renderdiffStates" })
-      .catch(() => {});
-    await client.detach().catch(() => {});
+    await forcer.close();
   }
 }
 

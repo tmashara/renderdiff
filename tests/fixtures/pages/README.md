@@ -20,7 +20,7 @@ Three groups:
   elements each change names (`margin`, `color`, `nav`), and a lost `::before` line and a
   re-parented pairing (`divider`).
 - **Guard rails** — `blank`, `tall`, `animated`, `lazy`, `lazy-deep`, `lazy-js`, `lazy-grow`, `consent`,
-  `drifting`, `tracker`, `clock`, `ticker`, `unsettled`, `unsettled-once`, `sprite`, `short`, `tall-region`, `reorder`, `stripe`, `frameset`, `menu`, `scroll-spy`, `signed-in`, `fixed`, `inserted`, `labelled`, `broken-asset`, `fonts`, `media`, `long`, `video`, `video-seek`, `lottie`, `hang`, `origin`, `cooperate`, `mask-geometry`, `bistable`, `offcanvas`, `appshell`, `smooth-scroll`, `rules`, `prefix`, `prefix-same`, `reflowing`, `waapi`, `geometry`, `stalled-frame`.
+  `drifting`, `tracker`, `clock`, `ticker`, `unsettled`, `unsettled-once`, `sprite`, `short`, `tall-region`, `reorder`, `stripe`, `frameset`, `menu`, `scroll-spy`, `signed-in`, `fixed`, `inserted`, `labelled`, `broken-asset`, `fonts`, `media`, `long`, `video`, `video-seek`, `lottie`, `hang`, `origin`, `cooperate`, `mask-geometry`, `bistable`, `offcanvas`, `appshell`, `smooth-scroll`, `rules`, `prefix`, `prefix-same`, `box-decoration-break`, `reflowing`, `waapi`, `geometry`, `stalled-frame`.
   One per defence in `src/capture.ts` / `src/config.ts`.
 
 ## Authoring rules

@@ -198,6 +198,7 @@ describe("validation", () => {
     ['{ freezeVideo: "no" }', /`freezeVideo` must be a boolean/],
     ["{ lottieFrame: 1.5 }", /`lottieFrame` must be a whole number/],
     ["{ lottieFrame: -1 }", /`lottieFrame` must be a whole number/],
+    ['{ browser: "firefox" }', /`browser` must be one of "chromium", "webkit"/],
     ["{ storageState: 1 }", /`storageState` must be a non-empty path/],
     [
       '{ storageState: { left: "a.json", center: "b.json" } }',

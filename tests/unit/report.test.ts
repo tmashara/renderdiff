@@ -128,6 +128,9 @@ describe("writeEvidence", () => {
     const under = await evidence([differs("/a")], { threshold: 0.5 });
     assert.equal(banner(under), "Not verified");
     assert.match(under, /1 shot\(s\) differ under threshold/);
+    const stopped = await evidence([shot("/", { stopped: ["right"] })]);
+    assert.equal(banner(stopped), "Not verified");
+    assert.match(stopped, /1 shot\(s\) with a stopped load/);
     const rerun = await evidence([shot("/")], { rerun: { rerun: 1, reused: 4 } });
     assert.equal(banner(rerun), "Not verified");
     const full = await evidence([shot("/")], { rerun: { rerun: 5, reused: 0 } });
@@ -478,6 +481,11 @@ describe("renderdiff merge", () => {
     const [a, b] = [full(), partial()];
     const other = partial([], { right: "https://other.example" });
     assert.match((await merge(a, other, path.join(tempDir(), "o"))).stderr, /✗ right differs/);
+    const engine = partial([], { browser: { name: "webkit", version: "26.5" } });
+    assert.match(
+      (await merge(a, engine, path.join(tempDir(), "o"))).stderr,
+      /✗ browser differs: chromium in .*, webkit in /,
+    );
     const self = await merge(a, b, a);
     assert.equal(self.code, 2);
     assert.match(self.stderr, /is or is inside/);

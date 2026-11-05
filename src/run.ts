@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { chromium, errors, type Browser, type BrowserContext, type Page } from "playwright";
+import { errors, type Browser, type BrowserContext, type Page } from "playwright";
 import sharp from "sharp";
 import { applyAccepted, readAccepted, unacceptable, updateAccepted } from "./accept.ts";
 import { CACHE_DIR, cacheFile, replayable, REPLAY_TTL, saveRecording, shotId } from "./cache.ts";
@@ -28,6 +28,7 @@ import {
   prefixDiff,
   ruleCoverage,
 } from "./computed.ts";
+import { engineOf } from "./engine.ts";
 import { locate, MAX_SPOTS, severity, snapshotStates, type ElementDiff } from "./locate.ts";
 import {
   alive,
@@ -155,8 +156,9 @@ function wipeable(dir: string): boolean {
   return fs.statSync(dir).isDirectory() && fs.readdirSync(dir).every(ours);
 }
 
-/** A stylesheet or font face failed on a side; older results.json files lack the field. */
-const broken = (r: ComparedResult) => !!(r.failed?.left.length || r.failed?.right.length);
+/** A stylesheet or font face failed on a side, or its load was stopped; older results.json files lack `failed`. */
+const broken = (r: ComparedResult) =>
+  !!(r.failed?.left.length || r.failed?.right.length || r.stopped);
 
 export const reusable = (r: RouteResult) =>
   r.status === "compared" &&
@@ -209,7 +211,7 @@ function previous(file: string, now: Record<string, unknown>): Results | string 
   for (const [key, value] of Object.entries(now)) {
     if (key === "config" && value !== was[key]) {
       return (
-        `the config (masks, hooks, hidden selectors, blocked URLs, CSS, storage state, --computed, --aria) ` +
+        `the config (masks, hooks, hidden selectors, blocked URLs, CSS, storage state, --computed, --aria, --browser) ` +
         `differs from the one that wrote ${file}; run without --rerun-failed to start over, ` +
         `or run the routes you changed into a new --out and renderdiff merge it with this one`
       );
@@ -305,7 +307,9 @@ export async function run({
   const reused = new Set(results);
 
   const stems = slugs(routes);
-  const launched = jobs.length ? await launch() : null;
+  const engine = engineOf(cfg);
+  const launched = jobs.length ? await engine.launch() : null;
+  const launchedMeta = launched && { name: launched.name, version: launched.browser.version() };
   const queue = [...jobs];
   let done = 0;
   let down = "";
@@ -321,7 +325,7 @@ export async function run({
   };
   // Whole minute, so an HH:MM display reads the same on both sides.
   const now = Math.floor(Date.now() / 60_000) * 60_000;
-  const har = launched && cacheRight ? cacheFile(cfg, browserOf(launched)) : null;
+  const har = launchedMeta && cacheRight ? cacheFile(cfg, launchedMeta) : null;
   const replayedAt =
     har &&
     replayable(
@@ -563,6 +567,7 @@ export async function run({
         const made = await crops(leftShot.png, rightShot.png, worstFirst(spots));
         const snap = (page: Page, side: "left" | "right") =>
           snapshotStates(
+            engine,
             page,
             masksFor(cfg, page, route),
             COMPUTED_TIMEOUT,
@@ -632,8 +637,9 @@ export async function run({
           ...made.map((c, i) => write(cropped[i]!.path, c.png)),
         ]);
 
-        if (!rightShot.failed.length) recorded.push(shotId(route, width));
+        if (!rightShot.failed.length && !rightShot.stopped) recorded.push(shotId(route, width));
         const marked = [...new Set([...leftShot.marked, ...rightShot.marked])];
+        const stopped = (["left", "right"] as const).filter((s) => shots[s].stopped);
         const fonts = {
           added: leftShot.fonts.filter((f) => !rightShot.fonts.includes(f)),
           removed: rightShot.fonts.filter((f) => !leftShot.fonts.includes(f)),
@@ -650,6 +656,7 @@ export async function run({
           accepted: false,
           failed: { left: leftShot.failed, right: rightShot.failed },
           ...(marked.length ? { masked: marked } : {}),
+          ...(stopped.length ? { stopped } : {}),
           ...(fonts.added.length || fonts.removed.length ? { fonts } : {}),
           ...computed,
           ...aria,
@@ -661,6 +668,7 @@ export async function run({
         const details = [
           sel,
           assets ? `failed ${assets}` : "",
+          stopped.length ? `stopped loading on ${stopped.join(" and ")}` : "",
           unstableBox ? `unstable within ${fmtRegion(unstableBox)}` : "",
           regions.length
             ? `${regions.length} region${regions.length > 1 ? "s" : ""}, largest ${fmtRegion(regions[0]!)}`
@@ -716,6 +724,7 @@ export async function run({
     console.log(`Capturing ${jobs.length} pair(s) with ${cfg.concurrency} worker(s)...\n`);
   }
   if (launched) {
+    if (cfg.computed && engine.statesNote) console.log(engine.statesNote);
     await Promise.all(
       Array.from({ length: cfg.concurrency }, (_, i) => worker(launched.browser, i)),
     );
@@ -725,7 +734,7 @@ export async function run({
     console.error(`✗ ${down} stopped responding mid-run. Start it again and rerun.`);
     return 2;
   }
-  const browserMeta = launched ? browserOf(launched) : prev!.meta.browser;
+  const browserMeta = launchedMeta ?? prev!.meta.browser;
   let unsaved = "";
   if (har && !replayedAt) {
     try {
@@ -909,6 +918,12 @@ export async function merge(fullDir: string, partialDir: string, outDir: string)
         `${side} differs: ${full.meta[side]} in ${fullDir}, ${partial.meta[side]} in ${partialDir}`,
       );
   }
+  const engine = (r: Results) => (r.meta.browser.name === "webkit" ? "webkit" : "chromium");
+  if (engine(full) !== engine(partial))
+    throw new Error(
+      `browser differs: ${engine(full)} in ${fullDir}, ${engine(partial)} in ${partialDir}; ` +
+        `one engine's pixels never match the other's`,
+    );
   checkOut([fullDir, partialDir], outDir);
 
   const key = (r: RouteResult) => `${name(r)}@${r.width}`;
@@ -1049,40 +1064,6 @@ export async function pack(srcDir: string, outDir: string): Promise<void> {
   console.log(
     `packed ${results.length} shot(s) into ${outDir}: ${plan.size} images, ${mb(before)} → ${mb(after)}`,
   );
-}
-
-const browserOf = (l: { browser: Browser; channel: string | null }) => ({
-  name: l.channel ?? "chromium",
-  version: l.browser.version(),
-});
-
-// Replaces Playwright's own headless --blink-settings, so its hover/pointer values are repeated.
-const ARGS = [
-  "--blink-settings=imageAnimationPolicy=2,primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4",
-];
-
-/**
- * A missing browser binary is the likeliest first-run failure, so fall back to the system
- * Chrome (both sides share it, so the comparison stays symmetric), then name the fix.
- */
-export async function launch() {
-  try {
-    return { browser: await chromium.launch({ args: ARGS }), channel: null };
-  } catch (e) {
-    try {
-      const browser = await chromium.launch({ channel: "chrome", args: ARGS });
-      console.log(
-        `Bundled Chromium failed to launch; using the system Chrome ${browser.version()}.`,
-      );
-      return { browser, channel: "chrome" };
-    } catch {
-      const msg = e instanceof Error ? e.message : String(e);
-      throw new Error(
-        `could not launch Chromium, or the system Chrome:\n  ${msg}\n\n` +
-          `  Install the browser with:  npx playwright install chromium`,
-      );
-    }
-  }
 }
 
 const transient = (e: unknown) =>
@@ -1298,8 +1279,8 @@ export function compact(
   for (const route of routes) {
     const rows = results.filter((r) => name(r) === route);
     const ok = rows.filter((r): r is ComparedResult => r.status === "compared");
-    // Unstable pixels went unmeasured and a failed asset rendered a fallback, so a shot with
-    // either is not clean, only unchanged.
+    // Unstable pixels went unmeasured, and a failed asset or stopped load rendered a fallback,
+    // so a shot with any is not clean, only unchanged.
     const same = ok.filter((r) => r.diffPixels === 0 && r.unstablePixels === 0 && !broken(r));
     const acc = ok.filter((r) => r.accepted);
     const changed = ok.filter((r) => !same.includes(r) && !r.accepted);
@@ -1340,6 +1321,8 @@ export function compact(
         right: [...new Set(g.flatMap((r) => r.failed?.right ?? []))],
       });
       if (failed) out.push(`    failed ${failed}`);
+      const stopped = [...new Set(g.flatMap((r) => r.stopped ?? []))].sort();
+      if (stopped.length) out.push(`    stopped loading on ${stopped.join(" and ")}`);
       const fonts = fmtFonts({
         added: [...new Set(g.flatMap((r) => r.fonts?.added ?? []))],
         removed: [...new Set(g.flatMap((r) => r.fonts?.removed ?? []))],

@@ -12,7 +12,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { ACCEPTED_FILE } from "./accept.ts";
+import { engineOf, engines, type Engine } from "./engine.ts";
 import type { Results } from "./report.ts";
 import {
   alive,
@@ -120,7 +120,12 @@ function parseArgs(argv: string[]): Args {
     else if (v === "--right") a.right = value();
     else if (v === "--out") a.outDir = value();
     else if (v === "--config") a.config = value();
-    else if (v === "--mask") (a.masks ??= []).push(value());
+    else if (v === "--browser") {
+      const b = value();
+      if (!Object.keys(engines).includes(b))
+        throw new Error(`--browser expects ${Object.keys(engines).join(" or ")}, got ${b}`);
+      a.browser = b as Engine["name"];
+    } else if (v === "--mask") (a.masks ??= []).push(value());
     else if (v === "--only") (a.only ??= []).push(value());
     else if (v === "--hide") (a.hideSelectors ??= []).push(value());
     else if (v === "--selector" || v === "--left-selector" || v === "--right-selector") {
@@ -258,6 +263,9 @@ const HELP = `
     --out <dir>         Output directory                   (default: ./renderdiff-out)
     --concurrency <n>   Parallel workers              (default: half the cores, 2–8)
     --config <path>     Config file. Default: renderdiff.config.{ts,mts,js,mjs} in cwd.
+    --browser <name>    chromium or webkit; both sides are shot in it (default: chromium).
+                        webkit writes to ./renderdiff-out-webkit by default and accepts
+                        into renderdiff.accepted.webkit.json.
     --selector <sel>    Compare one element (a Playwright selector) on both sides.
     --left-selector <sel>, --right-selector <sel>
                         That side's selector, over --selector.
@@ -283,8 +291,8 @@ const HELP = `
     --no-recheck        Don't reload a differing shot's right side to find content that
                         varies per load. Off anyway under --cache-right.
     --computed          Also diff every element's computed style and ::before/::after,
-                        and links' and controls' :hover/:focus-visible, and say whether
-                        the markup is identical. Pixels still decide.
+                        and links' and controls' :hover/:focus-visible (Chromium only),
+                        and say whether the markup is identical. Pixels still decide.
     --aria              Also diff each page's accessibility tree (Playwright's ARIA
                         snapshot) line by line. Pixels still decide.
     --sitemap[=<url>]   Add the paths in the right side's sitemap (one index level, files
@@ -520,6 +528,7 @@ const PROBE_FLAGS = [
   "--mask-media",
   "--no-freeze-video",
   "--storage-state",
+  "--browser",
 ];
 
 /** `renderdiff probe <url>`: load one URL several times and list what varies between loads. */
@@ -672,7 +681,7 @@ try {
       rerun: args.rerunFailed,
       cacheRight: args.cacheRight,
       recheck: args.recheck,
-      acceptedFile: path.join(configPath ? path.dirname(configPath) : process.cwd(), ACCEPTED_FILE),
+      acceptedFile: path.resolve(path.dirname(configPath ?? "."), engineOf(cfg).acceptedFile),
     }),
   );
 } catch (e) {

@@ -57,6 +57,18 @@ jobs:
           out: accept-out
           artifact-name: accept
 
+      - id: webkit
+        continue-on-error: true
+        uses: ./
+        with:
+          left: ${{ steps.site.outputs.left }}
+          right: ${{ steps.site.outputs.right }}
+          routes: /box-decoration-break
+          widths: "1440"
+          browser: webkit
+          out: webkit-out
+          artifact-name: webkit
+
       - id: down
         continue-on-error: true
         uses: ./
@@ -71,12 +83,15 @@ jobs:
           DOWN: ${{ steps.down.outputs.exit-code }}
           CLEAN: ${{ steps.clean.outputs.exit-code }}
           DIFFER: ${{ steps.differ.outputs.exit-code }}
+          WEBKIT: ${{ steps.webkit.outputs.exit-code }}
           OUTCOME: ${{ steps.differ.outcome }}
         run: |
           test "$CLEAN" = 0
           test "$DIFFER" = 1
           test "$OUTCOME" = failure
           test "$DOWN" = 2
+          test "$WEBKIT" = 1
+          node -e 'const { meta } = require("./webkit-out/results.json"); if (meta.browser.name !== "webkit") throw meta.browser'
           node -e 'const r = require("./differ-out/results.json").results; for (const p of ["/color", "/tint"]) if (!(r.find((x) => x.url === p)?.score < 0.999)) throw p'
           grep -q '"/color"' accept-out/renderdiff.accepted.json
           grep -q '<!-- renderdiff:differ -->' "$RUNNER_TEMP/renderdiff-comment-differ.md"

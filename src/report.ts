@@ -74,6 +74,8 @@ export interface ComparedResult extends BaseResult {
   text: TextDiff;
   /** Reasons of `data-renderdiff-mask` elements either side carried. Absent when none did. */
   masked?: string[];
+  /** WebKit: sides whose load was stopped so the shot could be taken; their pending requests failed. */
+  stopped?: ("left" | "right")[];
   /** Paths relative to the out dir. `diff` is absent only for a zero-diff shot in `renderdiff pack` output. */
   images: { left: string; right: string; diff?: string };
   /** At most three, worst first: one-sided or text changes, then property changes, then shifts. */
@@ -436,6 +438,8 @@ function findings(r: ComparedResult, crop = cropLink): string {
   const items: string[] = [];
   const failed = fmtFailed(r.failed);
   if (failed) items.push(`<p class="failed">failed to load: ${esc(failed)}</p>`);
+  if (r.stopped)
+    items.push(`<p class="failed">stopped loading on ${esc(r.stopped.join(" and "))}</p>`);
   if (r.fonts) items.push(`<p class="failed">fonts ${esc(fmtFonts(r.fonts))}</p>`);
   if (r.regions.length) {
     items.push(
@@ -742,6 +746,7 @@ export async function writeEvidence(
     ...count(open.filter((r) => r.unstablePixels).length, "shot(s) with unstable pixels"),
     ...count(open.filter((r) => r.varies).length, "shot(s) vary per load (painted out)"),
     ...count(open.filter((r) => fmtFailed(r.failed)).length, "shot(s) with failed assets"),
+    ...count(open.filter((r) => r.stopped).length, "shot(s) with a stopped load"),
     ...count(
       open.filter((r) => r.diffPixels > 0 && !fails(r, meta.threshold)).length,
       "shot(s) differ under threshold",

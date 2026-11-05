@@ -531,7 +531,7 @@ file, not each line), scores rounded down to four decimals (so a shot that diffe
     "clock": "…",                // the instant both sides' clocks start at
     "blockUrlPatterns": ["…"], "hideSelectors": ["…"],
     "masks": [{ "urlPath": "/pricing", "reason": "live star count" }],   // no urlPath: every route
-    "browser": { "name": "chromium", "version": "…" },   // "chrome" when it fell back
+    "browser": { "name": "chromium", "version": "…" },   // "chrome" when it fell back; "webkit" with --browser webkit
     "storageState": { "left": "auth.json", "right": null },   // file names only
     "config": "…",              // hash of what decides a shot; --rerun-failed needs it unchanged
     "rightReplayedFrom": null,  // --cache-right: when the replayed recording was made
@@ -566,6 +566,7 @@ file, not each line), scores rounded down to four decimals (so a shot that diffe
       "failed": { "left": [], "right": [] },   // stylesheets and font faces that didn't load: "font Inter 700", "stylesheet https://…"
       "fonts": { "added": [], "removed": ["Inter 600"] },   // web font faces one side loaded; absent when equal
       "masked": ["rotating quote (data-renderdiff-mask)"],   // absent unless a side marked elements data-renderdiff-mask
+      "stopped": ["right"],   // WebKit only, absent unless a load still open after 5s was stopped for the shot
       "computed": { "dom": 1, "changes": [], "truncated": 0, "unmatched": { "left": [], "right": ["body > nav > a[href=\"/pricing\"]"] },
         "rules": [{ "side": "left", "sheet": "docs.css", "conditions": ["@media (min-width: 60em)"], "rules": 5, "elements": 67 }],
         "prefixes": { "left": ["-webkit-user-select: none"], "right": [] } },   // --computed only; null: snapshot failed, "computedError" says why; rules: one-sided rule groups, elements they could style here; prefixes: { left, right }, prefixed declarations only that side's CSS source has

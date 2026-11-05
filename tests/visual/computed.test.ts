@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { chromium, type Browser, type Page } from "playwright";
 import { diffSnapshots } from "../../src/computed.ts";
+import { engines } from "../../src/engine.ts";
 import { locate, PROPS, snapshot, snapshotStates } from "../../src/locate.ts";
 import { readText, type Shot } from "../../src/capture.ts";
 import type { Region } from "../../src/compare.ts";
@@ -137,7 +138,9 @@ test("pixel mode's selectors keep the classes in source order", async () => {
 
 async function states(body: string, css: [string, string]) {
   const [l, r] = await Promise.all([page(body, css[0]), page(body, css[1])]);
-  const s = await Promise.all([l, r].map((p) => snapshotStates(p, [], BUDGET, null)));
+  const s = await Promise.all(
+    [l, r].map((p) => snapshotStates(engines.chromium, p, [], BUDGET, null)),
+  );
   await Promise.all([l.close(), r.close()]);
   return diffSnapshots(s[0]!.snap, s[1]!.snap);
 }
@@ -183,7 +186,7 @@ test("past 500 links the rest are counted, and the page is left resting", async 
     "a:hover { color: red }",
   );
   const before = await snapshot(p, [], BUDGET, null);
-  const { snap, unchecked } = await snapshotStates(p, [], BUDGET, null);
+  const { snap, unchecked } = await snapshotStates(engines.chromium, p, [], BUDGET, null);
   assert.equal(unchecked, 1);
   const color = PROPS.indexOf("color");
   assert.equal(snap[`body > a[href="#x"]:hover`]?.styles[color], "rgb(255, 0, 0)");

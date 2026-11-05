@@ -23,7 +23,18 @@ honestly. This is what renderdiff does to make sure of that.
 - **Kills animation, transitions, caret blink and smooth scrolling** (CSS `scroll-behavior` and
   `behavior: "smooth"` in script scrolls, from before any hook), and hides common consent banners and
   dev toolbars. Animated images (GIF, WebP, APNG) and SVG animations show their first frame;
-  it is a Blink setting, so cross-origin and CSS background images freeze too.
+  it is a Blink setting, so cross-origin and CSS background images freeze too. WebKit
+  (`--browser webkit`) has no such setting: there an animated image keeps playing, which is
+  usually caught as unstable (painted out of the score, never accepted). One with slow
+  frames can hold still for both shots and land on a different frame per side: mask it if
+  it flips.
+- **On WebKit, stops a load that never ends**, as a last resort. WebKit's `fonts.ready`,
+  which its screenshot waits on, holds until the load event, so a frame that never loads
+  would hang the shot. When a shot takes over 5s and the load event hasn't fired, renderdiff
+  calls `window.stop()`, which lets it finish. That fails the page's open requests (a pending
+  `fetch` rejects, images break), so like a failed asset the shot is never clean or reused
+  and doesn't change the exit code: `stopped loading on right` under the row and in
+  report.html, `stopped` in results.json, and evidence.html says Not verified.
 - **Settles the page** — makes native lazy images eager, scrolls every viewport-height
   slice a frame at a time, to the bottom even as the page grows, so script lazy loaders fire, waits for every image to decode,
   `document.fonts.ready` (at most 5s) and up to 3s for the network to go 250ms with nothing in flight
