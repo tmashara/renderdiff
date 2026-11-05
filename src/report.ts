@@ -492,20 +492,22 @@ const head = (r: ComparedResult) => `
     <span class="px">${r.diffPixels.toLocaleString()} / ${r.totalPixels.toLocaleString()} px differ</span>
   </header>`;
 
+const ROLE = { left: "left · change", right: "right · reference" };
+
 function card(r: ComparedResult): string {
   const imgs = r.images;
   return `
 <article class="card" id="${esc(cardId(r))}">${head(r)}
   ${findings(r)}
   <div class="grid">
-    <figure><figcaption>left</figcaption><a href="${imgs.left}" target="_blank"><img loading="lazy" src="${imgs.left}"></a></figure>
-    <figure><figcaption>right</figcaption><a href="${imgs.right}" target="_blank"><img loading="lazy" src="${imgs.right}"></a></figure>
+    <figure><figcaption>${ROLE.left}</figcaption><a href="${imgs.left}" target="_blank"><img loading="lazy" src="${imgs.left}"></a></figure>
+    <figure><figcaption>${ROLE.right}</figcaption><a href="${imgs.right}" target="_blank"><img loading="lazy" src="${imgs.right}"></a></figure>
     <figure><figcaption>diff</figcaption>${imgs.diff ? `<a href="${imgs.diff}" target="_blank"><img loading="lazy" src="${imgs.diff}"></a>` : `<p class="nodiff">no differing pixels</p>`}</figure>
   </div>
   <div class="slider" style="--x:50%">
     <img loading="lazy" src="${imgs.right}">
     <div class="l"><img loading="lazy" src="${imgs.left}"></div>
-    <input type="range" value="50" aria-label="Divider: left shot on the left, right shot on the right">
+    <input type="range" value="50" aria-label="Divider: your change on the left, the reference on the right">
   </div>
 </article>`;
 }
@@ -658,7 +660,7 @@ ${sidebar(results, meta.threshold)}
 <main>
 <h1>Visual diff</h1>
 <p class="meta">
-  left <code>${esc(meta.left)}</code> vs right <code>${esc(meta.right)}</code><br>
+  ${ROLE.left} <code>${esc(meta.left)}</code> vs ${ROLE.right} <code>${esc(meta.right)}</code><br>
   ${esc(meta.generatedAt)} &middot; ${esc(meta.browser.name)} ${esc(meta.browser.version)}${(
     ["left", "right"] as const
   )
@@ -780,7 +782,7 @@ ${STYLE}
 
 <h1>${esc(title)}</h1>
 <p class="meta">
-  left <code>${esc(meta.left)}</code> vs right <code>${esc(meta.right)}</code><br>
+  ${ROLE.left} <code>${esc(meta.left)}</code> vs ${ROLE.right} <code>${esc(meta.right)}</code><br>
   ${esc(meta.generatedAt)} &middot; renderdiff ${esc(meta.version)} &middot;
   widths ${meta.widths.join(", ")} &middot;
   threshold ${meta.threshold === null ? "none" : pct(meta.threshold)} &middot;

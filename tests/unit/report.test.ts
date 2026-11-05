@@ -313,6 +313,19 @@ describe("writeReport", () => {
     );
   });
 
+  test("the report and evidence name left as the change and right as the reference", async () => {
+    const html = await report([at("/a", 1440)]);
+    const sides =
+      /left · change <code>http:\/\/localhost:3000<\/code> vs right · reference <code>https:\/\/example\.com<\/code>/;
+    assert.match(html, sides);
+    assert.match(await evidence([at("/a", 1440)]), sides);
+    assert.deepEqual(
+      [...html.matchAll(/<figcaption>([^<]+)/g)].map((m) => m[1]),
+      ["left · change", "right · reference", "diff"],
+    );
+    assert.match(html, /aria-label="Divider: your change on the left, the reference on the right"/);
+  });
+
   test("a packed zero-diff card says so in place of the diff image", async () => {
     const images = { left: "a.1440.left.webp", right: "a.1440.left.webp" };
     const html = await report([at("/a", 1440, { images })]);
