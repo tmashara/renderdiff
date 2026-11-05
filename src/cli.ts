@@ -12,11 +12,10 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { engineOf, type Engine } from "./engine.ts";
+import { engineOf, engines, type Engine } from "./engine.ts";
 import type { Results } from "./report.ts";
 import {
   alive,
-  ENGINES,
   isHttpUrl,
   label,
   loadConfig,
@@ -123,8 +122,8 @@ function parseArgs(argv: string[]): Args {
     else if (v === "--config") a.config = value();
     else if (v === "--browser") {
       const b = value();
-      if (!ENGINES.includes(b as Engine["name"]))
-        throw new Error(`--browser expects ${ENGINES.join(" or ")}, got ${b}`);
+      if (!Object.keys(engines).includes(b))
+        throw new Error(`--browser expects ${Object.keys(engines).join(" or ")}, got ${b}`);
       a.browser = b as Engine["name"];
     } else if (v === "--mask") (a.masks ??= []).push(value());
     else if (v === "--only") (a.only ??= []).push(value());
@@ -682,10 +681,7 @@ try {
       rerun: args.rerunFailed,
       cacheRight: args.cacheRight,
       recheck: args.recheck,
-      acceptedFile: path.join(
-        configPath ? path.dirname(configPath) : process.cwd(),
-        engineOf(cfg).acceptedFile,
-      ),
+      acceptedFile: path.resolve(path.dirname(configPath ?? "."), engineOf(cfg).acceptedFile),
     }),
   );
 } catch (e) {

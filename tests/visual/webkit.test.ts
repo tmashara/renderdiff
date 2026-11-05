@@ -7,7 +7,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { after, before, test } from "node:test";
+import { setTimeout as sleep } from "node:timers/promises";
+import type { Page } from "playwright";
 import sharp from "sharp";
+import { engines } from "../../src/engine.ts";
 import {
   cleanupTempDirs,
   context,
@@ -67,16 +70,31 @@ test("a page past the one-shot height is tiled and stitched to its full height",
 
 test("a frame that never loads is stopped after the shot times out, and the stop recorded", async () => {
   const t0 = Date.now();
-  const r = await run(["/stalled-frame"], ["--progress"]);
+  const r = await run(["/stalled-frame"]);
   assert.equal(r.code, 0, context(r));
   assert.ok(Date.now() - t0 < 45_000, `took ${Date.now() - t0}ms${context(r)}`);
   assert.deepEqual(result(results(r.outDir), "/stalled-frame", 1440).stopped, ["left", "right"]);
-  assert.match(r.stdout, /stopped loading on left and right/, context(r));
+  assert.match(r.stdout, /^\s+stopped loading on left and right$/m, context(r));
+  assert.doesNotMatch(r.stdout, /clean/, context(r));
+  assert.match(r.report()!, /stopped loading on left and right/, context(r));
 });
 
 test("a page that finishes loading is never stopped", async () => {
   const r = await run(["/"]);
   assert.equal(result(results(r.outDir), "/", 1440).stopped, undefined, context(r));
+});
+
+test("a shot past 5s stops only an open load, and keeps its PNG if the stop is lost", async () => {
+  const { browser } = await engines.webkit.launch();
+  const page = await browser.newPage();
+  await page.goto(site.left + "/");
+  const png = Buffer.from("png");
+  const slow = () => sleep(5_200).then(() => png);
+  const stuck = { evaluate: () => new Promise(() => {}) } as unknown as Page;
+  const rejects = { evaluate: () => Promise.reject(new Error("gone")) } as unknown as Page;
+  const shots = [page, stuck, rejects].map((p) => engines.webkit.shot(p, slow));
+  assert.deepEqual(await Promise.all(shots), Array(3).fill({ png, stopped: false }));
+  await browser.close();
 });
 
 test("an animated GIF isn't frozen: its pixels are unstable, not a difference", async () => {

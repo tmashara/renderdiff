@@ -128,6 +128,9 @@ describe("writeEvidence", () => {
     const under = await evidence([differs("/a")], { threshold: 0.5 });
     assert.equal(banner(under), "Not verified");
     assert.match(under, /1 shot\(s\) differ under threshold/);
+    const stopped = await evidence([shot("/", { stopped: ["right"] })]);
+    assert.equal(banner(stopped), "Not verified");
+    assert.match(stopped, /1 shot\(s\) with a stopped load/);
     const rerun = await evidence([shot("/")], { rerun: { rerun: 1, reused: 4 } });
     assert.equal(banner(rerun), "Not verified");
     const full = await evidence([shot("/")], { rerun: { rerun: 5, reused: 0 } });

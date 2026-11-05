@@ -438,6 +438,8 @@ function findings(r: ComparedResult, crop = cropLink): string {
   const items: string[] = [];
   const failed = fmtFailed(r.failed);
   if (failed) items.push(`<p class="failed">failed to load: ${esc(failed)}</p>`);
+  if (r.stopped)
+    items.push(`<p class="failed">stopped loading on ${esc(r.stopped.join(" and "))}</p>`);
   if (r.fonts) items.push(`<p class="failed">fonts ${esc(fmtFonts(r.fonts))}</p>`);
   if (r.regions.length) {
     items.push(
@@ -742,6 +744,7 @@ export async function writeEvidence(
     ...count(open.filter((r) => r.unstablePixels).length, "shot(s) with unstable pixels"),
     ...count(open.filter((r) => r.varies).length, "shot(s) vary per load (painted out)"),
     ...count(open.filter((r) => fmtFailed(r.failed)).length, "shot(s) with failed assets"),
+    ...count(open.filter((r) => r.stopped).length, "shot(s) with a stopped load"),
     ...count(
       open.filter((r) => r.diffPixels > 0 && !fails(r, meta.threshold)).length,
       "shot(s) differ under threshold",

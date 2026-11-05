@@ -30,10 +30,11 @@ honestly. This is what renderdiff does to make sure of that.
   it flips.
 - **On WebKit, stops a load that never ends**, as a last resort. WebKit's `fonts.ready`,
   which its screenshot waits on, holds until the load event, so a frame that never loads
-  would hang the shot. When a shot takes over 5s, renderdiff calls `window.stop()`, which
-  lets it finish. That fails the page's open requests (a pending `fetch` rejects, images
-  break), which can show as a difference, so the shot records it: `stopped loading on right`
-  in the row, `stopped` in results.json.
+  would hang the shot. When a shot takes over 5s and the load event hasn't fired, renderdiff
+  calls `window.stop()`, which lets it finish. That fails the page's open requests (a pending
+  `fetch` rejects, images break), so like a failed asset the shot is never clean or reused
+  and doesn't change the exit code: `stopped loading on right` under the row and in
+  report.html, `stopped` in results.json, and evidence.html says Not verified.
 - **Settles the page** — makes native lazy images eager, scrolls every viewport-height
   slice a frame at a time, to the bottom even as the page grows, so script lazy loaders fire, waits for every image to decode,
   `document.fonts.ready` (at most 5s) and up to 3s for the network to go 250ms with nothing in flight

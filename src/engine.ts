@@ -3,18 +3,14 @@ import type { Browser, CDPSession, Page } from "playwright";
 import type { Box } from "./capture.ts";
 import type { ResolvedConfig } from "./config.ts";
 
-/** What differs between the browsers a run can shoot in, one implementation each. */
 export interface Engine {
   name: "chromium" | "webkit";
   outDir: string;
   acceptedFile: string;
-  /** Printed once with `--computed`, for an engine that can't force states. */
   statesNote?: string;
   /** `name` is what results.json records: `chrome` when Chromium fell back to it. */
   launch(): Promise<{ browser: Browser; name: string }>;
-  /** A PNG of `clip`, in page px. */
   grab(page: Page, clip: Box, beyond: boolean): Promise<Buffer>;
-  /** `take`'s PNG, and whether the page's load had to be stopped to get it. */
   shot(page: Page, take: () => Promise<Buffer>): Promise<{ png: Buffer; stopped: boolean }>;
   /** Forces `globalThis.__renderdiffStates` into pseudo-classes; null where that can't be done. */
   states(
@@ -52,10 +48,7 @@ const chromium: Engine = {
   name: "chromium",
   outDir: "renderdiff-out",
   acceptedFile: "renderdiff.accepted.json",
-  /**
-   * A missing browser binary is the likeliest first-run failure, so fall back to the system
-   * Chrome (both sides share it, so the comparison stays symmetric), then name the fix.
-   */
+  // Both sides share the fallback, so the comparison stays symmetric.
   async launch() {
     const { chromium } = await import("playwright");
     try {
@@ -68,9 +61,8 @@ const chromium: Engine = {
         );
         return { browser, name: "chrome" };
       } catch {
-        const msg = e instanceof Error ? e.message : String(e);
         throw new Error(
-          `could not launch Chromium, or the system Chrome:\n  ${msg}\n\n` +
+          `could not launch Chromium, or the system Chrome:\n  ${e instanceof Error ? e.message : e}\n\n` +
             `  Install the browser with:  npx playwright install chromium`,
         );
       }
@@ -126,9 +118,8 @@ const webkit: Engine = {
     try {
       return { browser: await webkit.launch(), name: "webkit" };
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
       throw new Error(
-        `could not launch WebKit:\n  ${msg}\n\n  Install the browser with:  npx playwright install webkit  (--with-deps on Linux)`,
+        `could not launch WebKit:\n  ${e instanceof Error ? e.message : e}\n\n  Install the browser with:  npx playwright install webkit  (--with-deps on Linux)`,
       );
     }
   },
@@ -138,8 +129,16 @@ const webkit: Engine = {
     const png = await Promise.race([shot, sleep(5_000, null, { ref: false })]);
     if (png) return { png, stopped: false };
     // WebKit's fonts.ready, which its screenshot waits on, holds until the load event; a stalled frame never fires it.
-    await page.evaluate(() => window.stop());
-    return { png: await shot, stopped: true };
+    const stop = page
+      .evaluate(() => {
+        const open = document.readyState !== "complete";
+        if (open) window.stop();
+        return open;
+      })
+      .catch(() => false);
+    const done = await shot;
+    // A hung evaluate must not cost a finished shot, and it stopped nothing we can vouch for.
+    return { png: done, stopped: await Promise.race([stop, false]) };
   },
   states: async () => null,
 };

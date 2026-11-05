@@ -153,8 +153,6 @@ export const DEFAULT_WIDTHS = [1440, 1152, 896, 704, 375];
 /** Directory a run writes its screenshots and `report.html` into. Relative to cwd. */
 export const DEFAULT_OUT_DIR = engines.chromium.outDir;
 
-export const ENGINES = Object.keys(engines) as Engine["name"][];
-
 /**
  * Captures run in parallel: half the cores, between 2 and 8. A run is bound by waiting on
  * pages, not CPU, and each worker holds two. No extra rate limiting needed: each worker
@@ -355,7 +353,7 @@ export interface ResolvedConfig {
   lottieFrame?: number;
   /** Optional like `lottieFrame`. */
   aria?: true;
-  /** Optional like `lottieFrame`: unset is Chromium. */
+  /** Unset is Chromium; absent, not `chromium`, so a Chromium run's config hash stays the same. */
   browser?: "webkit";
 }
 
@@ -620,8 +618,13 @@ function validate(c: Record<string, unknown>, file: string) {
     !(Number.isSafeInteger(c.lottieFrame) && (c.lottieFrame as number) >= 0)
   )
     bad("lottieFrame", "a whole number ≥ 0");
-  if (c.browser !== undefined && !ENGINES.includes(c.browser as Engine["name"]))
-    bad("browser", `one of ${ENGINES.map((e) => `"${e}"`).join(", ")}`);
+  if (c.browser !== undefined && !Object.keys(engines).includes(c.browser as string))
+    bad(
+      "browser",
+      `one of ${Object.keys(engines)
+        .map((e) => `"${e}"`)
+        .join(", ")}`,
+    );
 }
 
 /** CLI-supplied values. `undefined` means "not passed", so the config file wins. */

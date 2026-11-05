@@ -156,8 +156,9 @@ function wipeable(dir: string): boolean {
   return fs.statSync(dir).isDirectory() && fs.readdirSync(dir).every(ours);
 }
 
-/** A stylesheet or font face failed on a side; older results.json files lack the field. */
-const broken = (r: ComparedResult) => !!(r.failed?.left.length || r.failed?.right.length);
+/** A stylesheet or font face failed on a side, or its load was stopped; older results.json files lack `failed`. */
+const broken = (r: ComparedResult) =>
+  !!(r.failed?.left.length || r.failed?.right.length || r.stopped);
 
 export const reusable = (r: RouteResult) =>
   r.status === "compared" &&
@@ -636,11 +637,9 @@ export async function run({
           ...made.map((c, i) => write(cropped[i]!.path, c.png)),
         ]);
 
-        if (!rightShot.failed.length) recorded.push(shotId(route, width));
+        if (!rightShot.failed.length && !rightShot.stopped) recorded.push(shotId(route, width));
         const marked = [...new Set([...leftShot.marked, ...rightShot.marked])];
-        const stopped = (["left", "right"] as const).filter(
-          (s) => ({ left: leftShot, right: rightShot })[s].stopped,
-        );
+        const stopped = (["left", "right"] as const).filter((s) => shots[s].stopped);
         const fonts = {
           added: leftShot.fonts.filter((f) => !rightShot.fonts.includes(f)),
           removed: rightShot.fonts.filter((f) => !leftShot.fonts.includes(f)),
@@ -724,8 +723,8 @@ export async function run({
   if (progress) {
     console.log(`Capturing ${jobs.length} pair(s) with ${cfg.concurrency} worker(s)...\n`);
   }
-  if (cfg.computed && engine.statesNote && jobs.length) console.log(engine.statesNote);
   if (launched) {
+    if (cfg.computed && engine.statesNote) console.log(engine.statesNote);
     await Promise.all(
       Array.from({ length: cfg.concurrency }, (_, i) => worker(launched.browser, i)),
     );
@@ -1280,8 +1279,8 @@ export function compact(
   for (const route of routes) {
     const rows = results.filter((r) => name(r) === route);
     const ok = rows.filter((r): r is ComparedResult => r.status === "compared");
-    // Unstable pixels went unmeasured and a failed asset rendered a fallback, so a shot with
-    // either is not clean, only unchanged.
+    // Unstable pixels went unmeasured, and a failed asset or stopped load rendered a fallback,
+    // so a shot with any is not clean, only unchanged.
     const same = ok.filter((r) => r.diffPixels === 0 && r.unstablePixels === 0 && !broken(r));
     const acc = ok.filter((r) => r.accepted);
     const changed = ok.filter((r) => !same.includes(r) && !r.accepted);
@@ -1322,6 +1321,8 @@ export function compact(
         right: [...new Set(g.flatMap((r) => r.failed?.right ?? []))],
       });
       if (failed) out.push(`    failed ${failed}`);
+      const stopped = [...new Set(g.flatMap((r) => r.stopped ?? []))].sort();
+      if (stopped.length) out.push(`    stopped loading on ${stopped.join(" and ")}`);
       const fonts = fmtFonts({
         added: [...new Set(g.flatMap((r) => r.fonts?.added ?? []))],
         removed: [...new Set(g.flatMap((r) => r.fonts?.removed ?? []))],

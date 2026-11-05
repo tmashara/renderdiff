@@ -28,7 +28,7 @@ export interface Shot {
   /** Reasons of the page's `data-renderdiff-mask` elements, e.g. `rotating quote (data-renderdiff-mask)`. */
   marked: string[];
   /** WebKit only: the shot timed out on a load still open (fonts.ready waits on it), so it was stopped. */
-  stopped?: true;
+  stopped?: boolean;
 }
 
 /**
@@ -577,7 +577,7 @@ export async function capture(
         failed,
         fonts: loadedFonts,
         marked,
-        ...(stopped ? { stopped: true as const } : {}),
+        stopped,
       };
     prev = png;
   }
