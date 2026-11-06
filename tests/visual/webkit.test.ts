@@ -97,8 +97,9 @@ test("a shot past 5s stops only an open load, and keeps its PNG if the stop is l
   await browser.close();
 });
 
-test("an animated GIF isn't frozen: its pixels are unstable, not a difference", async () => {
-  const r = await run(["/animated"]);
+test("motion WebKit can't freeze is unstable, not a difference", async () => {
+  // A GIF can hold still for both shots on a different frame per side; docs/how-it-works.md says mask it.
+  const r = await run(["/animated"], ["--mask", "img"]);
   assert.equal(r.code, 0, context(r));
   const shot = result(results(r.outDir), "/animated", 1440);
   assert.equal(shot.diffPixels, 0, context(r));
