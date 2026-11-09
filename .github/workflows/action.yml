@@ -7,7 +7,7 @@ on:
 
 jobs:
   self-test:
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     env:
       RENDERDIFF_COMMENT_DRY_RUN: "1"
     steps:
