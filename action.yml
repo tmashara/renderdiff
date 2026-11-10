@@ -68,12 +68,15 @@ runs:
     - id: pw
       shell: bash
       working-directory: ${{ github.action_path }}
-      run: echo "version=$(node -p 'require("./package-lock.json").packages["node_modules/playwright"].version')" >> "$GITHUB_OUTPUT"
+      run: |
+        echo "version=$(node -p 'require("./package-lock.json").packages["node_modules/playwright"].version')" >> "$GITHUB_OUTPUT"
+        echo "image=${ImageOS:-}" >> "$GITHUB_OUTPUT"
 
     - uses: actions/cache@v4
       with:
         path: ${{ runner.tool_cache }}/renderdiff-ms-playwright
-        key: renderdiff-${{ inputs.browser }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.pw.outputs.version }}
+        # WebKit is built per Ubuntu release, and runner.os is only "Linux".
+        key: renderdiff-${{ inputs.browser }}-${{ runner.os }}-${{ steps.pw.outputs.image }}-${{ runner.arch }}-${{ steps.pw.outputs.version }}
 
     - shell: bash
       working-directory: ${{ github.action_path }}
